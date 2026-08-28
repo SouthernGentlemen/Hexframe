@@ -71,8 +71,6 @@ export function safeNextPath(raw: string | null | undefined): string {
   if (typeof raw !== "string" || raw.length === 0 || raw.length > 512) return DEFAULT_NEXT;
   if (raw[0] !== "/") return DEFAULT_NEXT;
   if (raw.startsWith("//") || raw.startsWith("/\\")) return DEFAULT_NEXT;
-  // Control characters would be a header-splitting attempt rather than a path, and a
-  // backslash is normalised to a slash by enough clients to be worth refusing outright.
   if (/[\x00-\x1f\x7f\\]/.test(raw)) return DEFAULT_NEXT;
   return raw;
 }
@@ -82,17 +80,10 @@ function escapeHtml(value: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
+    .replace(/\"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
 
-/**
- * Headers for anything that is part of the credential flow.
- *
- * `no-store` keeps the form and its error out of the back button and out of any shared
- * cache. The CSP allows the inline stylesheet and nothing else at all — no scripts, no
- * images, no fonts, no frames, and a form that can only post to this origin.
- */
 function authHeaders(contentType: string): Headers {
   return new Headers({
     "content-type": contentType,
@@ -105,14 +96,6 @@ function authHeaders(contentType: string): Headers {
   });
 }
 
-/**
- * The 503 every protected route answers when a credential binding is missing.
- *
- * It names the absent binding on purpose. The operator is the only person who can reach
- * this — there is no session to leak to anyone else — and "ADMIN_SESSION_SECRET is not
- * configured" turns a mystifying failure into a one-line fix. What it must never do is
- * carry on with a default, which is why this is a hard stop rather than a warning.
- */
 export function credentialsUnavailable(env: Env): Response {
   const missing = missingCredentialBindings(env);
   const list = missing.join(", ");
@@ -122,13 +105,6 @@ export function credentialsUnavailable(env: Env): Response {
   return new Response(body, { status: 503, headers });
 }
 
-/**
- * The login page.
- *
- * `error` is never the submitted username, the reason a password failed, or anything else
- * derived from what was typed — only one of a small set of fixed strings this file
- * writes. Nothing on the page hints at what the expected username is.
- */
 export function loginPage(error: string | null, next: string): Response {
   const safeNext = safeNextPath(next);
   const status = error === null ? 200 : 401;
@@ -200,17 +176,10 @@ function redirect(location: string, cookie: string | null): Response {
   headers.set("location", location);
   if (cookie) headers.append("set-cookie", cookie);
   // 303 rather than 302: the browser must follow a POST with a GET, so a refresh on the
-  // destination never re-submits the credential.
-  return new Response(`Redirecting to ${location}\n`, { status: 303, headers });
+  // destination never re-submits the credential. Redirects intentionally carry no body.
+  return new Response(null, { status: 303, headers });
 }
 
-/**
- * `POST /login`, and `GET /login` by way of the router.
- *
- * Nothing that was submitted is echoed back. The response to a wrong username and the
- * response to a wrong password are byte-identical, so neither the page nor the status
- * code tells an attacker which half they got right.
- */
 export async function handleLogin(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
 
@@ -263,22 +232,11 @@ export async function handleLogin(request: Request, env: Env): Promise<Response>
   return redirect(next, cookie);
 }
 
-/** `FormData.get` returns `File | string | null`; only a string is ever a credential. */
 function readField(form: FormData, name: string): string | null {
   const value = form.get(name);
   return typeof value === "string" ? value : null;
 }
 
-/**
- * `POST /logout`.
- *
- * POST-only on purpose: a `GET /logout` can be triggered by any image tag on any page,
- * and while being logged out is a mild thing to have done to you, an endpoint that
- * changes state on GET is a habit worth not forming.
- *
- * The optional `url` lets the expiring cookie match the `Secure` flag of the one being
- * cleared, which is what makes logout work over plain http under `wrangler dev`.
- */
 export function handleLogout(url?: URL): Response {
   return redirect("/login", clearSessionCookie(url));
 }
