@@ -14,29 +14,33 @@ export interface KeyMap {
   [code: string]: number;
 }
 
-/** Left hand on WASD, right hand on the attack row. */
+/** Physical action key → one of four positions inside the active modifier bank. */
+export interface ActionKeyMap {
+  [code: string]: 0 | 1 | 2 | 3;
+}
+
+/** Movement stays on the left hand; action selection is handled by `DEFAULT_ACTION_KEYMAP`. */
 export const DEFAULT_KEYMAP_P1: KeyMap = {
   KeyW: InputBit.Up,
   KeyA: InputBit.Left,
   KeyS: InputBit.Down,
   KeyD: InputBit.Right,
-  KeyJ: InputBit.Light,
-  KeyK: InputBit.Medium,
-  KeyL: InputBit.Heavy,
-  KeyU: InputBit.Throw,
 };
 
-/**
- * The arrow cluster and the numeric keypad, so two players can share one keyboard in the
- * lab without either hand crossing the other.
- */
+/** Optional second-player movement keys used by dummy recording. */
 export const DEFAULT_KEYMAP_P2: KeyMap = {
-  ArrowUp: InputBit.Up,
-  ArrowLeft: InputBit.Left,
-  ArrowDown: InputBit.Down,
-  ArrowRight: InputBit.Right,
-  Numpad1: InputBit.Light,
-  Numpad2: InputBit.Medium,
-  Numpad3: InputBit.Heavy,
-  Numpad0: InputBit.Throw,
+  KeyI: InputBit.Up,
+  KeyJ: InputBit.Left,
+  KeyK: InputBit.Down,
+  KeyL: InputBit.Right,
 };
+
+/** Spatial action diamond: keyboard arrows mirror Y/X/B/A on a standard gamepad. */
+export const DEFAULT_ACTION_KEYMAP: ActionKeyMap = {
+  ArrowUp: 0,
+  ArrowLeft: 1,
+  ArrowRight: 2,
+  ArrowDown: 3,
+};
+
+export const NO_ACTION_KEYMAP: ActionKeyMap = {};

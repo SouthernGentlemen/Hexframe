@@ -3,7 +3,7 @@
 A deterministic 2D fighting-game simulator, and the laboratory used to build it.
 
 The order of work is deliberate: this is a **combat simulator first and a game second**.
-The first build carries one stage, one fighter, one dummy and one real move, and around
+The current build carries one stage, one fighter, one dummy and 24 tagged moves, and around
 them the machinery that everything later depends on — a fixed 60 Hz integer simulation,
 snapshots, state hashes, rollback, and a lab that can pause, step, rewind and inspect it.
 
@@ -27,7 +27,7 @@ docs/           CONTRACTS.md — the module surface every part is written agains
 
 ```bash
 npm install
-cp .env.example .dev.vars   # then fill in the three ADMIN_* values
+cp .env.example .env        # then fill in the account id and three ADMIN_* values
 npm run dev                 # vite build, then wrangler dev on :8788
 ```
 
@@ -44,15 +44,24 @@ npm run typecheck
 
 Three values, by the same names in every environment:
 
-| name | local (`.dev.vars`) | production |
+| name | local (`.env`) | production |
 |---|---|---|
-| `ADMIN_USERNAME` | yes | `wrangler secret put ADMIN_USERNAME` |
-| `ADMIN_PASSWORD` | yes | `wrangler secret put ADMIN_PASSWORD` |
-| `ADMIN_SESSION_SECRET` | yes | `wrangler secret put ADMIN_SESSION_SECRET` |
+| `ADMIN_USERNAME` | yes | synchronized by the deploy script |
+| `ADMIN_PASSWORD` | yes | synchronized by the deploy script |
+| `ADMIN_SESSION_SECRET` | yes | synchronized by the deploy script |
 
 None of them reaches the browser. If any is missing the protected routes answer `503`
 and name the one that is absent — they never fall open and never fall back to a default.
-`.env`, `.env.*` and `.dev.vars` are ignored by git.
+`.env`, `.env.*` and `.dev.vars` are ignored by git. `npm run deploy` reads the root
+`.env`, deploys to the selected Cloudflare account, and synchronizes the three admin
+values as Worker secrets.
+
+## Controls and move building
+
+Movement is WASD or the left stick/D-pad. The arrow-key diamond maps spatially to
+Y/X/B/A. Shift or LT selects action bank two, Space or RT selects bank three, and holding
+both selects bank four: 16 independent action inputs in total. The private lab's loadout
+menu assigns any 16 of the 24 moves to those inputs and persists the build locally.
 
 ## The two rules worth restating
 
@@ -67,7 +76,7 @@ a rollback that re-runs the same frames has to land on the same bits.
 
 ## Not here yet
 
-0.1 is the foundation: the deterministic core, rollback, the lab, and one move. Still to
+0.1 is the foundation: the deterministic core, rollback, the lab, and the tagged move catalog. Still to
 come — the projectile and throw archetypes, the `MatchRoom` Durable Object, the two-browser
 WebSocket match, and the network condition simulator. They are additions on top of this
 core, not changes to it.

@@ -6,12 +6,13 @@
  */
 
 import type { InputFrame } from "../../combat/types";
-import { INPUT_MASK } from "../../combat/types";
-import type { KeyMap } from "./keymap";
+import { actionBit, INPUT_MASK } from "../../combat/types";
+import type { ActionKeyMap, KeyMap } from "./keymap";
 
 export class KeyboardController {
   private readonly target: EventTarget;
   private readonly map: KeyMap;
+  private readonly actionMap: ActionKeyMap;
   /** Own keys of `map`, so a code like `constructor` cannot match through the prototype. */
   private readonly mapped: Set<string>;
   /**
@@ -44,10 +45,17 @@ export class KeyboardController {
     this.held.clear();
   };
 
-  constructor(target: EventTarget, map: KeyMap) {
+  constructor(target: EventTarget, map: KeyMap, actionMap: ActionKeyMap = {}) {
     this.target = target;
     this.map = map;
-    this.mapped = new Set(Object.keys(map));
+    this.actionMap = actionMap;
+    this.mapped = new Set([
+      ...Object.keys(map),
+      ...Object.keys(actionMap),
+      "ShiftLeft",
+      "ShiftRight",
+      "Space",
+    ]);
     target.addEventListener("keydown", this.onKeyDown);
     target.addEventListener("keyup", this.onKeyUp);
     target.addEventListener("blur", this.onBlur);
@@ -56,7 +64,14 @@ export class KeyboardController {
   /** The bitmask for everything currently held. Sampling never mutates what is held. */
   sample(): InputFrame {
     let bits = 0;
-    for (const code of this.held) bits |= this.map[code];
+    for (const code of this.held) bits |= this.map[code] ?? 0;
+
+    const shift = this.held.has("ShiftLeft") || this.held.has("ShiftRight");
+    const space = this.held.has("Space");
+    const bank = (shift ? 1 : 0) + (space ? 2 : 0);
+    for (const [code, position] of Object.entries(this.actionMap)) {
+      if (this.held.has(code)) bits |= actionBit(bank * 4 + position);
+    }
     return bits & INPUT_MASK;
   }
 
@@ -76,6 +91,13 @@ export class KeyboardController {
    */
   private captures(e: KeyboardEvent): boolean {
     if (e.ctrlKey || e.metaKey || e.altKey) return false;
+    const target = e.target;
+    if (
+      target instanceof Element &&
+      target.closest("button, a, input, select, textarea, [contenteditable='true']")
+    ) {
+      return false;
+    }
     return this.mapped.has(e.code);
   }
 }
