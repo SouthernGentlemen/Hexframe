@@ -1,0 +1,73 @@
+public_id,public_sha,legacy_id,source_repo,source_sha,source_date,mapping_type,deployment,release,notes
+HF-001,,,Hexframe,842eac0,2026-08-23,decomposed,,v0.1.0,project foundation extracted from the initial combat-lab implementation
+HF-002,,,Hexframe,842eac0,2026-08-23,decomposed,,v0.1.0,integer authoritative state and the fixed 60 Hz clock; input-frame representation lives in the same type module
+HF-003,,,Hexframe,842eac0,2026-08-23,decomposed,,v0.1.0,fighter state machine: startup active recovery
+HF-004,,,Hexframe,842eac0,2026-08-23,decomposed,,v0.1.0,input frames history and buffering
+HF-005,,,Hexframe,842eac0,2026-08-23,decomposed,,v0.1.0,command parsing and move resolution
+HF-006,,,Hexframe,842eac0,2026-08-23,decomposed,,v0.1.0,movement and ground physics
+HF-007,,,Hexframe,842eac0,2026-08-23,decomposed,,v0.1.0,collision hitboxes pushboxes and hit resolution
+HF-008,,,Hexframe,842eac0,2026-08-23,decomposed,,v0.1.0,schema-validated content pipeline
+HF-009,,,Hexframe,842eac0,2026-08-23,decomposed,,v0.1.0,authored test fighter content and its conformance test
+HF-010,,,Hexframe,842eac0,2026-08-23,decomposed,,v0.1.0,deterministic simulation step and the combat barrel; simulation tests land here
+HF-011,,,Hexframe,842eac0,2026-08-23,decomposed,,v0.1.0,snapshot serialization and the snapshot ring
+HF-012,,,Hexframe,842eac0,2026-08-23,decomposed,,v0.1.0,deterministic state hashing
+HF-013,,,Hexframe,842eac0,2026-08-23,decomposed,,v0.1.0,rollback session and deterministic replay verification
+HF-014,,,Hexframe,842eac0,2026-08-23,decomposed,,v0.1.0,SVG renderer kept strictly downstream of simulation
+HF-015,,,Hexframe,842eac0,2026-08-23,decomposed,,v0.1.0,Worker authenticated developer access and routing; HIGH risk
+HF-016,,,Hexframe,842eac0,2026-08-23,decomposed,,v0.1.0,device input mapping and input recording
+HF-017,,,Hexframe,842eac0,2026-08-23,decomposed,,v0.1.0,training lab harness dummy timeline and debugger panel
+HF-018,,,Hexframe,5c55ecb,2026-08-23,decomposed,,v0.2.0,local development deployment and secret-sync tooling; HIGH risk
+HF-019,,,Hexframe,5c55ecb,2026-08-23,decomposed,,v0.2.0,authored technique catalog and schema extension
+HF-020,,,Hexframe,5c55ecb,2026-08-23,decomposed,,v0.2.0,controller-first loadouts and the action layout
+HF-021,,,Hexframe,5c55ecb,2026-08-23,decomposed,,v0.2.0,gamepad input
+HF-022,,,Hexframe,fcd2871,2026-08-23,decomposed,,v0.2.0,deterministic status and debuff system
+HF-023,,,Hexframe,fcd2871,2026-08-23,decomposed,,v0.2.0,equipment model and lab build state
+HF-024,,,Hexframe,fcd2871,2026-08-23,decomposed,,v0.2.0,accessible Armory view and stored preferences
+HF-025,,,Hexframe,fcd2871,2026-08-23,decomposed,,v0.2.0,synthesized combat audio; no audio asset is bundled
+HF-026,,,Hexframe,c892ea2,2026-08-24,decomposed,,v0.2.0,split Armory into browse and detail
+HF-027,,,Hexframe,c892ea2,2026-08-24,decomposed,,v0.2.0,move showcases and move-effect rendering
+HF-028,,,Hexframe,59a4f4c,2026-08-24,direct,,v0.3.0,replace the gear model with armor grades resistances and threshold skills
+HF-029,,,Hexframe,59a4f4c,2026-08-24,decomposed,,v0.3.0,deterministic combat debugger inspector and scenarios
+HF-030,,,Hexframe,59a4f4c,2026-08-24,decomposed,,v0.3.0,public play route separated from authenticated developer tools
+HF-031,,,Hexframe,59a4f4c,2026-08-24,decomposed,,v0.3.0,worker route keyboard and timeline tests
+HF-032,,,Hexframe,59a4f4c,2026-08-24,decomposed,,v0.3.0,agent delivery workflow record
+HF-033,,,Hexframe,bced074,2026-08-24,direct,,v0.3.0,make public play game-first
+HF-034,,,Hexframe,9331bdf,2026-08-24,direct,,v0.3.0,advanced combat interactions
+HF-035,,,Hexframe,89b6801,2026-08-24,decomposed,,v0.3.0,combat presentation readability
+HF-036,,,Hexframe,89b6801,2026-08-24,decomposed,,v0.3.0,state-driven animations
+HF-037,,,Hexframe,ef0073a,2026-08-24,decomposed,,v0.3.0,replace move showcases with move demonstrations
+HF-038,,,Hexframe,ef0073a,2026-08-24,decomposed,,v0.3.0,Moves Codex
+HF-039,,,Hexframe,122af81,2026-08-24,decomposed,,v0.3.0,directional route framing
+HF-040,,,Hexframe,122af81,2026-08-24,decomposed,,v0.3.0,tutorial
+HF-041,,,Hexframe,122af81,2026-08-24,decomposed,,v0.3.0,move demonstration scenarios
+HF-042,,,Hexframe,fb5f6a5,2026-08-24,direct,,v0.3.0,reset tutorial move preview on start
+HF-043,,,Hexframe,1ef855f,2026-08-24,decomposed,,v0.4.0,stage entities and interaction resolution
+HF-044,,,Hexframe,1ef855f,2026-08-24,decomposed,,v0.4.0,Black Belfry stage and campaign state
+HF-045,,,Hexframe,1ef855f,2026-08-24,decomposed,,v0.4.0,Bell Warden boss and boss controller
+HF-046,,,Hexframe,1ef855f,2026-08-24,decomposed,,v0.4.0,campaign traversal breakables hazards and checkpoints
+HF-047,,,Hexframe,1ef855f,2026-08-24,decomposed,,v0.4.0,interact input and input recording coverage
+HF-048,,,Hexframe,1ef855f,2026-08-24,decomposed,,v0.4.0,campaign vertical slice verification
+HF-049,,,Hexframe,c6d74e8,2026-08-25,decomposed,,v0.5.0,versioned player-save contract; HIGH risk persistence schema
+HF-050,,,Hexframe,c6d74e8,2026-08-25,decomposed,,v0.5.0,server-authoritative save persistence and signed player identity; HIGH risk
+HF-051,,,Hexframe,c6d74e8,2026-08-25,decomposed,,v0.5.0,player save client with legacy key migration
+HF-052,,,Hexframe,c6d74e8,2026-08-25,decomposed,,v0.5.0,GameSession contract
+HF-053,,,Hexframe,c6d74e8,2026-08-25,decomposed,,v0.5.0,unify game menus and fold Lab into Training
+HF-054,,,Hexframe,c7eca52,2026-08-27,decomposed,,v0.6.0,party-slot model and team combat
+HF-055,,,Hexframe,c7eca52,2026-08-27,decomposed,,v0.6.0,deterministic loadout AI controller; HIGH risk AI decision authority
+HF-056,,,Hexframe,c7eca52,2026-08-27,decomposed,,v0.6.0,AI difficulty profiles
+HF-057,,,Hexframe,c7eca52,2026-08-27,decomposed,,v0.6.0,front-end title application and route separation
+HF-058,,,Hexframe,c7eca52,2026-08-27,decomposed,,v0.6.0,character regression scene
+HF-059,,,Hexframe,c7eca52,2026-08-27,decomposed,,v0.6.0,rig and animation presentation correction
+HF-060,,,Hexframe,6d225d1,2026-08-27,direct,,v0.6.0,route the root entry through the title screen
+HF-061,,,Hexframe,37f67ce,2026-08-27,direct,,v0.6.0,correct blocking and restore animation continuity
+HF-062,,,Hexframe,bc65bf1,2026-08-28,direct,,v0.6.0,tighten AI choice quality and front-end routes
+HF-063,,,Hexframe,77552ba,2026-08-28,direct,,v0.6.0,target-aware party hit gating
+HF-064,,,Hexframe,21ee03e 9f878c2 dd71145,2026-08-28,consolidated,,v0.6.0,campaign loadout pause; three source commits within three minutes
+HF-065,,,Hexframe,bb75f94 a3056e5,2026-08-28,consolidated,,v0.6.0,normalized player arm presentation and forward-readable guard poses
+HF-066,,,Hexframe,351f48f dd71145,2026-08-28,consolidated,,v0.6.0,validate player hands by geometry rather than angle constants
+HF-067,,,,,,reconstructed-from-deployment,,v0.7.0,reconstruction declaration change-management and release-management records
+HF-068,,,,,,reconstructed-from-deployment,,v0.7.0,CI release and deploy workflows with change-ID and secret gates
+HF-069,,,,,,reconstructed-from-deployment,,v0.7.0,build-stamped deployment identity at /version.json and in the UI
+HF-070,,,,,,reconstructed-from-deployment,,v0.7.0,intentional license covering code and the one original SVG asset
+HF-071,,,,,,reconstructed-from-deployment,,v0.7.0,README architecture security model and AI applicability records
+HF-072,,,,,,reconstructed-from-deployment,,v0.7.0,production migration to the Hexframe identity; HIGH risk see MIGRATION note
