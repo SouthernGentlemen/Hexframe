@@ -5,6 +5,7 @@ export interface FighterNode {
   readonly root: SVGGElement;
   readonly bones: ReadonlyMap<string, SVGGElement>;
   readonly rig: RawRig;
+  pose: Record<string, RawBonePose>;
 }
 
 function parseModel(model: string): Map<string, SVGGElement> {
@@ -61,7 +62,7 @@ export function buildFighterNode(model: string, rig: RawRig): FighterNode {
   }
 
   if (!bones.has(rig.root)) throw new Error(`Rig root ${rig.root} does not exist`);
-  return { root, bones, rig };
+  return { root, bones, rig, pose: {} };
 }
 
 /** Applies an animation pose without changing the rig's authored hierarchy. */
@@ -69,7 +70,32 @@ export function applyPose(
   node: FighterNode,
   pose: Record<string, { rotation?: number; x?: number; y?: number }>,
 ): void {
+  node.pose = pose;
   for (const part of node.rig.parts) {
     node.bones.get(part.name)?.setAttribute("transform", boneTransform(part, pose[part.name]));
   }
+}
+
+/** Origin of a posed bone in fighter-local SVG coordinates (x right, y down). */
+export function boneAnchor(node: FighterNode, boneName: string): { x: number; y: number } {
+  const byName = new Map(node.rig.parts.map((part) => [part.name, part]));
+  const chain: RawRigPart[] = [];
+  let current = byName.get(boneName);
+  while (current) {
+    chain.unshift(current);
+    current = current.parent === null ? undefined : byName.get(current.parent);
+  }
+  let x = 0;
+  let y = 0;
+  let degrees = 0;
+  for (const part of chain) {
+    const pose = node.pose[part.name];
+    const localX = part.pivot.x + (pose?.x ?? 0);
+    const localY = -(part.pivot.y + (pose?.y ?? 0));
+    const radians = degrees * Math.PI / 180;
+    x += localX * Math.cos(radians) - localY * Math.sin(radians);
+    y += localX * Math.sin(radians) + localY * Math.cos(radians);
+    degrees -= pose?.rotation ?? 0;
+  }
+  return { x, y };
 }

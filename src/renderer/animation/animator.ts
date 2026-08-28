@@ -64,6 +64,7 @@ export function sampleAnimation(anim: RawAnimation, frame: number): Pose {
 
 /** Presentation clip for a combat state. Combat never reads this choice back. */
 export function animationForState(f: FighterState, c: CharacterDef): string {
+  if (f.state === StateId.Defeat) return "defeat";
   if (f.state === StateId.Attack) return moveOf(c, f.moveId)?.animation ?? "idle";
   if (f.state === StateId.Dash) {
     return f.dashForward === 1 ? "dash_forward" : "dash_backward";

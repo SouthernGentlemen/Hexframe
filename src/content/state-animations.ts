@@ -184,4 +184,15 @@ export const STATE_ANIMATIONS: Record<string, RawAnimation> = {
       { frame: 10, bones: { pelvis: { y: 0, x: 0, rotation: 0 }, torso: { rotation: 0 }, head: { rotation: 0 }, leg_upper_l: { rotation: 6 }, leg_lower_l: { rotation: -8 }, leg_upper_r: { rotation: -8 }, leg_lower_r: { rotation: 6 }, arm_upper_l: { rotation: -14 }, arm_lower_l: { rotation: -34 }, arm_upper_r: { rotation: -20 }, arm_lower_r: { rotation: -46 } } },
     ],
   },
+  defeat: {
+    name: "defeat",
+    loop: false,
+    duration: 30,
+    note: "Final presentation-only fall held after vitality reaches zero.",
+    keyframes: [
+      { frame: 0, bones: { torso: { rotation: -22 }, head: { rotation: 18 }, arm_upper_l: { rotation: 42 }, arm_upper_r: { rotation: 55 } } },
+      { frame: 15, bones: { pelvis: { y: -34, x: -12, rotation: -54 }, torso: { rotation: -28 }, head: { rotation: 24 }, leg_upper_l: { rotation: 38 }, leg_upper_r: { rotation: -30 } } },
+      { frame: 30, bones: { pelvis: { y: -44, x: -18, rotation: -88 }, torso: { rotation: -6 }, head: { rotation: 10 }, arm_upper_l: { rotation: 24 }, arm_upper_r: { rotation: -18 } } },
+    ],
+  },
 };

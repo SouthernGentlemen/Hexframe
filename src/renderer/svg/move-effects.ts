@@ -2,6 +2,8 @@ import type { MoveDef } from "../../combat/types";
 import { fmt, SVG_NS } from "./stage";
 
 export type MoveEffectKind = "fire" | "poison" | "freeze" | "shock" | "bleed" | "void" | "physical" | "prism";
+export type MoveEffectAnchor = "hand_near" | "hand_far" | "foot_near" | "foot_far" | "head" | "chest" | "pelvis" | "ground" | "hitbox_center";
+export type MoveEffectLayer = "telegraph" | "trail" | "residue";
 
 export interface MoveEffectProfile {
   kind: MoveEffectKind;
@@ -15,6 +17,8 @@ export interface MoveEffectProfile {
   effect: string;
   trail: string;
   impact: string;
+  anchor: MoveEffectAnchor;
+  coreRadius: number;
 }
 
 export interface MoveVisualDefinition {
@@ -23,38 +27,68 @@ export interface MoveVisualDefinition {
   impact: string;
   offsetX: number;
   offsetY: number;
+  anchor: MoveEffectAnchor;
+  count: number;
+  radius: number;
+  spin: number;
+  rotation: number;
+  shape: number;
+  coreRadius: number;
+  windows: Readonly<Record<MoveEffectLayer, readonly [number, number]>>;
+}
+
+function visual(
+  effect: string,
+  trail: string,
+  impact: string,
+  anchor: MoveEffectAnchor,
+  offsetX: number,
+  offsetY: number,
+  particles: readonly [number, number, number, number, number, number],
+  timing: readonly [number, number, number, number],
+): MoveVisualDefinition {
+  return {
+    effect, trail, impact, anchor, offsetX, offsetY,
+    count: particles[0], radius: particles[1], spin: particles[2], rotation: particles[3], shape: particles[4], coreRadius: particles[5],
+    windows: { telegraph: [0, timing[0]], trail: [timing[1], timing[2]], residue: [timing[2] + 1, timing[3]] },
+  };
 }
 
 /** Presentation vocabulary keyed by technique, kept entirely outside combat MoveDef. */
 export const MOVE_VISUALS: Readonly<Record<string, MoveVisualDefinition>> = {
-  standing_light: { effect: "knuckle_flash", trail: "short_speed_lines", impact: "white_cross", offsetX: 46, offsetY: -62 },
-  crouching_light: { effect: "low_streak", trail: "floor_dust", impact: "low_cross", offsetX: 42, offsetY: -30 },
-  ember_palm: { effect: "palm_burst", trail: "embers", impact: "fire_disc", offsetX: 58, offsetY: -61 },
-  venom_fang: { effect: "fang_streak", trail: "venom_thread", impact: "needle_burst", offsetX: 56, offsetY: -60 },
-  frost_heel: { effect: "heel_comet", trail: "ice_dust", impact: "ice_star", offsetX: 72, offsetY: -73 },
-  storm_knuckle: { effect: "lightning_bolt", trail: "charge_sparks", impact: "electric_cross", offsetX: 62, offsetY: -62 },
-  crimson_arc: { effect: "slash_arc", trail: "blood_ribbon", impact: "red_crescent", offsetX: 57, offsetY: -59 },
-  rift_uppercut: { effect: "rising_rift", trail: "void_column", impact: "vertical_tear", offsetX: 30, offsetY: -78 },
-  bastion_break: { effect: "ground_break", trail: "stone_chips", impact: "stone_crack", offsetX: 64, offsetY: -32 },
-  shadow_step: { effect: "afterimages", trail: "shadow_echoes", impact: "void_displacement", offsetX: 34, offsetY: -53 },
-  ashen_sweep: { effect: "ground_arc", trail: "flame_floor", impact: "ember_spray", offsetX: 62, offsetY: -18 },
-  glacier_spike: { effect: "vertical_shards", trail: "frost_mist", impact: "ice_pillars", offsetX: 52, offsetY: -50 },
-  static_rush: { effect: "electric_afterimages", trail: "ion_wake", impact: "voltage_burst", offsetX: 48, offsetY: -53 },
-  toxic_bloom: { effect: "poison_bloom", trail: "spore_ring", impact: "toxin_flower", offsetX: 27, offsetY: -53 },
-  blood_moon: { effect: "blood_crescent", trail: "red_droplets", impact: "moon_slash", offsetX: 55, offsetY: -66 },
-  void_hook: { effect: "void_tether", trail: "tether_motes", impact: "hook_snap", offsetX: 72, offsetY: -58 },
-  iron_reversal: { effect: "reversal_flare", trail: "iron_sparks", impact: "iron_cross", offsetX: 30, offsetY: -68 },
-  phoenix_drive: { effect: "rising_spiral", trail: "phoenix_feathers", impact: "fire_spiral", offsetX: 38, offsetY: -72 },
-  permafrost: { effect: "frost_wave", trail: "ground_rime", impact: "frozen_surge", offsetX: 70, offsetY: -20 },
-  plague_touch: { effect: "hand_aura", trail: "lingering_cloud", impact: "plague_mark", offsetX: 57, offsetY: -58 },
-  thunder_clap: { effect: "shock_ring", trail: "radial_arcs", impact: "thunder_ring", offsetX: 37, offsetY: -58 },
-  reaper_kick: { effect: "scythe_impact", trail: "heel_crescent", impact: "reaper_arc", offsetX: 74, offsetY: -73 },
-  eclipse_breaker: { effect: "dark_crescent", trail: "umbral_fall", impact: "eclipse_wave", offsetX: 62, offsetY: -50 },
-  prism_burst: { effect: "prism_star", trail: "spectrum_rays", impact: "prismatic_burst", offsetX: 37, offsetY: -58 },
-  astral_jab: { effect: "astral_streak", trail: "star_motes", impact: "astral_point", offsetX: 57, offsetY: -61 },
-  witch_knee: { effect: "knee_miasma", trail: "witch_smoke", impact: "poison_knot", offsetX: 47, offsetY: -47 },
-  meteor_heel: { effect: "heel_descent", trail: "falling_embers", impact: "meteor_splash", offsetX: 47, offsetY: -25 },
-  void_dive: { effect: "dive_wake", trail: "split_afterimage", impact: "void_crater", offsetX: 52, offsetY: -38 },
+  standing_light: visual("knuckle_flash", "short_speed_lines", "white_cross", "hand_near", 2, 0, [3, 12, 4, 0, 1, 3], [2, 3, 6, 10]),
+  crouching_light: visual("low_streak", "floor_dust", "low_cross", "hand_near", 3, 2, [3, 14, 3, 8, 1, 3], [3, 4, 7, 12]),
+  ember_palm: visual("palm_burst", "embers", "fire_disc", "hand_near", 2, 0, [4, 18, 3, 12, 0, 4], [5, 6, 11, 16]),
+  venom_fang: visual("fang_streak", "venom_thread", "needle_burst", "hand_near", 3, 1, [3, 16, -3, 28, 1, 3], [4, 5, 10, 15]),
+  frost_heel: visual("heel_comet", "ice_dust", "ice_star", "foot_near", 4, -1, [4, 22, -2, 42, 2, 4], [7, 8, 13, 19]),
+  storm_knuckle: visual("lightning_bolt", "charge_sparks", "electric_cross", "hand_near", 3, 0, [5, 20, 6, 6, 1, 4], [5, 6, 12, 17]),
+  crimson_arc: visual("slash_arc", "blood_ribbon", "red_crescent", "hand_near", 8, 0, [4, 25, -3, 25, 3, 4], [6, 7, 13, 19]),
+  rift_uppercut: visual("rising_rift", "void_column", "vertical_tear", "chest", 14, -18, [5, 28, 5, 0, 2, 5], [6, 7, 14, 21]),
+  bastion_break: visual("ground_break", "stone_chips", "stone_crack", "ground", 45, -2, [4, 30, -2, 15, 2, 5], [11, 12, 18, 25]),
+  shadow_step: visual("afterimages", "shadow_echoes", "void_displacement", "pelvis", 0, -4, [3, 24, -5, 32, 3, 4], [4, 5, 10, 16]),
+  ashen_sweep: visual("ground_arc", "flame_floor", "ember_spray", "ground", 42, -2, [4, 27, 2, 0, 1, 4], [6, 7, 13, 19]),
+  glacier_spike: visual("vertical_shards", "frost_mist", "ice_pillars", "ground", 48, -3, [4, 30, -3, 4, 2, 4], [8, 9, 15, 22]),
+  static_rush: visual("electric_afterimages", "ion_wake", "voltage_burst", "chest", 8, 2, [4, 20, 6, 18, 1, 4], [3, 4, 11, 17]),
+  toxic_bloom: visual("poison_bloom", "spore_ring", "toxin_flower", "chest", 2, 3, [5, 26, -2, 45, 0, 5], [7, 8, 16, 23]),
+  blood_moon: visual("blood_crescent", "red_droplets", "moon_slash", "hand_far", 10, -2, [4, 28, -4, 15, 3, 4], [9, 10, 16, 23]),
+  void_hook: visual("void_tether", "tether_motes", "hook_snap", "hand_near", 7, 0, [3, 25, 3, 22, 1, 4], [7, 8, 14, 20]),
+  iron_reversal: visual("reversal_flare", "iron_sparks", "iron_cross", "chest", 0, -7, [5, 22, -5, 0, 3, 5], [4, 5, 11, 17]),
+  phoenix_drive: visual("rising_spiral", "phoenix_feathers", "fire_spiral", "chest", 12, -15, [5, 31, 5, 10, 2, 5], [7, 8, 15, 23]),
+  permafrost: visual("frost_wave", "ground_rime", "frozen_surge", "ground", 50, -3, [4, 34, -2, 0, 2, 5], [9, 10, 18, 25]),
+  plague_touch: visual("hand_aura", "lingering_cloud", "plague_mark", "hand_near", 3, 1, [4, 21, -2, 30, 0, 4], [5, 6, 12, 18]),
+  thunder_clap: visual("shock_ring", "radial_arcs", "thunder_ring", "chest", 0, 0, [6, 27, 7, 0, 1, 5], [7, 8, 14, 21]),
+  reaper_kick: visual("scythe_impact", "heel_crescent", "reaper_arc", "foot_near", 8, -2, [4, 30, -4, 18, 3, 5], [12, 13, 19, 27]),
+  eclipse_breaker: visual("dark_crescent", "umbral_fall", "eclipse_wave", "hand_far", 12, 6, [5, 32, -3, 38, 3, 5], [10, 11, 18, 26]),
+  prism_burst: visual("prism_star", "spectrum_rays", "prismatic_burst", "chest", 0, 1, [6, 34, 6, 0, 0, 6], [9, 10, 20, 28]),
+  astral_jab: visual("astral_streak", "star_motes", "astral_point", "hand_near", 3, 0, [3, 15, 4, 8, 1, 3], [2, 3, 7, 11]),
+  witch_knee: visual("knee_miasma", "witch_smoke", "poison_knot", "pelvis", 27, 1, [4, 20, -3, 33, 0, 4], [4, 5, 10, 15]),
+  meteor_heel: visual("heel_descent", "falling_embers", "meteor_splash", "foot_near", 3, 3, [4, 24, 3, 50, 2, 4], [7, 8, 14, 20]),
+  void_dive: visual("dive_wake", "split_afterimage", "void_crater", "pelvis", 18, 12, [4, 29, -4, 22, 3, 5], [8, 9, 16, 23]),
+  grave_toll: visual("shock_ring", "bell_arcs", "resonant_burst", "chest", 0, 0, [6, 38, 5, 0, 1, 6], [10, 11, 18, 26]),
+  chain_sweep: visual("ground_arc", "chain_drag", "iron_spray", "hand_near", 18, 8, [3, 36, -2, 0, 1, 5], [35, 36, 49, 61]),
+  bell_hammer: visual("vertical_shards", "bell_fall", "stone_crack", "hand_near", 0, 8, [4, 32, 2, 0, 2, 6], [31, 32, 46, 60]),
+  grave_pulse: visual("shock_ring", "grave_rings", "grave_burst", "ground", 0, -2, [5, 42, -3, 0, 0, 6], [29, 30, 49, 63]),
+  chain_hook: visual("void_tether", "chain_threads", "hook_snap", "hand_near", 12, 0, [3, 34, 3, 15, 1, 5], [24, 25, 39, 53]),
 };
 
 const DEFAULT_VISUAL: MoveVisualDefinition = {
@@ -63,7 +97,19 @@ const DEFAULT_VISUAL: MoveVisualDefinition = {
   impact: "physical_burst",
   offsetX: 44,
   offsetY: -52,
+  anchor: "hitbox_center",
+  count: 3,
+  radius: 18,
+  spin: 3,
+  rotation: 0,
+  shape: 1,
+  coreRadius: 4,
+  windows: { telegraph: [0, 3], trail: [4, 9], residue: [10, 14] },
 };
+
+export function moveVisualDefinition(moveKey: string): MoveVisualDefinition {
+  return MOVE_VISUALS[moveKey] ?? DEFAULT_VISUAL;
+}
 
 const COLORS: Record<MoveEffectKind, readonly [string, string]> = {
   fire: ["#ff9a4d", "#ffd36a"],
@@ -76,27 +122,29 @@ const COLORS: Record<MoveEffectKind, readonly [string, string]> = {
   prism: ["#ffffff", "#8fffe0"],
 };
 
-/** A stable visual signature. Presentation may vary by id; combat never reads it. */
+/** A stable authored visual signature. Combat never reads it. */
 export function moveEffectProfile(
-  moveId: number,
+  _moveId: number,
   tags: readonly string[],
   moveKey = "",
 ): MoveEffectProfile {
   const kind = effectKind(tags);
   const colors = COLORS[kind];
-  const visual = MOVE_VISUALS[moveKey] ?? DEFAULT_VISUAL;
+  const visual = moveVisualDefinition(moveKey);
   return {
     kind,
     primary: colors[0],
     secondary: colors[1],
-    count: 4 + (moveId % 6),
-    radius: 18 + ((moveId * 7) % 19),
-    spin: (moveId % 2 === 0 ? 1 : -1) * (3 + (moveId % 5)),
-    rotation: (moveId * 17) % 360,
-    shape: moveId % 4,
+    count: visual.count,
+    radius: visual.radius,
+    spin: visual.spin,
+    rotation: visual.rotation,
+    shape: visual.shape,
     effect: visual.effect,
     trail: visual.trail,
     impact: visual.impact,
+    anchor: visual.anchor,
+    coreRadius: visual.coreRadius,
   };
 }
 
@@ -110,20 +158,24 @@ export function drawMoveParticles(
   scale = 1,
 ): void {
   const profile = moveEffectProfile(move.id, move.tags, move.key);
-  const visual = MOVE_VISUALS[move.key] ?? DEFAULT_VISUAL;
+  const visual = moveVisualDefinition(move.key);
+  const effectLayer = layerAt(visual, frame);
+  if (effectLayer === null) return;
   const group = document.createElementNS(SVG_NS, "g");
   group.setAttribute("class", `move-particles effect-${profile.kind} move-effect-${move.id}`);
   group.setAttribute("data-move-id", String(move.id));
   group.setAttribute("data-effect", visual.effect);
   group.setAttribute("data-trail", visual.trail);
   group.setAttribute("data-impact", visual.impact);
+  group.setAttribute("data-layer", effectLayer);
+  group.setAttribute("data-anchor", visual.anchor);
   group.setAttribute("transform", `translate(${fmt(x + facing * visual.offsetX)} ${fmt(y + visual.offsetY)}) scale(${fmt(scale)})`);
 
   drawTechniqueMotif(group, visual.effect, profile, facing, frame);
 
   const core = document.createElementNS(SVG_NS, "circle");
   core.setAttribute("class", "move-particle move-particle-core");
-  core.setAttribute("r", fmt(5 + ((move.id + frame) % 5)));
+  core.setAttribute("r", fmt(profile.coreRadius + (frame % 4) * 0.3));
   core.setAttribute("fill", "none");
   core.setAttribute("stroke", profile.secondary);
   core.setAttribute("stroke-width", "1.5");
@@ -137,7 +189,7 @@ export function drawMoveParticles(
     const orbit = profile.radius + pulse + (index % 3) * 4;
     const px = Math.cos(radians) * orbit;
     const py = Math.sin(radians) * orbit * 0.72;
-    group.appendChild(particleShape(profile, move.id, index, px, py, degrees));
+    group.appendChild(particleShape(profile, index, px, py, degrees));
   }
   layer.appendChild(group);
 }
@@ -260,7 +312,6 @@ function effectKind(tags: readonly string[]): MoveEffectKind {
 
 function particleShape(
   profile: MoveEffectProfile,
-  moveId: number,
   index: number,
   x: number,
   y: number,
@@ -273,7 +324,7 @@ function particleShape(
     circle.setAttribute("class", "move-particle particle-orb");
     circle.setAttribute("cx", fmt(x));
     circle.setAttribute("cy", fmt(y));
-    circle.setAttribute("r", fmt(2 + ((moveId + index) % 4)));
+    circle.setAttribute("r", fmt(2 + (index % 3)));
     circle.setAttribute("fill", color);
     return circle;
   }
@@ -285,7 +336,7 @@ function particleShape(
     line.setAttribute("x2", fmt(x));
     line.setAttribute("y2", fmt(y));
     line.setAttribute("stroke", color);
-    line.setAttribute("stroke-width", fmt(1 + (moveId % 3)));
+    line.setAttribute("stroke-width", fmt(1 + (profile.shape % 3)));
     return line;
   }
   const polygon = document.createElementNS(SVG_NS, "polygon");
@@ -296,4 +347,12 @@ function particleShape(
   polygon.setAttribute("stroke-width", "1");
   polygon.setAttribute("transform", `translate(${fmt(x)} ${fmt(y)}) rotate(${fmt(degrees)})`);
   return polygon;
+}
+
+function layerAt(visual: MoveVisualDefinition, frame: number): MoveEffectLayer | null {
+  for (const layer of ["telegraph", "trail", "residue"] as const) {
+    const [start, end] = visual.windows[layer];
+    if (frame >= start && frame <= end) return layer;
+  }
+  return null;
 }

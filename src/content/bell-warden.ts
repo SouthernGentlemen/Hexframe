@@ -61,10 +61,10 @@ function move(
 }
 
 const moves = [
-  move(BellWardenMoveId.ChainSweep, "chain_sweep", "ashen_sweep", 42, 5, 68, HitLevel.Low, 92, { x: 18, y: 0, w: 310, h: 34 }, { startFrame: 0, endFrame: 41, shape: "ground-band", pattern: "diagonal", cue: "chain-rattle" }),
-  move(BellWardenMoveId.BellHammer, "bell_hammer", "eclipse_breaker", 38, 5, 72, HitLevel.Overhead, 118, { x: 10, y: 24, w: 126, h: 150 }, { startFrame: 0, endFrame: 37, shape: "vertical-sigil", pattern: "runes", cue: "bell-rise" }),
-  move(BellWardenMoveId.GravePulse, "grave_pulse", "prism_burst", 36, 7, 58, HitLevel.Low, 80, { x: -30, y: 0, w: 370, h: 28 }, { startFrame: 0, endFrame: 35, shape: "floor-pulse", pattern: "rings", cue: "grave-hum" }),
-  move(BellWardenMoveId.ChainHook, "chain_hook", "void_hook", 31, 4, 54, HitLevel.Mid, 74, { x: 26, y: 42, w: 350, h: 32 }, { startFrame: 0, endFrame: 30, shape: "tracking-line", pattern: "chain", cue: "hook-drag" }),
+  move(BellWardenMoveId.ChainSweep, "chain_sweep", "chain_sweep", 42, 5, 68, HitLevel.Low, 92, { x: 18, y: 0, w: 310, h: 34 }, { startFrame: 0, endFrame: 41, shape: "ground-band", pattern: "diagonal", cue: "chain-rattle" }),
+  move(BellWardenMoveId.BellHammer, "bell_hammer", "bell_hammer", 38, 5, 72, HitLevel.Overhead, 118, { x: 10, y: 24, w: 126, h: 150 }, { startFrame: 0, endFrame: 37, shape: "vertical-sigil", pattern: "runes", cue: "bell-rise" }),
+  move(BellWardenMoveId.GravePulse, "grave_pulse", "grave_pulse", 36, 7, 58, HitLevel.Low, 80, { x: -30, y: 0, w: 370, h: 28 }, { startFrame: 0, endFrame: 35, shape: "floor-pulse", pattern: "rings", cue: "grave-hum" }),
+  move(BellWardenMoveId.ChainHook, "chain_hook", "chain_hook", 31, 4, 54, HitLevel.Mid, 74, { x: 26, y: 42, w: 350, h: 32 }, { startFrame: 0, endFrame: 30, shape: "tracking-line", pattern: "chain", cue: "hook-drag" }),
 ];
 
 export const BELL_WARDEN: CharacterDef = {

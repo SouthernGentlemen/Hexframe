@@ -39,9 +39,7 @@ export const BLACK_BELFRY: StageDef = {
     object(107, EntityKind.Breakable, CampaignMaterial.IronScrap, 510, 34, 62),
   ],
   interactables: [
-    object(201, EntityKind.Interactable, InteractableKind.ArsenalShrine, -1160, 52, 118),
     object(202, EntityKind.Interactable, InteractableKind.Checkpoint, -250, 62, 102),
-    object(203, EntityKind.Interactable, InteractableKind.Forge, 420, 76, 92),
     object(204, EntityKind.Interactable, InteractableKind.BossGate, 710, 38, 180),
     object(205, EntityKind.Interactable, InteractableKind.Chest, 570, 54, 40),
   ],

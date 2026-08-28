@@ -15,8 +15,8 @@ interface AuthoredAttack {
 
 const READY: Pose = {
   torso: { rotation: 0 }, head: { rotation: 0 }, pelvis: { x: 0, y: 0, rotation: 0 },
-  arm_upper_l: { rotation: -14 }, arm_lower_l: { rotation: -34 }, hand_l: { rotation: 0 },
-  arm_upper_r: { rotation: -20 }, arm_lower_r: { rotation: -46 }, hand_r: { rotation: 0 },
+  arm_upper_l: { rotation: 28 }, arm_lower_l: { rotation: 66 }, hand_l: { rotation: 0 },
+  arm_upper_r: { rotation: 40 }, arm_lower_r: { rotation: 68 }, hand_r: { rotation: 0 },
   leg_upper_l: { rotation: 6 }, leg_lower_l: { rotation: -8 }, foot_l: { rotation: 0 },
   leg_upper_r: { rotation: -8 }, leg_lower_r: { rotation: 6 }, foot_r: { rotation: 0 },
 };
@@ -25,16 +25,16 @@ const CROUCH_READY: Pose = {
   pelvis: { x: 0, y: -20, rotation: 0 }, torso: { rotation: 12 }, head: { rotation: -8 },
   leg_upper_l: { rotation: 62 }, leg_lower_l: { rotation: -78 }, foot_l: { rotation: 14 },
   leg_upper_r: { rotation: -54 }, leg_lower_r: { rotation: 70 }, foot_r: { rotation: -12 },
-  arm_upper_l: { rotation: -30 }, arm_lower_l: { rotation: -50 },
-  arm_upper_r: { rotation: -34 }, arm_lower_r: { rotation: -60 },
+  arm_upper_l: { rotation: 36 }, arm_lower_l: { rotation: 70 },
+  arm_upper_r: { rotation: 46 }, arm_lower_r: { rotation: 72 },
 };
 
 const AIR_READY: Pose = {
   pelvis: { x: 0, y: 0, rotation: 0 }, torso: { rotation: 7 }, head: { rotation: -4 },
   leg_upper_l: { rotation: 48 }, leg_lower_l: { rotation: -62 }, foot_l: { rotation: 12 },
   leg_upper_r: { rotation: 38 }, leg_lower_r: { rotation: -56 }, foot_r: { rotation: 10 },
-  arm_upper_l: { rotation: -42 }, arm_lower_l: { rotation: -58 },
-  arm_upper_r: { rotation: -48 }, arm_lower_r: { rotation: -62 },
+  arm_upper_l: { rotation: 24 }, arm_lower_l: { rotation: 60 },
+  arm_upper_r: { rotation: 34 }, arm_lower_r: { rotation: 62 },
 };
 
 /**
@@ -208,7 +208,7 @@ function buildAnimation(name: string, spec: AuthoredAttack): RawAnimation {
     duration: spec.duration,
     note: "Authored anticipation, contact and follow-through silhouettes; combat timing remains separate.",
     keyframes: [
-      { frame: 0, bones: spec.start ?? READY },
+      { frame: 0, bones: READY },
       { frame: Math.max(1, spec.contact - 2), bones: spec.anticipation },
       { frame: spec.contact, bones: spec.strike },
       { frame: Math.min(spec.duration, spec.activeEnd + 3), bones: spec.followThrough },

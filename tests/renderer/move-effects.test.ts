@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { TEST_FIGHTER } from "../../src/content/test-fighter";
-import { moveEffectProfile } from "../../src/renderer/svg/move-effects";
+import { BELL_WARDEN } from "../../src/content/bell-warden";
+import { MOVE_VISUALS, moveEffectProfile, moveVisualDefinition } from "../../src/renderer/svg/move-effects";
 
 describe("move particle profiles", () => {
   it("gives every move a distinct deterministic visual signature", () => {
@@ -25,5 +26,21 @@ describe("move particle profiles", () => {
     expect(moveEffectProfile(5, ["cold", "freeze"]).kind).toBe("freeze");
     expect(moveEffectProfile(6, ["lightning", "shock"]).kind).toBe("shock");
     expect(moveEffectProfile(24, ["elemental", "burn", "freeze", "shock"]).kind).toBe("prism");
+  });
+
+  it("never derives geometry from the numeric move id", () => {
+    expect(moveEffectProfile(1, ["fire", "burn"], "ember_palm"))
+      .toEqual(moveEffectProfile(9999, ["fire", "burn"], "ember_palm"));
+  });
+
+  it("authors an anchor and exact non-overlapping windows for every playable technique", () => {
+    const moves = [...TEST_FIGHTER.moves, ...BELL_WARDEN.moves];
+    expect(Object.keys(MOVE_VISUALS)).toEqual(expect.arrayContaining(moves.map((move) => move.key)));
+    for (const move of moves) {
+      const visual = moveVisualDefinition(move.key);
+      expect(visual.anchor).toBeTruthy();
+      expect(visual.windows.telegraph[1]).toBeLessThan(visual.windows.trail[0]);
+      expect(visual.windows.trail[1]).toBeLessThan(visual.windows.residue[0]);
+    }
   });
 });
