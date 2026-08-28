@@ -8,31 +8,44 @@ import playerRig from "../../characters/test_fighter/rig.json";
 import { BELL_WARDEN } from "../../src/content/bell-warden";
 import { BELL_WARDEN_ANIMATIONS, BELL_WARDEN_RIG } from "../../src/content/bell-warden-assets";
 import { ADDITIONAL_ANIMATIONS } from "../../src/content/additional-animations";
+import { STATE_ANIMATIONS } from "../../src/content/state-animations";
 
-const GUARD = {
-  arm_upper_l: 28,
-  arm_lower_l: 66,
-  arm_upper_r: 40,
-  arm_lower_r: 68,
+const READY = {
+  arm_upper_l: -14,
+  arm_lower_l: -34,
+  arm_upper_r: -20,
+  arm_lower_r: -46,
 } as const;
 
-function armRotations(animation: { keyframes: readonly { bones: unknown }[] }): Record<keyof typeof GUARD, number | undefined> {
+function armRotations(animation: { keyframes: readonly { bones: unknown }[] }): Record<keyof typeof READY, number | undefined> {
   const bones = animation.keyframes[0].bones as Record<string, { rotation?: number } | undefined>;
-  return Object.fromEntries(Object.keys(GUARD).map((bone) => [bone, bones[bone]?.rotation])) as Record<keyof typeof GUARD, number | undefined>;
+  return Object.fromEntries(Object.keys(READY).map((bone) => [bone, bones[bone]?.rotation])) as Record<keyof typeof READY, number | undefined>;
 }
 
 describe("character presentation authoring", () => {
-  it("uses separated shoulders and one forward-guard reference for core player clips", () => {
+  it("keeps every generated attack on the same authored player reference pose", () => {
     const parts = Object.fromEntries(playerRig.parts.map((part) => [part.name, part]));
-    expect(parts.arm_upper_l.pivot.x).toBe(-8);
-    expect(parts.arm_upper_r.pivot.x).toBe(8);
-    expect(armRotations(idle)).toEqual(GUARD);
-    expect(armRotations(walkForward)).toEqual(GUARD);
-    expect(armRotations(walkBackward)).toEqual(GUARD);
-    expect(armRotations(standingLight)).toEqual(GUARD);
+    expect(parts.arm_upper_l.pivot.x).toBe(-2);
+    expect(parts.arm_upper_r.pivot.x).toBe(2);
+    expect(armRotations(idle)).toEqual(READY);
+    expect(armRotations(standingLight).arm_upper_r).toBe(READY.arm_upper_r);
+    expect(armRotations(standingLight).arm_lower_r).toBe(READY.arm_lower_r);
     for (const animation of Object.values(ADDITIONAL_ANIMATIONS)) {
-      expect(armRotations(animation)).toEqual(GUARD);
+      expect(armRotations(animation)).toEqual(READY);
     }
+
+    // Both guards must put both hands in front of the torso. Negative lower-arm
+    // rotations turn the nested forearms backward and caused the sideways flail.
+    for (const name of ["block_stand", "block_crouch"] as const) {
+      const block = armRotations(STATE_ANIMATIONS[name]);
+      expect(block.arm_upper_l).toBeGreaterThan(0);
+      expect(block.arm_lower_l).toBeGreaterThan(0);
+      expect(block.arm_upper_r).toBeGreaterThan(0);
+      expect(block.arm_lower_r).toBeGreaterThan(0);
+    }
+
+    expect(walkForward.keyframes).toHaveLength(9);
+    expect(walkBackward.keyframes).toHaveLength(9);
   });
 
   it("gives the Bell Warden a dedicated broad rig and every required clip", () => {

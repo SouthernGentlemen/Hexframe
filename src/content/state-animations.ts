@@ -113,9 +113,9 @@ export const STATE_ANIMATIONS: Record<string, RawAnimation> = {
     duration: 8,
     note: "High guard absorbs impact through forearms and a rearward torso brace.",
     keyframes: [
-      { frame: 0, bones: { pelvis: { x: -3 }, torso: { rotation: -12 }, head: { rotation: 8 }, arm_upper_l: { rotation: 12 }, arm_lower_l: { rotation: -98 }, hand_l: { rotation: 18 }, arm_upper_r: { rotation: 20 }, arm_lower_r: { rotation: -106 }, hand_r: { rotation: 14 }, leg_upper_l: { rotation: -12 }, leg_upper_r: { rotation: 16 } } },
-      { frame: 3, bones: { pelvis: { x: -6, y: -2 }, torso: { rotation: -18 }, head: { rotation: 13 }, arm_upper_l: { rotation: 20 }, arm_lower_l: { rotation: -112 }, arm_upper_r: { rotation: 27 }, arm_lower_r: { rotation: -116 } } },
-      { frame: 8, bones: { pelvis: { x: -2 }, torso: { rotation: -10 }, head: { rotation: 6 }, arm_upper_l: { rotation: 10 }, arm_lower_l: { rotation: -96 }, arm_upper_r: { rotation: 17 }, arm_lower_r: { rotation: -102 } } },
+      { frame: 0, bones: { pelvis: { x: -3 }, torso: { rotation: -12 }, head: { rotation: 8 }, arm_upper_l: { rotation: 32 }, arm_lower_l: { rotation: 82 }, hand_l: { rotation: 18 }, arm_upper_r: { rotation: 46 }, arm_lower_r: { rotation: 78 }, hand_r: { rotation: 14 }, leg_upper_l: { rotation: -12 }, leg_upper_r: { rotation: 16 } } },
+      { frame: 3, bones: { pelvis: { x: -6, y: -2 }, torso: { rotation: -18 }, head: { rotation: 13 }, arm_upper_l: { rotation: 42 }, arm_lower_l: { rotation: 100 }, arm_upper_r: { rotation: 54 }, arm_lower_r: { rotation: 96 } } },
+      { frame: 8, bones: { pelvis: { x: -2 }, torso: { rotation: -10 }, head: { rotation: 6 }, arm_upper_l: { rotation: 30 }, arm_lower_l: { rotation: 80 }, arm_upper_r: { rotation: 44 }, arm_lower_r: { rotation: 76 } } },
     ],
   },
   block_crouch: {
@@ -124,9 +124,9 @@ export const STATE_ANIMATIONS: Record<string, RawAnimation> = {
     duration: 8,
     note: "Low guard seals the torso and shin behind both forearms.",
     keyframes: [
-      { frame: 0, bones: { pelvis: { y: -22, x: -3 }, torso: { rotation: 4 }, head: { rotation: -1 }, leg_upper_l: { rotation: 68 }, leg_lower_l: { rotation: -82 }, leg_upper_r: { rotation: -58 }, leg_lower_r: { rotation: 74 }, arm_upper_l: { rotation: 32 }, arm_lower_l: { rotation: -124 }, arm_upper_r: { rotation: 38 }, arm_lower_r: { rotation: -130 } } },
-      { frame: 3, bones: { pelvis: { y: -25, x: -6 }, torso: { rotation: -2 }, head: { rotation: 4 }, arm_upper_l: { rotation: 40 }, arm_lower_l: { rotation: -136 }, arm_upper_r: { rotation: 46 }, arm_lower_r: { rotation: -140 } } },
-      { frame: 8, bones: { pelvis: { y: -21, x: -2 }, torso: { rotation: 5 }, arm_upper_l: { rotation: 30 }, arm_lower_l: { rotation: -122 }, arm_upper_r: { rotation: 36 }, arm_lower_r: { rotation: -128 } } },
+      { frame: 0, bones: { pelvis: { y: -22, x: -3 }, torso: { rotation: 4 }, head: { rotation: -1 }, leg_upper_l: { rotation: 68 }, leg_lower_l: { rotation: -82 }, leg_upper_r: { rotation: -58 }, leg_lower_r: { rotation: 74 }, arm_upper_l: { rotation: 38 }, arm_lower_l: { rotation: 88 }, arm_upper_r: { rotation: 50 }, arm_lower_r: { rotation: 84 } } },
+      { frame: 3, bones: { pelvis: { y: -25, x: -6 }, torso: { rotation: -2 }, head: { rotation: 4 }, arm_upper_l: { rotation: 48 }, arm_lower_l: { rotation: 104 }, arm_upper_r: { rotation: 60 }, arm_lower_r: { rotation: 100 } } },
+      { frame: 8, bones: { pelvis: { y: -21, x: -2 }, torso: { rotation: 5 }, arm_upper_l: { rotation: 36 }, arm_lower_l: { rotation: 86 }, arm_upper_r: { rotation: 48 }, arm_lower_r: { rotation: 82 } } },
     ],
   },
   hit_stand: {
