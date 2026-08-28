@@ -79,6 +79,8 @@ async function passThrough(request: Request, env: Env, url: URL): Promise<Respon
 async function route(request: Request, env: Env, url: URL): Promise<Response> {
   const path = url.pathname;
 
+  if (path === "/") return handlePlay(request, env, url);
+
   if (path === "/login") return handleLogin(request, env);
 
   if (path === "/logout") {
@@ -94,6 +96,15 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/play" || path.startsWith("/play/")) return handlePlay(request, env, url);
 
   if (path === "/training" || path.startsWith("/training/")) return handleTraining(request, env, url);
+
+  if (
+    path === "/campaign" || path.startsWith("/campaign/") ||
+    path === "/fight" || path.startsWith("/fight/") ||
+    path === "/loadouts" || path.startsWith("/loadouts/") ||
+    path === "/forge" || path.startsWith("/forge/") ||
+    path === "/codex" || path.startsWith("/codex/") ||
+    path === "/settings" || path.startsWith("/settings/")
+  ) return handlePlay(request, env, url);
 
   if (path === "/lab" || path.startsWith("/lab/")) return handleLab(request, env, url);
 

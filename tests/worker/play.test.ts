@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Env } from "../../src/worker/env";
+import worker from "../../src/worker/index";
 import { handlePlay, handleTraining } from "../../src/worker/routes/play";
 
 function environment(paths: string[]): Env {
@@ -65,4 +66,15 @@ describe("public playtest route", () => {
     expect(response.status).toBe(405);
     expect(response.headers.get("allow")).toBe("GET, HEAD");
   });
+
+  it.each(["/", "/campaign/", "/fight/", "/loadouts/loadout-01/", "/forge/", "/codex/moves/3/", "/settings/"])(
+    "serves the routed SPA document at %s",
+    async (pathname) => {
+      const paths: string[] = [];
+      const response = await worker.fetch(new Request(`https://hexframe.test${pathname}`), environment(paths));
+      expect(response.status).toBe(200);
+      expect(paths).toEqual(["/lab/index.html"]);
+      expect(await response.text()).toContain('src="/play/assets/game.js"');
+    },
+  );
 });

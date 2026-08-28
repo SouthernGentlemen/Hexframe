@@ -67,20 +67,13 @@ describe("lab accessibility contract", () => {
     expect(html).not.toContain("Sixteen actions, equipped relics");
   });
 
-  it("renders the six-destination game shell without operator-only state", () => {
+  it("keeps routed front-end screens out of the combat document", () => {
     const html = view(true);
     expect(html).toContain('class="lab-shell public-play"');
     expect(html).toContain("Prime. Link. Cash out.");
-    expect(html).toContain("Press any button");
-    expect(html).toContain("Main menu");
-    expect(html).toContain('data-front-destination="campaign"');
-    expect(html).toContain('data-front-destination="fight"');
-    expect(html).toContain('data-front-destination="training"');
-    expect(html).toContain('data-front-destination="armory"');
-    expect(html).toContain('data-front-destination="codex"');
-    expect(html).toContain('data-front-destination="system"');
-    expect(html).toContain("Warden Arena");
-    expect(html).toContain("Training Grid");
+    expect(html).not.toContain("Press any button");
+    expect(html).not.toContain('data-front-destination');
+    expect(html).not.toContain('id="front-shell"');
     expect(html).toContain('class="training-frame-console"');
     expect(html).toContain('id="move-timeline-console"');
     expect(html).not.toContain('class="frame-console"');
@@ -92,7 +85,7 @@ describe("lab accessibility contract", () => {
     expect(html).not.toContain('data-menu-tab="debug"');
     expect(html).not.toContain('action="/logout"');
     expect(html).not.toContain('id="debug-panel"');
-    expect(html).toContain("SERVER PERSISTENCE");
+    expect(html).not.toContain("SERVER PERSISTENCE");
   });
 
   it("makes frame and interaction inspection part of ordinary Training", () => {
@@ -127,9 +120,31 @@ describe("lab accessibility contract", () => {
         developerTools: false,
       });
     };
-    expect(renderMode("campaign").match(/data-menu-tab=/g)).toHaveLength(4);
-    expect(renderMode("fight").match(/data-menu-tab=/g)).toHaveLength(2);
-    expect(renderMode("training").match(/data-menu-tab=/g)).toHaveLength(3);
+    const campaignHtml = renderMode("campaign");
+    const fightHtml = renderMode("fight");
+    const trainingHtml = renderMode("training");
+
+    expect(campaignHtml.match(/data-menu-tab=/g)).toHaveLength(2);
+    expect(campaignHtml.match(/data-menu-page=/g)).toHaveLength(2);
+    expect(campaignHtml).toContain('id="page-loadout"');
+    expect(campaignHtml).toContain('id="page-settings"');
+    expect(campaignHtml).not.toContain('id="page-moves"');
+    expect(campaignHtml).not.toContain('id="page-training"');
+
+    expect(fightHtml.match(/data-menu-tab=/g)).toHaveLength(2);
+    expect(fightHtml.match(/data-menu-page=/g)).toHaveLength(2);
+    expect(fightHtml).toContain('id="page-moves"');
+    expect(fightHtml).toContain('id="page-settings"');
+    expect(fightHtml).not.toContain('id="page-loadout"');
+    expect(fightHtml).not.toContain('id="page-training"');
+
+    expect(trainingHtml.match(/data-menu-tab=/g)).toHaveLength(2);
+    expect(trainingHtml.match(/data-menu-page=/g)).toHaveLength(2);
+    expect(trainingHtml).toContain('id="page-training"');
+    expect(trainingHtml).toContain('id="page-settings"');
+    expect(trainingHtml).toContain('<summary>Advanced</summary>');
+    expect(trainingHtml).not.toContain('id="page-loadout"');
+    expect(trainingHtml).not.toContain('id="page-moves"');
 
     const tutorial = defaultSession("training");
     tutorial.options.tutorial = true;
@@ -144,8 +159,8 @@ describe("lab accessibility contract", () => {
       session: tutorial,
       developerTools: false,
     });
-    expect(tutorialHtml.match(/data-menu-tab=/g)).toHaveLength(4);
-    expect(tutorialHtml).toContain('data-menu-tab="moves"');
+    expect(tutorialHtml.match(/data-menu-tab=/g)).toHaveLength(2);
+    expect(tutorialHtml).not.toContain('data-menu-tab="moves"');
   });
 });
 

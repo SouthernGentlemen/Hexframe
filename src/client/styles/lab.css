@@ -140,6 +140,9 @@ kbd { padding: 4px 6px; border: 1px solid #46515b; border-bottom-width: 2px; bor
 .hud { position: absolute; z-index: 2; top: 20px; left: 22px; right: 22px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 24px; opacity: var(--hud-opacity); pointer-events: none; }
 .hud-player { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px; color: #cbd1d6; font: 800 9px ui-monospace, monospace; letter-spacing: .1em; }
 .hud-player-right { grid-column: 3; }
+.hud-team { display: grid; gap: 5px; min-width: 0; }
+.hud-team .hud-player { grid-template-columns: auto minmax(80px, 1fr) auto; }
+.hud-party-member + .hud-party-member { transform: scale(.82); transform-origin: left top; opacity: .86; }
 .hud-player > strong { display: grid; gap: 2px; }
 .hud-player > strong b { font: inherit; }
 .hud-player > strong small { color: #77c9e8; font: 650 7px ui-monospace, monospace; letter-spacing: .04em; white-space: nowrap; }
@@ -161,6 +164,7 @@ kbd { padding: 4px 6px; border: 1px solid #46515b; border-bottom-width: 2px; bor
 .current-route em { grid-column: 2; color: #89929b; font: normal 9px ui-monospace, monospace; }
 .status-lane { position: absolute; z-index: 3; top: 48px; display: flex; flex-wrap: wrap; gap: 5px; max-width: 42%; opacity: var(--hud-opacity); pointer-events: none; }
 .status-lane-you { left: 22px; }.status-lane-dummy { right: 22px; justify-content: flex-end; }
+.status-lane-party { top: calc(76px + (var(--party-row) - 1) * 26px); left: 22px; }
 .campaign-hud { position: absolute; z-index: 4; top: 76px; left: 50%; display: grid; min-width: 250px; padding: 9px 13px; border-top: 1px solid #8d774a; background: rgba(7,8,12,.8); text-align: center; transform: translateX(-50%); pointer-events: none; }
 .campaign-hud small { color: #a98d56; font: 700 7px ui-monospace, monospace; letter-spacing: .18em; }.campaign-hud strong { margin-top: 3px; color: #f0e9db; font: 800 10px ui-monospace, monospace; text-transform: uppercase; }.campaign-hud span { margin-top: 3px; color: #9ba3aa; font: 7px ui-monospace, monospace; }
 .debuff-chip { display: inline-grid; grid-template-columns: 19px auto auto; align-items: center; gap: 5px; min-height: 27px; padding: 3px 7px 3px 3px; border: 1px solid currentColor; background: rgba(7,9,12,.88); color: #fff; font: 8px ui-monospace, monospace; text-transform: uppercase; }
