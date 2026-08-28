@@ -1,14 +1,25 @@
 /**
- * Compatibility redirect from the retired laboratory product route.
+ * Primary developer-laboratory entry.
  *
- * Lab is now the advanced end of Training. A verified operator is redirected with the
- * developer-tools flag; everyone else reaches ordinary Training. The Worker makes that
- * decision before the unified client is served, so typing `debug=1` does not bypass the
- * session gate.
+ * `/lab` is intentionally private. An authenticated operator is sent to the neutral
+ * Training Grid with developer tools enabled; everyone else goes through the sign-in
+ * flow. Campaign content remains in the product, but it is not part of the laboratory
+ * entry path.
  */
 import type { Env } from "../env";
 import { credentialsConfigured } from "../auth/credentials";
 import { verifySessionCookie } from "../auth/session";
+
+function redirect(location: string): Response {
+  return new Response(null, {
+    status: 302,
+    headers: {
+      location,
+      "cache-control": "no-store",
+      "x-robots-tag": "noindex, nofollow",
+    },
+  });
+}
 
 export async function handleLab(request: Request, env: Env, url: URL): Promise<Response> {
   if (request.method !== "GET" && request.method !== "HEAD") {
@@ -21,20 +32,11 @@ export async function handleLab(request: Request, env: Env, url: URL): Promise<R
   const session = credentialsConfigured(env)
     ? await verifySessionCookie(env, request.headers.get("cookie"))
     : null;
-  const suffix = url.pathname.slice("/lab".length);
-  const query = new URLSearchParams(url.searchParams);
-  query.set("mode", "training");
-  if (session) query.set("debug", "1");
-  else query.delete("debug");
-  const serialized = query.toString();
-  const location = `/training${suffix}${serialized ? `?${serialized}` : ""}`;
-  return new Response(request.method === "HEAD" ? null : `Opening Training at ${location}\n`, {
-    status: 302,
-    headers: {
-      location,
-      "content-type": "text/plain; charset=utf-8",
-      "cache-control": "no-store",
-      "x-robots-tag": "noindex, nofollow",
-    },
-  });
+
+  if (!session) {
+    const next = `${url.pathname}${url.search}`;
+    return redirect(`/login?next=${encodeURIComponent(next)}`);
+  }
+
+  return redirect("/training/?mode=training&debug=1");
 }
