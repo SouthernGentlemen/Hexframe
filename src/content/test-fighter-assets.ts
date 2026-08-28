@@ -19,6 +19,12 @@ import standingLightJson from "../../characters/test_fighter/animations/standing
 import crouchingLightJson from "../../characters/test_fighter/animations/crouching_light.json";
 import { ADDITIONAL_ANIMATIONS } from "./additional-animations";
 import { STATE_ANIMATIONS } from "./state-animations";
+import {
+  normalizeIdlePresentation,
+  normalizeMovePresentation,
+  normalizeStatePresentation,
+  normalizeWalkPresentation,
+} from "./player-presentation";
 
 import type { RawAnimation, RawRig } from "./raw-types";
 import { validateAnimation, validateRig } from "./validate";
@@ -27,23 +33,29 @@ export const TEST_FIGHTER_MODEL: string = modelSvg;
 
 export const TEST_FIGHTER_RIG: RawRig = validateRig(rigJson);
 
-/** Clips by name. `MoveDef.animation` and the state-to-clip mapping both index this. */
+/**
+ * Clips by name. `MoveDef.animation` and the state-to-clip mapping both index this.
+ *
+ * The raw files stay readable as authored source material, while a tiny presentation-only
+ * normalization layer guarantees that neutral hands remain fighter-forward on both facings.
+ * Combat never imports this module, so the correction cannot alter boxes or frame data.
+ */
 export const TEST_FIGHTER_ANIMATIONS: Record<string, RawAnimation> = {
-  idle: validateAnimation(idleJson),
-  walk_forward: validateAnimation(walkForwardJson),
-  walk_backward: validateAnimation(walkBackwardJson),
-  standing_light: validateAnimation(standingLightJson),
-  crouching_light: validateAnimation(crouchingLightJson),
+  idle: validateAnimation(normalizeIdlePresentation(validateAnimation(idleJson)), "animations.idle"),
+  walk_forward: validateAnimation(normalizeWalkPresentation(validateAnimation(walkForwardJson)), "animations.walk_forward"),
+  walk_backward: validateAnimation(normalizeWalkPresentation(validateAnimation(walkBackwardJson), true), "animations.walk_backward"),
+  standing_light: validateAnimation(normalizeMovePresentation(validateAnimation(standingLightJson)), "animations.standing_light"),
+  crouching_light: validateAnimation(normalizeMovePresentation(validateAnimation(crouchingLightJson)), "animations.crouching_light"),
   ...Object.fromEntries(
     Object.entries(STATE_ANIMATIONS).map(([name, animation]) => [
       name,
-      validateAnimation(animation, `animations.${name}`),
+      validateAnimation(normalizeStatePresentation(name, validateAnimation(animation, `animations.${name}`)), `animations.${name}`),
     ]),
   ),
   ...Object.fromEntries(
     Object.entries(ADDITIONAL_ANIMATIONS).map(([name, animation]) => [
       name,
-      validateAnimation(animation, `animations.${name}`),
+      validateAnimation(normalizeMovePresentation(validateAnimation(animation, `animations.${name}`)), `animations.${name}`),
     ]),
   ),
 };
