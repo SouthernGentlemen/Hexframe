@@ -7,13 +7,14 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "npm run build && wrangler dev --port 8788",
-    "start": "wrangler dev --port 8788",
+    "dev": "node scripts/dev.mjs",
+    "start": "node scripts/dev.mjs --skip-build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "validate:content": "vitest run tests/content",
-    "deploy": "npm run build && wrangler deploy"
+    "secrets:push": "node scripts/sync-secrets.mjs",
+    "deploy": "node scripts/deploy.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260823.1",

@@ -4,8 +4,8 @@ dist/
 *.tsbuildinfo
 .DS_Store
 
-# Credentials. None of these may ever be committed: the lab password and the session
-# signing key live in .dev.vars locally and in Cloudflare secrets in production.
+# Credentials. None of these may ever be committed: the repository-root .env is the
+# local source of truth and the deploy script copies its admin values into production.
 .env
 .env.*
 !.env.example
