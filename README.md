@@ -1,133 +1,140 @@
 # Hexframe
 
-A deterministic 2D fighting game with its training instruments built into the game.
+Hexframe is a deterministic 2D fighting game built around authored loadouts, party AI, a single-player campaign, and first-class training tools.
 
-The order of work is deliberate: this is a **combat simulator first and a game second**.
-The current build carries the Black Belfry campaign slice, its Warden Arena duel variant,
-a training grid, one player fighter, the Bell Warden, 29 tagged moves, five deterministic
-status systems, three server-persisted loadouts and 25 equippable items. Around
-them is the machinery that everything later depends on — a fixed 60 Hz integer
-simulation, snapshots, state hashes, rollback, and Training tools that can pause, step,
-rewind and inspect it.
+The current vertical slice includes Black Belfry, its Warden Arena fight variant, the Training Grid, one player fighter, the Bell Warden, 29 tagged techniques, deterministic status systems, three server-persisted loadouts, equipment/crafting, and a fixed 60 Hz integer simulation with snapshots, hashes, and rollback infrastructure.
 
-## Layout
+## Player flow
 
+`/` is the title screen. `/play/` is the main menu with five player-facing destinations:
+
+- **Continue** — enter the current Black Belfry campaign checkpoint.
+- **Fight** — build a party from one human loadout plus up to two AI loadout slots, choose AI difficulty, and face the current encounter.
+- **Training** — choose a loadout, run the tutorial, or enter the integrated training environment.
+- **Loadouts** — edit the three 16-technique builds used by both human and AI slots. Forge is linked from this route.
+- **Codex** — inspect moves, statuses, enemies, and stages.
+
+Settings and player profile data are global controls rather than a sixth menu destination.
+
+The public front end uses clean routed screens:
+
+```text
+/
+/play/
+/campaign/
+/fight/
+/training/
+/loadouts/
+/loadouts/:id/
+/forge/
+/codex/
+/codex/moves/:id/
+/codex/status/:id/
+/codex/enemies/bell-warden/
+/codex/stages/black-belfry/
+/settings/
 ```
-src/combat      the simulation. integers only, no DOM, no clock, no randomness
-src/input       input frames, the buffer, and the command parser
-src/rollback    serialisation, hashing, the snapshot ring, the rollback session
-src/content     JSON → runtime combat data, and the validator that guards the door
-src/renderer    SVG. downstream of the simulation and never able to influence it
-src/lab         game UI: menus, armory, codex, training timeline, dummy, debug panel
-src/game        StageCatalog and the shared GameSession launch contract
-src/player      the versioned PlayerSave contract, browser cache, and save client
-src/worker      Cloudflare Worker: routing, save authority, developer gate, assets
-characters/     authored content, in world pixels and frames
-schemas/        JSON Schema for every content type
-tests/          simulation, determinism, rollback, collision, move and content suites
-docs/           CONTRACTS.md — the module surface every part is written against
+
+The retired Lab concept is folded into Training. `/lab/` remains a compatibility/authentication route and authenticated operator tooling is exposed through Training developer mode; ordinary players get the normal Training surface.
+
+## Core architecture
+
+```text
+src/combat      deterministic simulation; integers only, no DOM or wall clock
+src/input       input frames, history, buffering, command parsing
+src/rollback    snapshots, hashing, replay, rollback session
+src/content     authored gameplay and presentation content
+src/renderer    SVG presentation; always downstream of simulation
+src/game        StageCatalog, GameSession, party slots, deterministic loadout AI
+src/player      versioned PlayerSave contract, cache, server save client
+src/client      title/front-end route shell and browser entrypoints
+src/lab         in-match UI plus integrated Training/debug instrumentation
+src/worker      Cloudflare routing, save authority, auth gates, static assets
+characters/     authored fighter rig/animation/move content
+schemas/        JSON schemas for authored content
+ tests/         simulation, rollback, input, content, AI, renderer and worker suites
 ```
 
-## Running it
+Two rules are load-bearing:
+
+**Visual data is not combat data.** Rig poses, animations, particles, telegraphs, and SVG changes cannot change damage, startup, hitboxes, movement, or authoritative state.
+
+**Rendering is downstream.** The simulation runs on a fixed 60 Hz integer clock. Browser refresh rate and presentation interpolation cannot influence rollback state.
+
+## Sessions and parties
+
+A `GameSession` launches Campaign, Fight, or Training through a shared contract:
+
+```text
+mode
+party[]
+encounterId
+stageId
+options
+```
+
+A party slot contains a controller type and a loadout. Slot 1 is human; Fight and Campaign can add up to two AI slots. AI uses the same authored loadouts as the player rather than a separate hidden moveset.
+
+The deterministic `LoadoutAIController` reasons from authored move roles and combat state: starter/link/cashout tags, cancel windows, status stacks, stamina, range, defensive threat, spacing, and difficulty. It owns no ambient random state; tie-breaking and mistakes are derived from authoritative frame/seed inputs.
+
+Current AI difficulties change reaction delay, threat prediction, route depth, defensive consistency, spacing accuracy, offensive choice breadth, mistake frequency, and aggression. They do not modify fighter stats or authored damage.
+
+## Stages
+
+The StageCatalog currently exposes three launchable stage definitions:
+
+- `black-belfry-campaign` — scrolling campaign traversal with breakables, hazards, automatic checkpoint, chest, boss gate, and boss reward.
+- `black-belfry-arena` — compact duel-only Warden Arena with campaign traversal removed.
+- `training-grid` — neutral deterministic training space.
+
+Black Belfry no longer uses Forge or Arsenal Shrine objects as menu navigation. Loadouts and Forge are global routes; stage interactions are reserved for actual world actions.
+
+## Training
+
+Training is part of the game rather than a separate product. Normal tools include dummy behavior, recording/playback, reversals/counterattacks, frame transport, save/load state, geometry display, interaction history, and scenario capture/replay. Permanent authoritative developer instrumentation remains operator-gated.
+
+## Saves
+
+Progress uses one versioned `PlayerSave` containing campaign stage state, unlocks, inventory, and loadouts. A per-player Durable Object is the server source of truth and revisions protect against silent concurrent overwrites. Browser storage is a cache/migration surface, not the authority.
+
+Boss rewards and crafting are server operations. Bell Warden completion/reward mutation is idempotent.
+
+Device-specific preferences such as audio, accessibility, visual settings, deadzone, and vibration remain local.
+
+## Presentation
+
+The player and Bell Warden use independent SVG rigs and animation sets. Bell Warden no longer reuses the player skeleton.
+
+Technique VFX are authored per move with named anchors and exact presentation windows. Effects can anchor to hands, feet, torso, pelvis, ground, or hitbox centers, while actual contact bursts use the collision contact coordinates emitted by the simulation. Presentation remains non-authoritative.
+
+## Running locally
 
 ```bash
 npm install
-cp .env.example .env        # then fill in the account id and three ADMIN_* values
-npm run dev                 # vite build, then wrangler dev on :8788
+cp .env.example .env
+npm run dev
 ```
 
-`/` is the public landing page. `/play/` opens the title screen and six-destination main
-menu: Campaign, Fight, Training, Armory, Codex, and System. `/training/` launches the same
-client through the Training session contract. The retired `/lab` route redirects to
-Training; an authenticated operator receives `debug=1`, while an unauthenticated request
-is stripped back to ordinary Training. The permanent authoritative-state debugger remains
-operator-only, while frame controls, save states, geometry display, dummy behavior, and
-scenario capture are normal Training features.
+Then use:
 
 ```bash
-npm test          # simulation, determinism, rollback, collision, move, input, content
+npm test
 npm run typecheck
+npm run build
 ```
 
 ## Credentials
 
-Three values, by the same names in every environment:
+Local and production environments use the same secret names:
 
-| name | local (`.env`) | production |
-|---|---|---|
-| `ADMIN_USERNAME` | yes | synchronized by the deploy script |
-| `ADMIN_PASSWORD` | yes | synchronized by the deploy script |
-| `ADMIN_SESSION_SECRET` | yes | synchronized by the deploy script |
+| Name | Purpose |
+| --- | --- |
+| `ADMIN_USERNAME` | Operator login |
+| `ADMIN_PASSWORD` | Operator login |
+| `ADMIN_SESSION_SECRET` | Operator/player-save session signing |
 
-None of them reaches the browser. The session secret also signs the opaque player-save
-identity cookie. If it is absent, server saves answer `503` and the client continues from
-its device cache without treating that cache as authoritative.
-`.env`, `.env.*` and `.dev.vars` are ignored by git. `npm run deploy` reads the root
-`.env`, deploys to the selected Cloudflare account, and synchronizes the three admin
-values as Worker secrets.
+Secrets never ship to the browser.
 
-## Controls and move building
+## Current scope
 
-Movement is WASD or the left stick/D-pad. The arrow-key diamond maps spatially to
-Y/X/B/A. Direction chooses a status route: up is Fire, left is Poison, right is Freeze,
-and down is Shock. Shift or LT advances to the Link bank, E or RT advances to Cashout,
-and holding both selects the utility row: four route columns and 16 independent action
-inputs in total. The Arsenal renders that exact 4×4 layout, can equip an authored route
-from the Codex in one action, and persists the player's builds locally.
-
-The combo graph is authored rather than fully connected. Status primers are starters,
-their same-family follow-ups are links, and links reach only matching cashouts. Starters
-may pivot into another starter to reprime a route; cashouts and reversals end it. The
-catalog and Status Codex expose those role tags, and tests pin the five showcased routes.
-
-The Armory separates Loadout and Gear so neither screen has competing nested panels.
-Loadout arms one of the 16 action slots, equips directly from a controller-navigable
-filtered catalog, shows duplicate-aware equipped locations, and derives route completeness
-from authored cancel targets. The three loadouts are also the game's fighter-select
-fantasy: Campaign, Fight, and Training launch the selected 16-move build plus equipment.
-Gear contains equipped slots, character stats, inventory and item detail. The Moves Codex runs a canonical two-fighter mini-match through the real
-`Simulation` for Demo/Hit/Block, with exact 60 Hz frame scrubbing and the authoritative
-move timeline; the Status Codex explains primer/payoff routes, while training internals
-and hitbox overlays remain separate.
-
-The optional first-launch tutorial is a real game mode rather than a documentation page.
-Its movement, defense, direction, modifier, route, status, Arsenal, and Codex lessons
-advance from inputs, fighter states, move starts, contacts, and status events. It installs
-a temporary deterministic build, saves completion per lesson, and restores the player's
-presets unchanged when the tutorial exits.
-
-Every attack has a deterministic presentation profile. The 29 profiles combine authored
-fighter clips with distinct elemental colors, particle shapes, orbit counts, sizes,
-rotations and motion, while remaining downstream of combat state.
-
-Progress now uses one versioned `PlayerSave`: per-stage campaign state, unlocks, inventory,
-and loadouts. A per-player Durable Object is the source of truth and revisions prevent
-silent concurrent overwrites. Boss rewards, stage pickups, checkpoints, chests, and
-crafting are explicit server operations; Bell Warden rewards are idempotent. The old
-campaign/build localStorage keys are read once for migration into the unified cache.
-
-Settings are keyboard/gamepad navigable and deliberately remain device-local. Audio mixing, audio
-captions, visual-effect reduction, reduced motion, text scaling, high contrast, color
-vision palettes, status patterns, dyslexia-friendly type, strong focus indicators,
-screen-reader combat announcements, deadzone and vibration controls all have explicit
-user-facing controls. System motion preferences are honored by default.
-
-## The two rules worth restating
-
-**Visual data is not combat data.** Changing a torso lean in `characters/*/animations/`
-cannot change damage, startup or a hitbox, because the simulation never reads an
-animation. It reads `characters/*/moves/`.
-
-**Rendering is downstream.** Nothing under `src/renderer` or `src/lab` may decide game
-state. The simulation runs at a fixed 60 frames per second on integers, and the browser's
-refresh rate, `deltaTime`, and floating-point maths are kept out of it entirely — because
-a rollback that re-runs the same frames has to land on the same bits.
-
-## Not here yet
-
-0.1 is the foundation: the deterministic core, rollback, Campaign/Fight/Training launch
-contracts, unified saves, armory, gear, status routes, accessibility preferences and the
-tagged move catalog. Still to come —
-the projectile and throw archetypes, the `MatchRoom` Durable Object, the two-browser
-WebSocket match, and the network condition simulator. They are additions on top of this
-core, not changes to it.
+The current build is still foundational. Network matches, the MatchRoom Durable Object, two-browser WebSocket play, projectiles/throws as complete gameplay archetypes, additional stages, and additional fighters remain future work. The goal is to add those systems on top of the deterministic session/party/content contracts rather than replace them.

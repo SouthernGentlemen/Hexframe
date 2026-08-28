@@ -7,7 +7,6 @@ import { applyPreferences, loadPreferences, persistPreferences, resetPreferences
 import type { LabPreferences } from "../lab/preferences";
 import { cachePlayerSave, craftPlayerArmor, loadPlayerSave, persistPlayerSave, resetPlayerCampaign } from "../player/client";
 import type { PlayerSave } from "../player/save";
-import { mountRigRegressionScene } from "../renderer/character/regression-scene";
 
 interface FrontState {
   save: PlayerSave;
@@ -31,8 +30,6 @@ export async function startFrontApp(mount: HTMLElement): Promise<() => void> {
 
   const render = (): void => {
     mount.innerHTML = routeMarkup(window.location.pathname, state);
-    const rigScene = mount.querySelector<HTMLElement>("#rig-regression");
-    if (rigScene) mountRigRegressionScene(rigScene);
     bindMenuPreview(mount);
     mount.querySelector<HTMLElement>("[autofocus]")?.focus();
   };
@@ -122,7 +119,6 @@ function routeMarkup(pathname: string, state: FrontState): string {
   if (path === "/campaign/") return shell(campaignMarkup(state), "Campaign");
   if (path === "/fight/") return shell(setupMarkup(state, "fight"), "Fight setup");
   if (path === "/training/") return shell(trainingMarkup(state), "Training");
-  if (path === "/training/presentation/") return shell(rigRegressionMarkup(), "Rig presentation test");
   if (path === "/loadouts/") return shell(loadoutListMarkup(state), "Loadouts");
   const loadoutMatch = path.match(/^\/loadouts\/(loadout-0[1-3])\/$/);
   if (loadoutMatch) return shell(loadoutEditorMarkup(state, loadoutMatch[1]), "Loadout editor");
@@ -168,16 +164,12 @@ function campaignMarkup(state: FrontState): string {
 }
 
 function setupMarkup(state: FrontState, mode: "fight"): string {
-  return screenHeader("FIGHT", "Party and encounter", "/play/") + `<section class="fight-setup"><div><h2>Party</h2>${partyMarkup(state)}</div><div class="setup-row"><span>ENCOUNTER</span><strong>Bell Warden</strong></div><div class="setup-row"><span>STAGE</span><strong>‹ &nbsp; Warden Arena &nbsp; ›</strong></div><button class="route-primary launch-fight" type="button" data-launch="${mode}">Fight</button></section>`;
+  return screenHeader("FIGHT", "Party and encounter", "/play/") + `<section class="fight-setup"><div><h2>Party</h2>${partyMarkup(state)}</div><div class="setup-row"><span>ENCOUNTER</span><strong>Bell Warden</strong></div><div class="setup-row"><span>STAGE</span><strong>Warden Arena</strong></div><button class="route-primary launch-fight" type="button" data-launch="${mode}">Fight</button></section>`;
 }
 
 function trainingMarkup(state: FrontState): string {
   const active = state.save.loadouts.byId[state.party[0].loadoutId];
-  return screenHeader("TRAINING", "Practice freely", "/play/") + `<section class="training-entry"><div class="training-figure" aria-hidden="true"><i></i><i></i><i></i></div><article><p>LOADOUT</p><button type="button" data-action="pick-slot" data-slot="0"><strong>YOU</strong><span>${escapeHtml(active.name)}</span><em>Change</em></button>${pickerMarkup(state)}<div class="training-entry-actions"><button type="button" data-launch="training" data-tutorial="true">Tutorial</button><button class="route-primary" type="button" data-launch="training">Start training</button></div><a class="presentation-test-link" href="/training/presentation/">Presentation test →</a></article></section>`;
-}
-
-function rigRegressionMarkup(): string {
-  return screenHeader("TRAINING / PRESENTATION", "Facing regression", "/training/") + `<section class="rig-regression"><header><span></span><strong>FACING RIGHT</strong><strong>FACING LEFT</strong></header><div id="rig-regression"></div></section>`;
+  return screenHeader("TRAINING", "Practice freely", "/play/") + `<section class="training-entry"><div class="training-figure" aria-hidden="true"><i></i><i></i><i></i></div><article><p>LOADOUT</p><button type="button" data-action="pick-slot" data-slot="0"><strong>YOU</strong><span>${escapeHtml(active.name)}</span><em>Change</em></button>${pickerMarkup(state)}<div class="training-entry-actions"><button type="button" data-launch="training" data-tutorial="true">Tutorial</button><button class="route-primary" type="button" data-launch="training">Start training</button></div></article></section>`;
 }
 
 function partyMarkup(state: FrontState): string {

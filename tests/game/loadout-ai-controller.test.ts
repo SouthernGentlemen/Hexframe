@@ -36,6 +36,17 @@ describe("loadout AI controller", () => {
     expect(first & (InputBit.Left | InputBit.Right)).toBe(0);
   });
 
+  it("narrows offensive choice breadth as difficulty rises", () => {
+    const apprentice = aiProfile("apprentice");
+    const standard = aiProfile("standard");
+    const master = aiProfile("master");
+
+    expect(apprentice.choiceBreadth).toBeGreaterThan(standard.choiceBreadth);
+    expect(standard.choiceBreadth).toBeGreaterThan(master.choiceBreadth);
+    expect(apprentice.predictionHorizon).toBeLessThan(standard.predictionHorizon);
+    expect(standard.predictionHorizon).toBeLessThan(master.predictionHorizon);
+  });
+
   it("changes decision quality without mutating character combat stats", () => {
     const sim = partySim();
     const before = JSON.stringify(sim.characters());

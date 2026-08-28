@@ -74,8 +74,9 @@ export class LoadoutAIController {
     usable.sort((a, b) => moveScore(b, target, distance) - moveScore(a, target, distance) || a.id - b.id);
 
     const mistake = deterministicPercent(state.frame, fighterIndex, this.seed, 23) < this.profile.mistakeFrequency;
-    const horizon = Math.max(1, Math.min(usable.length, mistake ? 3 : this.profile.predictionHorizon));
-    const pick = deterministicPercent(state.frame, fighterIndex, this.seed, 37) % horizon;
+    const breadth = mistake ? this.profile.choiceBreadth + 3 : this.profile.choiceBreadth;
+    const choiceCount = Math.max(1, Math.min(usable.length, breadth));
+    const pick = deterministicPercent(state.frame, fighterIndex, this.seed, 37) % choiceCount;
     return commandFor(character, usable[pick]?.id ?? usable[0].id);
   }
 
@@ -147,7 +148,7 @@ function moveReach(move: MoveDef): number {
 function bestMove(character: CharacterDef, predicate: (move: MoveDef) => boolean, stamina: number): MoveDef | null {
   return usableMoves(character)
     .filter((move) => predicate(move) && move.staminaCost <= stamina)
-    .sort((a, b) => a.startup - b.startup || b.hitboxes[0].damage - a.hitboxes[0].damage || a.id - b.id)[0] ?? null;
+    .sort((a, b) => a.startup - b.startup || (b.hitboxes[0]?.damage ?? 0) - (a.hitboxes[0]?.damage ?? 0) || a.id - b.id)[0] ?? null;
 }
 
 function usableMoves(character: CharacterDef): MoveDef[] {

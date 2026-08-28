@@ -16,6 +16,8 @@ export interface AiProfile {
   routeDepth: number;
   defensiveConsistency: number;
   spacingAccuracy: number;
+  /** Number of top-scored moves considered when no intentional mistake is made. */
+  choiceBreadth: number;
   mistakeFrequency: number;
   aggression: number;
 }
@@ -124,12 +126,42 @@ export const STAGE_CATALOG: Readonly<Record<StageId, StageCatalogEntry>> = {
 
 export function aiProfile(difficulty: AiDifficulty = "standard"): AiProfile {
   if (difficulty === "apprentice") {
-    return { difficulty, reactionDelay: 18, predictionHorizon: 4, routeDepth: 1, defensiveConsistency: 42, spacingAccuracy: 58, mistakeFrequency: 22, aggression: 48 };
+    return {
+      difficulty,
+      reactionDelay: 18,
+      predictionHorizon: 4,
+      routeDepth: 1,
+      defensiveConsistency: 42,
+      spacingAccuracy: 58,
+      choiceBreadth: 6,
+      mistakeFrequency: 22,
+      aggression: 48,
+    };
   }
   if (difficulty === "master") {
-    return { difficulty, reactionDelay: 4, predictionHorizon: 18, routeDepth: 4, defensiveConsistency: 92, spacingAccuracy: 94, mistakeFrequency: 3, aggression: 78 };
+    return {
+      difficulty,
+      reactionDelay: 4,
+      predictionHorizon: 18,
+      routeDepth: 4,
+      defensiveConsistency: 92,
+      spacingAccuracy: 94,
+      choiceBreadth: 1,
+      mistakeFrequency: 3,
+      aggression: 78,
+    };
   }
-  return { difficulty, reactionDelay: 9, predictionHorizon: 10, routeDepth: 3, defensiveConsistency: 72, spacingAccuracy: 78, mistakeFrequency: 10, aggression: 64 };
+  return {
+    difficulty,
+    reactionDelay: 9,
+    predictionHorizon: 10,
+    routeDepth: 3,
+    defensiveConsistency: 72,
+    spacingAccuracy: 78,
+    choiceBreadth: 3,
+    mistakeFrequency: 10,
+    aggression: 64,
+  };
 }
 
 export function humanSlot(loadoutId = "loadout-01"): PartySlot {
