@@ -130,6 +130,15 @@ export interface RawCommand {
   priority: number;
 }
 
+export interface RawDashProfile {
+  /** Positive pixels-per-frame magnitudes, one authored value per dash frame. */
+  velocities: number[];
+  /** Zero-based first frame on which an attack may cancel the dash. */
+  attackCancelFrame: number;
+  staminaCost: number;
+  recognitionWindow: number;
+}
+
 /**
  * A fighter's authored definition. Moves live in sibling files and are handed to
  * `loadCharacter` separately: a move is edited far more often than a stat block, and
@@ -142,9 +151,8 @@ export interface RawCharacter {
   /** Pixels per frame. */
   walkForwardSpeed: number;
   walkBackwardSpeed: number;
-  dashSpeed: number;
-  /** Frames. Not scaled. */
-  dashDuration: number;
+  dashForward: RawDashProfile;
+  dashBackward: RawDashProfile;
   jumpVelocityY: number;
   jumpVelocityXForward: number;
   /** Negative means away from facing. */

@@ -60,6 +60,7 @@ export const MoveId = {
   WitchKnee: 26,
   MeteorHeel: 27,
   VoidDive: 28,
+  GraveToll: 29,
 } as const;
 
 /**

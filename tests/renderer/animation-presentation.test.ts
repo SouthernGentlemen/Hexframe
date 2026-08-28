@@ -19,9 +19,10 @@ describe("presentation state animation", () => {
     const fighter = createSim().getState().fighters[0];
 
     fighter.state = StateId.Dash;
-    fighter.vx = TEST_FIGHTER.dashSpeed * fighter.facing;
+    fighter.dashForward = 1;
+    fighter.vx = TEST_FIGHTER.dashForward.velocities[0] * fighter.facing;
     expect(animationForState(fighter, TEST_FIGHTER)).toBe("dash_forward");
-    fighter.vx *= -1;
+    fighter.dashForward = 0;
     expect(animationForState(fighter, TEST_FIGHTER)).toBe("dash_backward");
 
     fighter.state = StateId.HitstunStand;

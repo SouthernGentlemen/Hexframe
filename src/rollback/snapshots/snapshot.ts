@@ -26,11 +26,14 @@ import type { EntityState, Facing, FighterState, SimState, StateIdValue } from "
 /** version, frame, rng, fighter count. */
 const HEADER_INTS = 4;
 
-/** `FighterState` has twenty-nine integer fields; see the writer loop for the order. */
-const FIGHTER_INTS = 29;
+/** `FighterState` has thirty integer fields; see the writer loop for the order. */
+const FIGHTER_INTS = 30;
 
-/** `EntityState` has eight. */
-const ENTITY_INTS = 8;
+/** `EntityState` has twelve. */
+const ENTITY_INTS = 12;
+
+/** `StageState` has nine fixed integer fields. */
+const STAGE_INTS = 9;
 
 const BYTES_PER_INT = 4;
 
@@ -103,6 +106,7 @@ function toStateId(value: number): StateIdValue {
 function byteLengthOf(state: SimState): number {
   let ints = HEADER_INTS + state.fighters.length * FIGHTER_INTS;
   ints += 1 + state.entities.length * ENTITY_INTS;
+  ints += STAGE_INTS;
   ints += 1; // roundOver
   ints += 1; // player count for the input history
   for (const row of state.inputHistory) {
@@ -143,6 +147,7 @@ export function serializeState(state: SimState): Uint8Array {
     w.i32(f.comboCount);
     w.i32(f.armorHits);
     w.i32(f.bufferConsumedFrame);
+    w.i32(f.dashForward);
     w.i32(f.burnStacks);
     w.i32(f.burnFrames);
     w.i32(f.poisonStacks);
@@ -157,6 +162,7 @@ export function serializeState(state: SimState): Uint8Array {
 
   w.i32(state.entities.length);
   for (const e of state.entities) {
+    w.i32(e.id);
     w.i32(e.kind);
     w.i32(e.owner);
     w.i32(e.x);
@@ -165,7 +171,20 @@ export function serializeState(state: SimState): Uint8Array {
     w.i32(e.vy);
     w.i32(e.life);
     w.i32(e.hitFlags);
+    w.i32(e.w);
+    w.i32(e.h);
+    w.i32(e.value);
   }
+
+  w.i32(state.stage.worldMinX);
+  w.i32(state.stage.worldMaxX);
+  w.i32(state.stage.arenaMinX);
+  w.i32(state.stage.arenaMaxX);
+  w.i32(state.stage.arenaLocked);
+  w.i32(state.stage.bossActive);
+  w.i32(state.stage.checkpoint);
+  w.i32(state.stage.rewardSpawned);
+  w.i32(state.stage.bossActivatedFrame);
 
   w.i32(state.roundOver);
 
@@ -219,6 +238,7 @@ export function deserializeState(bytes: Uint8Array): SimState {
       comboCount: r.i32(),
       armorHits: r.i32(),
       bufferConsumedFrame: r.i32(),
+      dashForward: r.i32(),
       burnStacks: r.i32(),
       burnFrames: r.i32(),
       poisonStacks: r.i32(),
@@ -236,6 +256,7 @@ export function deserializeState(bytes: Uint8Array): SimState {
   const entities: EntityState[] = new Array<EntityState>(entityCount);
   for (let i = 0; i < entityCount; i++) {
     entities[i] = {
+      id: r.i32(),
       kind: r.i32(),
       owner: r.i32(),
       x: r.i32(),
@@ -244,8 +265,23 @@ export function deserializeState(bytes: Uint8Array): SimState {
       vy: r.i32(),
       life: r.i32(),
       hitFlags: r.i32(),
+      w: r.i32(),
+      h: r.i32(),
+      value: r.i32(),
     };
   }
+
+  const stage = {
+    worldMinX: r.i32(),
+    worldMaxX: r.i32(),
+    arenaMinX: r.i32(),
+    arenaMaxX: r.i32(),
+    arenaLocked: r.i32(),
+    bossActive: r.i32(),
+    checkpoint: r.i32(),
+    rewardSpawned: r.i32(),
+    bossActivatedFrame: r.i32(),
+  };
 
   const roundOver = r.i32();
 
@@ -260,7 +296,7 @@ export function deserializeState(bytes: Uint8Array): SimState {
     inputHistory[p] = row;
   }
 
-  return { frame, rng, fighters, entities, roundOver, inputHistory };
+  return { frame, rng, fighters, entities, stage, roundOver, inputHistory };
 }
 
 /**
@@ -296,6 +332,7 @@ export function cloneState(state: SimState): SimState {
       comboCount: f.comboCount,
       armorHits: f.armorHits,
       bufferConsumedFrame: f.bufferConsumedFrame,
+      dashForward: f.dashForward,
       burnStacks: f.burnStacks,
       burnFrames: f.burnFrames,
       poisonStacks: f.poisonStacks,
@@ -313,6 +350,7 @@ export function cloneState(state: SimState): SimState {
   for (let i = 0; i < state.entities.length; i++) {
     const e = state.entities[i];
     entities[i] = {
+      id: e.id,
       kind: e.kind,
       owner: e.owner,
       x: e.x,
@@ -321,6 +359,9 @@ export function cloneState(state: SimState): SimState {
       vy: e.vy,
       life: e.life,
       hitFlags: e.hitFlags,
+      w: e.w,
+      h: e.h,
+      value: e.value,
     };
   }
 
@@ -334,6 +375,7 @@ export function cloneState(state: SimState): SimState {
     rng: state.rng,
     fighters,
     entities,
+    stage: { ...state.stage },
     roundOver: state.roundOver,
     inputHistory,
   };

@@ -59,8 +59,6 @@ export function applyGroundMotion(f: FighterState, c: CharacterDef, input: Input
 }
 
 export const JUMP_STAMINA_COST = 12;
-export const DASH_STAMINA_COST = 20;
-
 /**
  * Integrate one frame of physics.
  *

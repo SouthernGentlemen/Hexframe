@@ -3,7 +3,7 @@ import { px } from "../../src/combat/constants";
 import { armorRemaining, isInvulnerable } from "../../src/combat/collision/boxes";
 import { canStartMove, moveOf, staminaCostOf, startMove } from "../../src/combat/commands/resolve";
 import { resolveContacts } from "../../src/combat/hit-resolution/resolve";
-import { DASH_STAMINA_COST, JUMP_STAMINA_COST } from "../../src/combat/movement/physics";
+import { JUMP_STAMINA_COST } from "../../src/combat/movement/physics";
 import { Simulation } from "../../src/combat/simulation/simulation";
 import { applyTaggedDebuffs } from "../../src/combat/status/debuffs";
 import type { CharacterDef, FrameReport } from "../../src/combat/types";
@@ -19,7 +19,7 @@ import {
 import { createSim, placeFighters, runFrames } from "../helpers/harness";
 
 function report(): FrameReport {
-  return { frame: 0, contacts: [], debuffs: [], moveStarts: [], stateChanges: [] };
+  return { frame: 0, contacts: [], debuffs: [], moveStarts: [], stateChanges: [], entityEvents: [] };
 }
 
 function config(player: CharacterDef, dummy = TEST_FIGHTER): ConstructorParameters<typeof Simulation>[0] {
@@ -38,9 +38,9 @@ describe("stamina economy", () => {
     dash.step([InputBit.Right, 0]);
     const fighter = dash.getState().fighters[0];
     expect(fighter.state).toBe(StateId.Dash);
-    expect(fighter.stamina).toBe(TEST_FIGHTER.stamina - DASH_STAMINA_COST);
+    expect(fighter.stamina).toBe(TEST_FIGHTER.stamina - TEST_FIGHTER.dashForward.staminaCost);
     runFrames(dash, 37);
-    expect(fighter.stamina).toBe(TEST_FIGHTER.stamina - DASH_STAMINA_COST + 1);
+    expect(fighter.stamina).toBe(TEST_FIGHTER.stamina - TEST_FIGHTER.dashForward.staminaCost + 1);
   });
 
   it("gates techniques by current stamina and applies poison and air discounts", () => {
@@ -156,7 +156,8 @@ describe("behavioral armor perks", () => {
     const dash = new Simulation(config(grave)).getState().fighters[0];
     dash.state = StateId.Dash;
     dash.stateFrame = 1;
-    dash.vx = -grave.dashSpeed * dash.facing;
+    dash.dashForward = 0;
+    dash.vx = -grave.dashBackward.velocities[1] * dash.facing;
     expect(isInvulnerable(dash, grave, InvulKind.Strike)).toBe(true);
 
     const target = createSim().getState().fighters[1];

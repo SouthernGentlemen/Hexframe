@@ -102,7 +102,7 @@ export function isInvulnerable(
     c.perks.graveStep &&
     f.state === StateId.Dash &&
     f.stateFrame < 3 &&
-    f.vx * f.facing < 0
+    f.dashForward === 0
   ) {
     return true;
   }

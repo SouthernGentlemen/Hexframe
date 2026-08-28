@@ -51,6 +51,8 @@ export const InputBit = {
   Action14: 1 << 17,
   Action15: 1 << 18,
   Action16: 1 << 19,
+  /** Deterministic world interaction: doors, shrines, chests, forges and rewards. */
+  Interact: 1 << 20,
   // Compatibility names for authored 0.1 content and existing replay scripts.
   Light: 1 << 4,
   Medium: 1 << 5,
@@ -67,10 +69,10 @@ export function actionBit(slot: number): number {
 }
 
 /** Every bit the engine defines. Anything outside this mask is dropped on the way in. */
-export const INPUT_MASK = (1 << (ACTION_SLOT_COUNT + 4)) - 1;
+export const INPUT_MASK = (1 << (ACTION_SLOT_COUNT + 5)) - 1;
 
 /** All attack buttons, for "is any attack pressed" tests. */
-export const ATTACK_BUTTONS = INPUT_MASK & ~0x0f;
+export const ATTACK_BUTTONS = ((1 << ACTION_SLOT_COUNT) - 1) << 4;
 
 /** All directions. */
 export const DIRECTION_BITS = InputBit.Up | InputBit.Down | InputBit.Left | InputBit.Right;
@@ -190,6 +192,14 @@ export interface CancelWindow {
   onHitOnly: boolean;
 }
 
+export interface TelegraphDef {
+  startFrame: number;
+  endFrame: number;
+  shape: "ground-band" | "vertical-sigil" | "floor-pulse" | "tracking-line";
+  pattern: "diagonal" | "rings" | "runes" | "chain";
+  cue: string;
+}
+
 /** A move: what the game *does*. Its `animation` is only a name the renderer resolves. */
 export interface MoveDef {
   id: number;
@@ -215,6 +225,8 @@ export interface MoveDef {
   armorWindows: ArmorWindow[];
   movement: MovementKey[];
   cancelWindows: CancelWindow[];
+  /** Presentation-only warning metadata; combat resolution never reads it. */
+  telegraph?: TelegraphDef;
 }
 
 /** How a player asks for a move. Motions are facing-relative numpad digits. */
@@ -251,8 +263,8 @@ export interface CharacterDef {
   perks: CombatPerks;
   walkForwardSpeed: number;
   walkBackwardSpeed: number;
-  dashSpeed: number;
-  dashDuration: number;
+  dashForward: DashProfile;
+  dashBackward: DashProfile;
   jumpVelocityY: number;
   jumpVelocityXForward: number;
   jumpVelocityXBackward: number;
@@ -291,6 +303,14 @@ export interface CombatPerks {
   burningBrand: boolean;
 }
 
+/** Authored per-frame ground speed and cancel rules for one dash direction. */
+export interface DashProfile {
+  velocities: number[];
+  attackCancelFrame: number;
+  staminaCost: number;
+  recognitionWindow: number;
+}
+
 // ---------------------------------------------------------------------------
 // Simulation state — hashed, snapshotted, rolled back
 // ---------------------------------------------------------------------------
@@ -311,6 +331,7 @@ export const StateId = {
   BlockstunCrouch: 12,
   Dash: 13,
   Knockdown: 14,
+  GuardBreak: 15,
 } as const;
 export type StateIdValue = (typeof StateId)[keyof typeof StateId];
 
@@ -357,6 +378,8 @@ export interface FighterState {
    * window; with it, a press produces exactly one move however early it was made.
    */
   bufferConsumedFrame: number;
+  /** 1 for a forward dash, 0 for a backdash. Meaningful only in `StateId.Dash`. */
+  dashForward: number;
   /** Deterministic stack counts and lifetimes for tag-driven status effects. */
   burnStacks: number;
   burnFrames: number;
@@ -372,7 +395,9 @@ export interface FighterState {
 
 /** A deterministic spawned entity — projectiles from 0.2. Present so rollback covers it. */
 export interface EntityState {
+  id: number;
   kind: number;
+  /** Entity subtype or owning fighter, depending on kind. */
   owner: number;
   x: number;
   y: number;
@@ -380,6 +405,67 @@ export interface EntityState {
   vy: number;
   life: number;
   hitFlags: number;
+  w: number;
+  h: number;
+  value: number;
+}
+
+export const EntityKind = {
+  Breakable: 0,
+  HealthPickup: 1,
+  StaminaPickup: 2,
+  MaterialPickup: 3,
+  Interactable: 4,
+  Hazard: 5,
+  Projectile: 6,
+} as const;
+
+export const InteractableKind = {
+  ArsenalShrine: 0,
+  Checkpoint: 1,
+  Forge: 2,
+  BossGate: 3,
+  Chest: 4,
+  BossReward: 5,
+} as const;
+
+export interface StageEntityDef {
+  id: number;
+  kind: number;
+  owner: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  value: number;
+  life?: number;
+}
+
+export interface StageDef {
+  id: string;
+  width: number;
+  spawnX: number;
+  cameraBounds: { minX: number; maxX: number };
+  bossArena: { gateX: number; minX: number; maxX: number };
+  checkpoints: number[];
+  interactables: StageEntityDef[];
+  breakables: StageEntityDef[];
+  hazards: StageEntityDef[];
+  backdrop: string;
+  bossReward?: StageEntityDef;
+}
+
+export interface StageState {
+  worldMinX: number;
+  worldMaxX: number;
+  arenaMinX: number;
+  arenaMaxX: number;
+  arenaLocked: number;
+  bossActive: number;
+  checkpoint: number;
+  rewardSpawned: number;
+  /** Frame the arena gate sealed, keeping boss sequencing rollback-authoritative. */
+  bossActivatedFrame: number;
 }
 
 /** The complete authoritative state of a match on one frame. */
@@ -390,6 +476,7 @@ export interface SimState {
   /** Always exactly `PLAYER_COUNT` entries, in player-index order. */
   fighters: FighterState[];
   entities: EntityState[];
+  stage: StageState;
   /** 1 once a fighter has reached zero health. The lab does not stop the clock. */
   roundOver: number;
   /**
@@ -437,6 +524,10 @@ export interface ContactEvent {
   counterHit: boolean;
   /** True when damage landed but a hyper-armor point prevented hitstun. */
   armored: boolean;
+  /** Stamina removed by this guard contact. Zero on a perfect guard. */
+  guardStaminaDamage: number;
+  perfectGuard: boolean;
+  guardBreak: boolean;
   /** Approximate world point of contact, for the renderer's effects. */
   x: number;
   y: number;
@@ -466,6 +557,24 @@ export interface FrameReport {
   moveStarts: { player: number; moveId: number }[];
   /** A fighter's state changed this frame, for the lab's state log. */
   stateChanges: { player: number; from: StateIdValue; to: StateIdValue }[];
+  entityEvents: EntityEvent[];
+}
+
+export const EntityEventKind = {
+  Broken: 0,
+  PickedUp: 1,
+  Interacted: 2,
+  Damaged: 3,
+  Spawned: 4,
+} as const;
+
+export interface EntityEvent {
+  entityId: number;
+  kind: number;
+  entityKind: number;
+  owner: number;
+  value: number;
+  player: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -478,6 +587,7 @@ export interface SimConfig {
   startX: [number, number];
   /** Seed for the deterministic RNG. */
   seed: number;
+  stage?: StageDef;
 }
 
 /** World-space collision volumes for one frame, for the debug overlay and for tests. */

@@ -15,7 +15,7 @@ import { createSim } from "../helpers/harness";
 const NO_RESISTANCE = { poison: 0, fire: 0, frost: 0, shock: 0 } as const;
 
 function report(): FrameReport {
-  return { frame: 0, contacts: [], debuffs: [], moveStarts: [], stateChanges: [] };
+  return { frame: 0, contacts: [], debuffs: [], moveStarts: [], stateChanges: [], entityEvents: [] };
 }
 
 describe("tag-driven debuffs", () => {

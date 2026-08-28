@@ -29,16 +29,13 @@ import {
   GROUND_Y,
   NO_MOVE,
   PLAYER_COUNT,
+  STAGE_HALF_WIDTH,
   STAMINA_REGEN_DELAY,
 } from "../constants";
 import { advanceMove, canStartMove, moveOf, startMove } from "../commands/resolve";
 import { resolvePushboxes } from "../collision/pushbox";
 import { resolveContacts } from "../hit-resolution/resolve";
-import {
-  applyGroundMotion,
-  applyMovement,
-  DASH_STAMINA_COST,
-} from "../movement/physics";
+import { applyGroundMotion, applyMovement } from "../movement/physics";
 import {
   enterState,
   isActionable,
@@ -50,6 +47,7 @@ import { pressedOn, readInput, writeInput } from "../../input/buffer/history";
 import { commandPressFrame, resolveCommand } from "../../input/parser/command-parser";
 import { isBackward, isForward } from "../../input/parser/numpad";
 import { isFrozen, tickDebuffs } from "../status/debuffs";
+import { resolveEntities } from "../entities/resolve";
 
 export class Simulation {
   readonly config: SimConfig;
@@ -97,6 +95,7 @@ export class Simulation {
         // -1 rather than 0, so that a press on frame 0 is still newer than "nothing
         // consumed yet" and the very first button of a match is not swallowed.
         bufferConsumedFrame: -1,
+        dashForward: 1,
         burnStacks: 0,
         burnFrames: 0,
         poisonStacks: 0,
@@ -115,7 +114,35 @@ export class Simulation {
       inputHistory.push(new Array<number>(COMMAND_HISTORY_FRAMES).fill(0));
     }
 
-    return { frame: 0, rng: config.seed, fighters, entities: [], roundOver: 0, inputHistory };
+    const stage = config.stage;
+    const entities = stage
+      ? [...stage.breakables, ...stage.interactables, ...stage.hazards].map((entity) => ({
+          ...entity,
+          vx: 0,
+          vy: 0,
+          life: entity.life ?? -1,
+          hitFlags: 0,
+        }))
+      : [];
+    return {
+      frame: 0,
+      rng: config.seed,
+      fighters,
+      entities,
+      stage: {
+        worldMinX: stage?.cameraBounds.minX ?? -STAGE_HALF_WIDTH,
+        worldMaxX: stage?.cameraBounds.maxX ?? STAGE_HALF_WIDTH,
+        arenaMinX: stage?.bossArena.minX ?? -STAGE_HALF_WIDTH,
+        arenaMaxX: stage?.bossArena.maxX ?? STAGE_HALF_WIDTH,
+        arenaLocked: 0,
+        bossActive: stage ? 0 : 1,
+        checkpoint: 0,
+        rewardSpawned: 0,
+        bossActivatedFrame: 0,
+      },
+      roundOver: 0,
+      inputHistory,
+    };
   }
 
   getState(): SimState {
@@ -148,6 +175,7 @@ export class Simulation {
       debuffs: [],
       moveStarts: [],
       stateChanges: [],
+      entityEvents: [],
     };
 
     const before: StateIdValue[] = s.fighters.map((f) => f.state);
@@ -190,7 +218,7 @@ export class Simulation {
 
       if (f.state === StateId.Attack) {
         advanceMove(f, c);
-      } else if (f.state === StateId.Dash && f.stateFrame >= c.dashDuration) {
+      } else if (f.state === StateId.Dash && f.stateFrame >= this.dashProfile(f, c).velocities.length) {
         enterState(f, StateId.Idle);
         f.vx = 0;
       } else if (isInStun(f) && f.stun === 0) {
@@ -202,6 +230,12 @@ export class Simulation {
       }
 
       tickTimers(f);
+
+      if (f.state === StateId.Dash) {
+        const profile = this.dashProfile(f, c);
+        const velocity = profile.velocities[Math.min(f.stateFrame, profile.velocities.length - 1)] ?? 0;
+        f.vx = velocity * (f.dashForward === 1 ? f.facing : -f.facing);
+      }
 
       if (f.staminaRegenDelay > 0) f.staminaRegenDelay--;
       else if (f.stamina < c.stamina) f.stamina++;
@@ -254,6 +288,7 @@ export class Simulation {
     //       All four are one call: a box is only interesting at the moment it is tested,
     //       and building intermediate lists nobody keeps would be work for its own sake.
     resolveContacts(s, this.chars, inputs, report);
+    resolveEntities(s, this.chars, inputs, report, this.config.stage);
 
     // 11-13. Hitstop, stun and health were written by step 10. They are decremented at
     //        the top of the following frame, so a hitstop of 7 freezes exactly 7 frames.
@@ -266,7 +301,7 @@ export class Simulation {
       e.y += e.vy;
       if (e.life > 0) e.life--;
     }
-    s.entities = s.entities.filter((e) => e.life > 0);
+    s.entities = s.entities.filter((e) => e.life !== 0);
 
     // 15-17. A state entered during this frame is on its frame 0 for the whole of it and
     //        ages at the end, which is what lets the checks at the top of the next frame
@@ -319,27 +354,35 @@ export class Simulation {
     enterState(f, StateId.Airborne);
   }
 
-  /** Start a grounded dash when the same horizontal direction is tapped twice in 8 frames. */
+  /** Start a grounded authored dash when the same horizontal direction is tapped twice. */
   private tryStartDash(s: SimState, player: number, f: FighterState, c: CharacterDef): boolean {
-    if (!isActionable(f) || f.airborne === 1 || f.stamina < DASH_STAMINA_COST) return false;
+    if (!isActionable(f) || f.airborne === 1) return false;
     const directions = [InputBit.Left, InputBit.Right] as const;
     for (const direction of directions) {
       if (!pressedOn(s, player, s.frame, direction)) continue;
+      const sign = direction === InputBit.Left ? -1 : 1;
+      const forward = sign === f.facing;
+      const profile = forward ? c.dashForward : c.dashBackward;
+      if (f.stamina < profile.staminaCost) continue;
       let doubleTap = false;
-      for (let frame = s.frame - 2; frame >= Math.max(0, s.frame - 8); frame--) {
+      for (let frame = s.frame - 2; frame >= Math.max(0, s.frame - profile.recognitionWindow); frame--) {
         if (pressedOn(s, player, frame, direction)) {
           doubleTap = true;
           break;
         }
       }
       if (!doubleTap) continue;
-      const sign = direction === InputBit.Left ? -1 : 1;
-      f.stamina -= DASH_STAMINA_COST;
+      f.stamina -= profile.staminaCost;
       f.staminaRegenDelay = STAMINA_REGEN_DELAY;
-      f.vx = c.dashSpeed * sign;
+      f.dashForward = forward ? 1 : 0;
+      f.vx = (profile.velocities[0] ?? 0) * sign;
       enterState(f, StateId.Dash);
       return true;
     }
     return false;
+  }
+
+  private dashProfile(f: FighterState, c: CharacterDef) {
+    return f.dashForward === 1 ? c.dashForward : c.dashBackward;
   }
 }
