@@ -4,7 +4,7 @@ A deterministic 2D fighting-game simulator, and the laboratory used to build it.
 
 The order of work is deliberate: this is a **combat simulator first and a game second**.
 The current build carries one stage, one fighter, one dummy, 24 tagged moves, five
-deterministic status systems, three persistent loadouts and 12 equippable items. Around
+deterministic status systems, three persistent loadouts and 25 equippable items. Around
 them is the machinery that everything later depends on — a fixed 60 Hz integer
 simulation, snapshots, state hashes, rollback, and a lab that can pause, step, rewind and
 inspect it.
@@ -33,9 +33,11 @@ cp .env.example .env        # then fill in the account id and three ADMIN_* valu
 npm run dev                 # vite build, then wrangler dev on :8788
 ```
 
-`/` is the public shell. `/lab` is private: the Worker checks a signed session cookie and
-sends you to `/login` if you have not got one. Nothing under `/lab` is served until that
-check passes.
+`/` is the public shell and `/play/` is the public, game-first playtest. `/lab` is private:
+the Worker checks a signed session cookie and sends you to `/login` if you have not got
+one. Nothing under `/lab` is served until that check passes. The two combat routes share
+one simulator and browser bundle, but only the lab renders the permanent debugger,
+geometry controls, interaction history, and scenario tools.
 
 ```bash
 npm test          # simulation, determinism, rollback, collision, move, input, content
@@ -61,9 +63,14 @@ values as Worker secrets.
 ## Controls and move building
 
 Movement is WASD or the left stick/D-pad. The arrow-key diamond maps spatially to
-Y/X/B/A. Shift or LT selects action bank two, Space or RT selects bank three, and holding
-both selects bank four: 16 independent action inputs in total. The private lab's loadout
-menu assigns any 16 of the 24 moves to those inputs and persists the build locally.
+Y/X/B/A. Shift or LT selects the Setup bank, E or RT selects Power, and holding both
+selects Finale: four named banks and 16 independent action inputs in total. The Arsenal
+assigns any 16 of the 24 moves to those inputs and persists the build locally.
+
+The combo graph is authored rather than fully connected. Status primers are starters,
+their same-family follow-ups are links, and links reach only matching cashouts. Starters
+may pivot into another starter to reprime a route; cashouts and reversals end it. The
+catalog and Status Codex expose those role tags, and tests pin the five showcased routes.
 
 The Armory separates Loadout and Gear so neither screen has competing nested panels.
 Loadout contains the keyboard/gamepad diagram, 16-action assignment deck, full frame-data

@@ -57,6 +57,17 @@ describe("lab accessibility contract", () => {
   it("removes operator-only controls from the public playtest", () => {
     const html = view(true);
     expect(html).toContain("PUBLIC PLAYTEST");
+    expect(html).toContain('class="lab-shell public-play"');
+    expect(html).toContain("Prime. Link. Cash out.");
+    expect(html).toContain("Arsenal · Codex · System");
+    expect(html).toContain('class="training-frame-console"');
+    expect(html).toContain('id="move-timeline-console"');
+    expect(html).not.toContain('class="frame-console"');
+    expect(html).not.toContain('id="frame-inspector"');
+    expect(html).not.toContain('class="geometry-controls"');
+    expect(html).not.toContain('id="interaction-history"');
+    expect(html).not.toContain('data-action="scenario-capture"');
+    expect(html).not.toContain("Combat operating system.");
     expect(html).not.toContain('data-menu-tab="debug"');
     expect(html).not.toContain('action="/logout"');
     expect(html).not.toContain('id="debug-panel"');

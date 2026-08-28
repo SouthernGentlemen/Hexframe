@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { cancelAllowed } from "../../src/combat/commands/resolve";
 import { ACTION_SLOT_COUNT, actionBit } from "../../src/combat/types";
 import {
   commandsForLoadout,
   DEFAULT_MOVE_LOADOUT,
+  MoveId,
   TEST_FIGHTER,
 } from "../../src/content/test-fighter";
 import { ADDITIONAL_ANIMATIONS } from "../../src/content/additional-animations";
+import { createSim } from "../helpers/harness";
 
 describe("move catalog and loadout", () => {
   it("ships 24 uniquely named and tagged moves", () => {
@@ -38,12 +41,52 @@ describe("move catalog and loadout", () => {
     }
   });
 
-  it("offers on-hit combo routes into other moves", () => {
+  it("enforces starter to link to cashout route grammar", () => {
     const validIds = new Set(TEST_FIGHTER.moves.map((move) => move.id));
     for (const move of TEST_FIGHTER.moves) {
-      expect(move.cancelWindows.length).toBeGreaterThan(0);
-      expect(move.cancelWindows[0].onHitOnly).toBe(true);
-      expect(move.cancelWindows[0].into.every((id) => validIds.has(id))).toBe(true);
+      const role = move.tags.find((tag) => ["starter", "link", "cashout", "reversal"].includes(tag));
+      expect(role).toBeDefined();
+      for (const window of move.cancelWindows) {
+        expect(window.onHitOnly).toBe(true);
+        expect(window.into.every((id) => validIds.has(id))).toBe(true);
+        const targetRoles = window.into.map((id) => TEST_FIGHTER.moves.find((candidate) => candidate.id === id)?.tags ?? []);
+        if (role === "starter") expect(targetRoles.every((tags) => tags.includes("starter") || tags.includes("link"))).toBe(true);
+        if (role === "link") expect(targetRoles.every((tags) => tags.includes("link") || tags.includes("cashout"))).toBe(true);
+      }
+      if (role === "cashout" || role === "reversal") expect(move.cancelWindows).toHaveLength(0);
     }
+
+    const route = (keys: string[]): void => {
+      for (let index = 0; index < keys.length - 1; index++) {
+        const move = TEST_FIGHTER.moves.find((candidate) => candidate.key === keys[index])!;
+        const into = TEST_FIGHTER.moves.find((candidate) => candidate.key === keys[index + 1])!;
+        expect(move.cancelWindows.some((window) => window.into.includes(into.id))).toBe(true);
+      }
+    };
+    route(["ember_palm", "ashen_sweep", "phoenix_drive"]);
+    route(["venom_fang", "toxic_bloom", "plague_touch"]);
+    route(["frost_heel", "glacier_spike", "permafrost"]);
+    route(["storm_knuckle", "static_rush", "bastion_break"]);
+    route(["crimson_arc", "blood_moon", "reaper_kick"]);
+
+    const ember = TEST_FIGHTER.moves.find((move) => move.key === "ember_palm")!;
+    const toxic = TEST_FIGHTER.moves.find((move) => move.key === "toxic_bloom")!;
+    const reaper = TEST_FIGHTER.moves.find((move) => move.key === "reaper_kick")!;
+    expect(ember.cancelWindows.some((window) => window.into.includes(toxic.id))).toBe(false);
+    expect(toxic.cancelWindows.some((window) => window.into.includes(reaper.id))).toBe(false);
+  });
+
+  it("applies the route grammar at the combat command gate", () => {
+    const fighter = createSim().getState().fighters[0];
+    fighter.moveId = MoveId.EmberPalm;
+    fighter.moveFrame = 8;
+    fighter.hitFlags = 1;
+    expect(cancelAllowed(fighter, TEST_FIGHTER, MoveId.AshenSweep)).toBe(true);
+    expect(cancelAllowed(fighter, TEST_FIGHTER, MoveId.ToxicBloom)).toBe(false);
+
+    fighter.moveId = MoveId.ToxicBloom;
+    fighter.moveFrame = 15;
+    expect(cancelAllowed(fighter, TEST_FIGHTER, MoveId.PlagueTouch)).toBe(true);
+    expect(cancelAllowed(fighter, TEST_FIGHTER, MoveId.ReaperKick)).toBe(false);
   });
 });

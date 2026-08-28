@@ -162,7 +162,8 @@ export function startLab(mount: HTMLElement): () => void {
     required("active-move").textContent = move?.key.replaceAll("_", " ") ?? "Ready";
     required("active-tags").textContent = move?.tags.join(" · ") ?? "Choose any 16 of 24 moves";
     for (const pause of mount.querySelectorAll<HTMLButtonElement>("[data-action='pause']")) pause.textContent = timeline.paused ? "Play" : "Pause";
-    required("frame-inspector").innerHTML = frameInspectorMarkup(state, sim.characters(), lastReport ?? timeline.lastReport, stateHash);
+    const frameInspector = mount.querySelector<HTMLElement>("#frame-inspector");
+    if (frameInspector) frameInspector.innerHTML = frameInspectorMarkup(state, sim.characters(), lastReport ?? timeline.lastReport, stateHash);
     renderFrameTimeline(state.fighters[0].moveId, state.fighters[0].moveFrame);
     renderInteractionHistory();
     moveShowcase.render(now);
@@ -607,11 +608,13 @@ export function startLab(mount: HTMLElement): () => void {
   }
 
   function renderInteractionHistory(): void {
+    const interactionHistory = mount.querySelector<HTMLElement>("#interaction-history");
+    if (!interactionHistory) return;
     const reports = timeline.contactReports();
     const key = `${reports.map((report) => `${report.frame}:${report.contacts.length}`).join(",")}|${selectedInteraction?.frame ?? "latest"}:${selectedInteraction?.index ?? 0}`;
     if (key === interactionRenderKey) return;
     interactionRenderKey = key;
-    required("interaction-history").innerHTML = interactionHistoryMarkup(reports, sim.characters(), selectedInteraction);
+    interactionHistory.innerHTML = interactionHistoryMarkup(reports, sim.characters(), selectedInteraction);
   }
 
   function inspectInteraction(frame: number, index: number): void {
