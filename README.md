@@ -1,140 +1,103 @@
 # Hexframe
 
-Hexframe is a deterministic 2D fighting game built around authored loadouts, party AI, a single-player campaign, and first-class training tools.
+A deterministic 2D fighting-game architecture built around authored combat, rollback
+infrastructure, deterministic party AI, and first-class training tools.
 
-The current vertical slice includes Black Belfry, its Warden Arena fight variant, the Training Grid, one player fighter, the Bell Warden, 29 tagged techniques, deterministic status systems, three server-persisted loadouts, equipment/crafting, and a fixed 60 Hz integer simulation with snapshots, hashes, and rollback infrastructure.
+**[Live](https://hexframe.wizardgang.ai)** · **[Architecture](docs/ARCHITECTURE.md)** ·
+**[Releases](../../releases)** · **[Engineering record](docs/RECONSTRUCTION.md)**
 
-## Player flow
+## What it does
 
-`/` is the title screen. `/play/` is the main menu with five player-facing destinations:
+Hexframe runs a fixed 60 Hz, integer-only simulation in the browser. One frame of inputs
+goes in, one frame of authoritative state comes out — no clock is read, no ambient
+randomness is sampled, and nothing outside that state can change the outcome. Everything
+else is downstream: rendering, tooling, the AI that plays a party slot, and the server.
 
-- **Continue** — enter the current Black Belfry campaign checkpoint.
-- **Fight** — build a party from one human loadout plus up to two AI loadout slots, choose AI difficulty, and face the current encounter.
-- **Training** — choose a loadout, run the tutorial, or enter the integrated training environment.
-- **Loadouts** — edit the three 16-technique builds used by both human and AI slots. Forge is linked from this route.
-- **Codex** — inspect moves, statuses, enemies, and stages.
+- **Fight, Training and Campaign** as three configurations of one simulation, not three
+  code paths that happen to look alike.
+- **The Black Belfry**, a campaign slice with traversal, breakables, hazards, checkpoints
+  and the Bell Warden.
+- **An Armory and a Moves Codex**, where every technique demonstrates itself from an
+  authored scenario instead of asking you to read frame data.
+- **Party members played by deterministic AI** that reads the same authored loadouts a
+  human player uses.
 
-Settings and player profile data are global controls rather than a sixth menu destination.
+## Interesting engineering
 
-The public front end uses clean routed screens:
+**Determinism is a property of the data, not a convention.** Every stored quantity is a
+32-bit integer; positions are sim units at 1/100 pixel, converted from authored pixels once
+in the loader. Two machines that disagree in the last bit of a double eventually disagree
+about whether an attack hit.
 
-```text
-/
-/play/
-/campaign/
-/fight/
-/training/
-/loadouts/
-/loadouts/:id/
-/forge/
-/codex/
-/codex/moves/:id/
-/codex/status/:id/
-/codex/enemies/bell-warden/
-/codex/stages/black-belfry/
-/settings/
-```
+**Command parsing happens inside the step.** If it ran in front of the simulation, a
+rollback would depend on the caller faithfully re-running a parser the simulation cannot
+see, and the first disagreement would surface frames later as an unexplained divergence.
 
-The retired Lab concept is folded into Training. `/lab/` remains a compatibility/authentication route and authenticated operator tooling is exposed through Training developer mode; ordinary players get the normal Training surface.
+**The random generator lives inside the snapshot.** A generator held at module scope
+desynchronises the moment anything uses it, because restoring a snapshot would not restore
+it.
 
-## Core architecture
+**Rendering cannot influence the simulation.** `src/combat`, `src/rollback`, `src/input`
+and `src/game` import nothing from `src/renderer`, `src/lab` or `src/client`.
 
-```text
-src/combat      deterministic simulation; integers only, no DOM or wall clock
-src/input       input frames, history, buffering, command parsing
-src/rollback    snapshots, hashing, replay, rollback session
-src/content     authored gameplay and presentation content
-src/renderer    SVG presentation; always downstream of simulation
-src/game        StageCatalog, GameSession, party slots, deterministic loadout AI
-src/player      versioned PlayerSave contract, cache, server save client
-src/client      title/front-end route shell and browser entrypoints
-src/lab         in-match UI plus integrated Training/debug instrumentation
-src/worker      Cloudflare routing, save authority, auth gates, static assets
-characters/     authored fighter rig/animation/move content
-schemas/        JSON schemas for authored content
- tests/         simulation, rollback, input, content, AI, renderer and worker suites
-```
+**The training tools are the debugger.** Scenarios capture exact per-frame inputs and a
+terminal state hash, so a bug report replays to the same bits.
 
-Two rules are load-bearing:
-
-**Visual data is not combat data.** Rig poses, animations, particles, telegraphs, and SVG changes cannot change damage, startup, hitboxes, movement, or authoritative state.
-
-**Rendering is downstream.** The simulation runs on a fixed 60 Hz integer clock. Browser refresh rate and presentation interpolation cannot influence rollback state.
-
-## Sessions and parties
-
-A `GameSession` launches Campaign, Fight, or Training through a shared contract:
-
-```text
-mode
-party[]
-encounterId
-stageId
-options
-```
-
-A party slot contains a controller type and a loadout. Slot 1 is human; Fight and Campaign can add up to two AI slots. AI uses the same authored loadouts as the player rather than a separate hidden moveset.
-
-The deterministic `LoadoutAIController` reasons from authored move roles and combat state: starter/link/cashout tags, cancel windows, status stacks, stamina, range, defensive threat, spacing, and difficulty. It owns no ambient random state; tie-breaking and mistakes are derived from authoritative frame/seed inputs.
-
-Current AI difficulties change reaction delay, threat prediction, route depth, defensive consistency, spacing accuracy, offensive choice breadth, mistake frequency, and aggression. They do not modify fighter stats or authored damage.
-
-## Stages
-
-The StageCatalog currently exposes three launchable stage definitions:
-
-- `black-belfry-campaign` — scrolling campaign traversal with breakables, hazards, automatic checkpoint, chest, boss gate, and boss reward.
-- `black-belfry-arena` — compact duel-only Warden Arena with campaign traversal removed.
-- `training-grid` — neutral deterministic training space.
-
-Black Belfry no longer uses Forge or Arsenal Shrine objects as menu navigation. Loadouts and Forge are global routes; stage interactions are reserved for actual world actions.
-
-## Training
-
-Training is part of the game rather than a separate product. Normal tools include dummy behavior, recording/playback, reversals/counterattacks, frame transport, save/load state, geometry display, interaction history, and scenario capture/replay. Permanent authoritative developer instrumentation remains operator-gated.
-
-## Saves
-
-Progress uses one versioned `PlayerSave` containing campaign stage state, unlocks, inventory, and loadouts. A per-player Durable Object is the server source of truth and revisions protect against silent concurrent overwrites. Browser storage is a cache/migration surface, not the authority.
-
-Boss rewards and crafting are server operations. Bell Warden completion/reward mutation is idempotent.
-
-Device-specific preferences such as audio, accessibility, visual settings, deadzone, and vibration remain local.
-
-## Presentation
-
-The player and Bell Warden use independent SVG rigs and animation sets. Bell Warden no longer reuses the player skeleton.
-
-Technique VFX are authored per move with named anchors and exact presentation windows. Effects can anchor to hands, feet, torso, pelvis, ground, or hitbox centers, while actual contact bursts use the collision contact coordinates emitted by the simulation. Presentation remains non-authoritative.
-
-## Running locally
+## Run locally
 
 ```bash
-npm install
-cp .env.example .env
+npm ci
+cp .env.example .env   # fill in the developer credentials you want locally
 npm run dev
 ```
 
-Then use:
+## Testing
 
 ```bash
-npm test
+npm test          # 140 tests across 33 files
 npm run typecheck
 npm run build
 ```
 
-## Credentials
+The suite covers deterministic replay and state hashing, snapshot round-trips, collision
+and hit resolution, command parsing, content conformance against the published schemas,
+AI determinism, worker route separation, and accessibility contracts for the interface.
 
-Local and production environments use the same secret names:
+## Release model
 
-| Name | Purpose |
-| --- | --- |
-| `ADMIN_USERNAME` | Operator login |
-| `ADMIN_PASSWORD` | Operator login |
-| `ADMIN_SESSION_SECRET` | Operator/player-save session signing |
+Releases are semantic versions, and a tag only exists if checking it out reproduces that
+product state. Production deploys a release tag, never an arbitrary `main` commit, and the
+running deployment states its own identity at
+[`/version.json`](https://hexframe.wizardgang.ai/version.json).
 
-Secrets never ship to the browser.
+See [docs/RELEASE-MANAGEMENT.md](docs/RELEASE-MANAGEMENT.md) and
+[docs/CHANGE-MANAGEMENT.md](docs/CHANGE-MANAGEMENT.md).
 
-## Current scope
+## Engineering record
 
-The current build is still foundational. Network matches, the MatchRoom Durable Object, two-browser WebSocket play, projectiles/throws as complete gameplay archetypes, additional stages, and additional fighters remain future work. The goal is to add those systems on top of the deterministic session/party/content contracts rather than replace them.
+This public history was **reconstructed** from the original private development repository,
+its deployed artifacts, and its tests. The reconstructed commit structure does not assert
+that each public commit originally existed as an independent Git commit. Original source
+commits and dates are kept in
+[docs/history/CHANGE-MAP.csv](docs/history/CHANGE-MAP.csv), and the method — including what
+was changed on purpose — is documented in [docs/RECONSTRUCTION.md](docs/RECONSTRUCTION.md).
+
+Development, release, security and change-management controls here are designed to support
+evidence aligned with ISO/IEC 27001:2022 and ISO/IEC 42001:2023. **No certification is
+claimed**, and a Git repository does not by itself make a project compliant.
+
+## Security
+
+Reported privately through GitHub's advisory flow. See [SECURITY.md](SECURITY.md) and
+[docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md).
+
+## AI applicability
+
+Hexframe contains **no machine learning**. Its "AI" is a deterministic rule system that
+plays a party slot from authored loadouts and emits ordinary input frames. See
+[docs/AI-APPLICABILITY.md](docs/AI-APPLICABILITY.md), which states what is verifiable and
+how to verify it.
+
+## License
+
+MIT — see [LICENSE](LICENSE) and [docs/LICENSING.md](docs/LICENSING.md).
