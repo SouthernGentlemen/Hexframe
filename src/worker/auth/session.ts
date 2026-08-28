@@ -1,5 +1,5 @@
 /**
- * The signed session cookie that gates the laboratory.
+ * The signed session cookie that gates advanced Training developer tools.
  *
  * There is no session store. The cookie carries its own username and expiry and is
  * authenticated by an HMAC over both, keyed with `ADMIN_SESSION_SECRET`, so a Worker
@@ -99,7 +99,7 @@ export function cookieSecureFor(url: URL): boolean {
 
 function cookieAttributes(secure: boolean): string {
   // HttpOnly keeps the cookie out of reach of any script on the page, and SameSite=Strict
-  // means a link or form from another site never carries it — the laboratory has no
+  // means a link or form from another site never carries it — the developer surface has no
   // cross-site flows at all, so the strictest setting costs nothing.
   return `Path=/; HttpOnly; SameSite=Strict${secure ? "; Secure" : ""}`;
 }

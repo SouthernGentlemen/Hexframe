@@ -14,13 +14,13 @@ function environment(): Env {
   };
 }
 
-describe("laboratory entry route", () => {
-  it("sends an unauthenticated visitor to the public playtest", async () => {
+describe("retired laboratory route", () => {
+  it("sends an unauthenticated visitor to ordinary Training", async () => {
     const url = new URL("https://hexframe.test/lab/");
     const response = await handleLab(new Request(url), environment(), url);
 
     expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("/play/");
+    expect(response.headers.get("location")).toBe("/training/?mode=training");
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
@@ -29,18 +29,17 @@ describe("laboratory entry route", () => {
     const response = await handleLab(new Request(url), environment(), url);
 
     expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("/play/moves/1?slot=2");
+    expect(response.headers.get("location")).toBe("/training/moves/1?slot=2&mode=training");
   });
 
-  it("serves the private laboratory to a verified operator session", async () => {
+  it("redirects a verified operator to Training developer tools", async () => {
     const env = environment();
     const url = new URL("https://hexframe.test/lab/");
     const cookie = await createSessionCookie(env, "operator", 60, url);
     const response = await handleLab(new Request(url, { headers: { cookie } }), env, url);
 
-    expect(response.status).toBe(200);
-    expect(response.headers.get("location")).toBeNull();
-    expect(await response.text()).toBe("unused");
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("/training/?mode=training&debug=1");
   });
 
   it("still redirects safely when operator credentials are not configured", async () => {
@@ -52,6 +51,6 @@ describe("laboratory entry route", () => {
     const response = await handleLab(new Request(url), env, url);
 
     expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("/play/");
+    expect(response.headers.get("location")).toBe("/training/?mode=training");
   });
 });

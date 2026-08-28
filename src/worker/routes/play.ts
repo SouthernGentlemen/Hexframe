@@ -1,15 +1,15 @@
 /**
- * Public playtest surface.
+ * Public game and training surfaces.
  *
- * `/play/` deliberately reuses the browser-only laboratory bundle: the bundle contains
- * combat content and local UI, but no credentials or privileged server capability. The
- * operator document and API remain gated at `/lab/*` and `/api/lab/*`.
+ * `/play/` and `/training/` deliberately reuse one browser game bundle. It contains
+ * combat content and local UI, but no credentials or privileged server capability.
+ * Developer mode is allowed only after the Worker verifies the operator session.
  */
 import type { Env } from "../env";
+import { credentialsConfigured } from "../auth/credentials";
+import { verifySessionCookie } from "../auth/session";
 
 const LAB_DOCUMENT = "/lab/index.html";
-const PLAY_ASSET_PREFIX = "/play/assets/";
-
 async function asset(env: Env, url: URL, path: string): Promise<Response> {
   return env.ASSETS.fetch(new Request(new URL(path, url.origin), { method: "GET" }));
 }
@@ -22,19 +22,21 @@ export async function handlePlay(request: Request, env: Env, url: URL): Promise<
     });
   }
 
+  const routePrefix = url.pathname.startsWith("/training") ? "/training" : "/play";
+  const assetPrefix = `${routePrefix}/assets/`;
   const lastSegment = url.pathname.slice(url.pathname.lastIndexOf("/") + 1);
   const wantsFile = lastSegment.includes(".");
-  if (wantsFile && !url.pathname.startsWith(PLAY_ASSET_PREFIX)) {
+  if (wantsFile && !url.pathname.startsWith(assetPrefix)) {
     return new Response(`Not found: ${url.pathname}\n`, {
       status: 404,
       headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
     });
   }
 
-  const assetPath = wantsFile ? url.pathname.replace(/^\/play\//, "/lab/") : LAB_DOCUMENT;
+  const assetPath = wantsFile ? url.pathname.replace(new RegExp(`^${routePrefix}/`), "/lab/") : LAB_DOCUMENT;
   const upstream = await asset(env, url, assetPath);
   if (upstream.status === 404) {
-    return new Response(wantsFile ? `Not found: ${url.pathname}\n` : "The playtest bundle is unavailable.\n", {
+    return new Response(wantsFile ? `Not found: ${url.pathname}\n` : "The game bundle is unavailable.\n", {
       status: 404,
       headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
     });
@@ -49,7 +51,25 @@ export async function handlePlay(request: Request, env: Env, url: URL): Promise<
   if (request.method === "HEAD") return new Response(null, { status: upstream.status, headers });
   if (wantsFile) return new Response(upstream.body, { status: upstream.status, headers });
 
-  const html = (await upstream.text()).replaceAll('"/lab/assets/', '"/play/assets/');
+  const html = (await upstream.text()).replaceAll('"/lab/assets/', `"${routePrefix}/assets/`);
   headers.delete("content-length");
   return new Response(html, { status: upstream.status, headers });
+}
+
+export async function handleTraining(request: Request, env: Env, url: URL): Promise<Response> {
+  if (url.searchParams.get("debug") === "1") {
+    const session = credentialsConfigured(env)
+      ? await verifySessionCookie(env, request.headers.get("cookie"))
+      : null;
+    if (!session) {
+      const safe = new URL(url);
+      safe.searchParams.delete("debug");
+      safe.searchParams.set("mode", "training");
+      return new Response("Developer tools require an operator session.\n", {
+        status: 302,
+        headers: { location: `${safe.pathname}${safe.search}`, "cache-control": "no-store" },
+      });
+    }
+  }
+  return handlePlay(request, env, url);
 }

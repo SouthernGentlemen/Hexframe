@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Env } from "../../src/worker/env";
-import { handlePlay } from "../../src/worker/routes/play";
+import { handlePlay, handleTraining } from "../../src/worker/routes/play";
 
 function environment(paths: string[]): Env {
   const assets = {
@@ -42,6 +42,21 @@ describe("public playtest route", () => {
     expect(response.status).toBe(200);
     expect(paths).toEqual(["/lab/assets/game.js"]);
     expect(response.headers.get("cache-control")).toContain("immutable");
+  });
+
+  it("serves the same game bundle under Training", async () => {
+    const paths: string[] = [];
+    const url = new URL("https://hexframe.test/training/?mode=training");
+    const response = await handleTraining(new Request(url), environment(paths), url);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain('src="/training/assets/game.js"');
+  });
+
+  it("strips unauthenticated developer tools from Training", async () => {
+    const url = new URL("https://hexframe.test/training/?mode=training&debug=1");
+    const response = await handleTraining(new Request(url), environment([]), url);
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("/training/?mode=training");
   });
 
   it("remains read-only at the HTTP boundary", async () => {

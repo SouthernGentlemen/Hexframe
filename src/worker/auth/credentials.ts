@@ -2,8 +2,8 @@
  * The single operator credential, and the only place it is ever compared.
  *
  * There is one account. That is why this is a pair of string comparisons and not a user
- * table: the laboratory is a private development tool, and inventing a user store for one
- * user would be more code to get wrong, not less.
+ * table: advanced Training tools are private, and inventing a user store for one operator
+ * would be more code to get wrong, not less.
  */
 import type { Env } from "../env";
 import { missingCredentialBindings } from "../env";

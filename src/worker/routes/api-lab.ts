@@ -1,7 +1,7 @@
 /**
- * `/api/lab/*` — the laboratory's own API, behind the same session gate as the page.
+ * `/api/lab/*` — the legacy-named developer API behind Training's operator session gate.
  *
- * The surface is deliberately two endpoints. Everything the laboratory does is computed
+ * The surface is deliberately two endpoints. Everything Training does is computed
  * in the browser from a deterministic simulation, so the server has nothing to offer it:
  * no state, no authority, no scoring. What is left is the pair of things only the server
  * can do — tell the page whether its session is still alive, and be somewhere a desync
@@ -32,7 +32,7 @@ function json(body: unknown, status: number): Response {
 }
 
 /**
- * The laboratory API.
+ * The Training developer API.
  *
  * Every failure is JSON, because the caller is `fetch` from a script and an HTML error
  * page would arrive as an unreadable parse error at exactly the moment something is

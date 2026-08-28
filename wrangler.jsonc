@@ -1,7 +1,7 @@
 {
-  // Hexframe Worker. Routing, the laboratory session gate, static asset delivery and
-  // (from 0.2) match transport. It never decides whether an attack hits: combat is
-  // deterministic simulation inside the browser.
+  // Hexframe Worker. Game routing, player saves, developer authentication, static
+  // assets and (from 0.2) match transport. It never decides whether an attack hits:
+  // combat is deterministic simulation inside the browser.
   "name": "hexframe",
   "main": "src/worker/index.ts",
   "compatibility_date": "2026-06-28",
@@ -10,10 +10,14 @@
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    // Every request passes through the Worker first so that /lab and /lab/* can be
-    // refused before any laboratory asset is served.
+    // Every request passes through the Worker first so save APIs and authenticated
+    // Training developer flags are handled before static asset delivery.
     "run_worker_first": true
   },
+  "durable_objects": {
+    "bindings": [{ "name": "PLAYER_SAVES", "class_name": "PlayerSaveObject" }]
+  },
+  "migrations": [{ "tag": "player-saves-v1", "new_sqlite_classes": ["PlayerSaveObject"] }],
   "observability": { "enabled": true },
   "env": {
     "production": {
@@ -28,6 +32,9 @@
         "directory": "./dist",
         "binding": "ASSETS",
         "run_worker_first": true
+      },
+      "durable_objects": {
+        "bindings": [{ "name": "PLAYER_SAVES", "class_name": "PlayerSaveObject" }]
       }
     }
   }
