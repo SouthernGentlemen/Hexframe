@@ -79,7 +79,7 @@ async function passThrough(request: Request, env: Env, url: URL): Promise<Respon
 async function route(request: Request, env: Env, url: URL): Promise<Response> {
   const path = url.pathname;
 
-  if (path === "/") return handlePlay(request, env, url);
+  if (path === "/") return handleLab(request, env, url);
 
   if (path === "/login") return handleLogin(request, env);
 
