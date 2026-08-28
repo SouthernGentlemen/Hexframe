@@ -42,9 +42,6 @@ export async function handlePlay(request: Request, env: Env, url: URL): Promise<
     });
   }
 
-  // The game is public and indexable. The developer routes are not: src/worker/routes/lab.ts
-  // and src/worker/routes/login.ts keep their own noindex, and Training gates its developer
-  // tools behind an operator session rather than behind obscurity.
   const headers = new Headers(upstream.headers);
   headers.set("x-content-type-options", "nosniff");
   headers.set("referrer-policy", "no-referrer");
@@ -67,7 +64,7 @@ export async function handleTraining(request: Request, env: Env, url: URL): Prom
       const safe = new URL(url);
       safe.searchParams.delete("debug");
       safe.searchParams.set("mode", "training");
-      return new Response("Developer tools require an operator session.\n", {
+      return new Response(null, {
         status: 302,
         headers: { location: `${safe.pathname}${safe.search}`, "cache-control": "no-store" },
       });
