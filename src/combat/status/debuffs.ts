@@ -91,6 +91,7 @@ export function applyTaggedDebuffs(
   source: number,
   target: number,
   report: FrameReport,
+  shockStackLimit = 3,
 ): void {
   if (tags.includes("burn")) {
     defender.burnStacks = Math.min(3, defender.burnStacks + 1);
@@ -108,7 +109,7 @@ export function applyTaggedDebuffs(
     report.debuffs.push(event(source, target, DebuffKind.Freeze, defender.freezeStacks >= 3 ? DebuffEventKind.Triggered : DebuffEventKind.Applied, defender.freezeStacks, defender.freezeFrames, 0));
   }
   if (tags.includes("shock")) {
-    defender.shockStacks = Math.min(3, defender.shockStacks + 1);
+    defender.shockStacks = Math.min(shockStackLimit, defender.shockStacks + 1);
     defender.shockFrames = resistDuration(SHOCK_DURATION, resistances.shock);
     report.debuffs.push(event(source, target, DebuffKind.Shock, DebuffEventKind.Applied, defender.shockStacks, defender.shockFrames, 0));
   }

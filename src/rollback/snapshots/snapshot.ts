@@ -26,8 +26,8 @@ import type { EntityState, Facing, FighterState, SimState, StateIdValue } from "
 /** version, frame, rng, fighter count. */
 const HEADER_INTS = 4;
 
-/** `FighterState` has twenty-six integer fields; see the writer loop for the order. */
-const FIGHTER_INTS = 26;
+/** `FighterState` has twenty-nine integer fields; see the writer loop for the order. */
+const FIGHTER_INTS = 29;
 
 /** `EntityState` has eight. */
 const ENTITY_INTS = 8;
@@ -136,9 +136,12 @@ export function serializeState(state: SimState): Uint8Array {
     w.i32(f.hitstop);
     w.i32(f.stun);
     w.i32(f.health);
+    w.i32(f.stamina);
+    w.i32(f.staminaRegenDelay);
     w.i32(f.airborne);
     w.i32(f.hitFlags);
     w.i32(f.comboCount);
+    w.i32(f.armorHits);
     w.i32(f.bufferConsumedFrame);
     w.i32(f.burnStacks);
     w.i32(f.burnFrames);
@@ -209,9 +212,12 @@ export function deserializeState(bytes: Uint8Array): SimState {
       hitstop: r.i32(),
       stun: r.i32(),
       health: r.i32(),
+      stamina: r.i32(),
+      staminaRegenDelay: r.i32(),
       airborne: r.i32(),
       hitFlags: r.i32(),
       comboCount: r.i32(),
+      armorHits: r.i32(),
       bufferConsumedFrame: r.i32(),
       burnStacks: r.i32(),
       burnFrames: r.i32(),
@@ -283,9 +289,12 @@ export function cloneState(state: SimState): SimState {
       hitstop: f.hitstop,
       stun: f.stun,
       health: f.health,
+      stamina: f.stamina,
+      staminaRegenDelay: f.staminaRegenDelay,
       airborne: f.airborne,
       hitFlags: f.hitFlags,
       comboCount: f.comboCount,
+      armorHits: f.armorHits,
       bufferConsumedFrame: f.bufferConsumedFrame,
       burnStacks: f.burnStacks,
       burnFrames: f.burnFrames,

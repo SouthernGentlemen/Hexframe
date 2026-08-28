@@ -105,6 +105,10 @@ export const MoveId = {
   ReaperKick: 22,
   EclipseBreaker: 23,
   PrismBurst: 24,
+  AstralJab: 25,
+  WitchKnee: 26,
+  MeteorHeel: 27,
+  VoidDive: 28,
 } as const;
 
 /**

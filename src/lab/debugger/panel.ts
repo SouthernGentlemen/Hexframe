@@ -37,6 +37,8 @@ export class DebugPanel {
           <div><dt>move</dt><dd>${move?.key ?? "—"}${move ? ` · ${fighter.moveFrame}` : ""}</dd></div>
           <div><dt>timers</dt><dd>stop ${fighter.hitstop} · stun ${fighter.stun}</dd></div>
           <div><dt>health</dt><dd>${fighter.health} / ${character.health}</dd></div>
+          <div><dt>stamina</dt><dd>${fighter.stamina} / ${character.stamina} · regen ${fighter.staminaRegenDelay}</dd></div>
+          <div><dt>armor</dt><dd>${fighter.armorHits} hit(s) absorbed</dd></div>
           <div><dt>status</dt><dd>burn ${fighter.burnStacks} · poison ${fighter.poisonStacks} · freeze ${fighter.freezeStacks} · shock ${fighter.shockStacks} · bleed ${fighter.bleedStacks}</dd></div>
         </dl>
       </article>`;
@@ -47,7 +49,7 @@ export class DebugPanel {
           .map(
             (contact) =>
               `P${contact.attacker + 1} → P${contact.defender + 1} · ${
-                contact.kind === ContactKind.Hit ? "HIT" : "BLOCK"
+                contact.kind === ContactKind.Hit ? contact.armored ? "ARMORED HIT" : "HIT" : "BLOCK"
               } · ${contact.damage}`,
           )
           .join("<br>")

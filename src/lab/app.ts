@@ -156,11 +156,15 @@ export function startLab(mount: HTMLElement): () => void {
       const percent = Math.max(0, Math.min(100, (fighter.health / maximum) * 100));
       required(`health-p${player + 1}`).style.width = `${percent}%`;
       required(`health-text-p${player + 1}`).textContent = String(fighter.health);
+      const maxStamina = sim.characters()[player].stamina;
+      const staminaPercent = Math.max(0, Math.min(100, (fighter.stamina / maxStamina) * 100));
+      required(`stamina-p${player + 1}`).style.width = `${staminaPercent}%`;
+      required(`stamina-text-p${player + 1}`).textContent = `${fighter.stamina} STA`;
       renderDebuffs(player, fighter);
     }
     const move = playerCharacter.moves.find((candidate) => candidate.id === state.fighters[0].moveId);
     required("active-move").textContent = move?.key.replaceAll("_", " ") ?? "Ready";
-    required("active-tags").textContent = move?.tags.join(" · ") ?? "Choose any 16 of 24 moves";
+    required("active-tags").textContent = move?.tags.join(" · ") ?? `Choose any 16 of ${playerCharacter.moves.length} moves`;
     for (const pause of mount.querySelectorAll<HTMLButtonElement>("[data-action='pause']")) pause.textContent = timeline.paused ? "Play" : "Pause";
     const frameInspector = mount.querySelector<HTMLElement>("#frame-inspector");
     if (frameInspector) frameInspector.innerHTML = frameInspectorMarkup(state, sim.characters(), lastReport ?? timeline.lastReport, stateHash);
@@ -575,6 +579,7 @@ export function startLab(mount: HTMLElement): () => void {
     required("move-showcase-name").textContent = move.key.replaceAll("_", " ");
     required("move-showcase-description").textContent = move.description;
     required("move-stat-damage").textContent = String(hitbox?.damage ?? 0);
+    required("move-stat-stamina").textContent = String(move.staminaCost);
     required("move-stat-startup").textContent = `${move.startup}f`;
     required("move-stat-active").textContent = `${move.active}f`;
     required("move-stat-recovery").textContent = `${move.recovery}f`;

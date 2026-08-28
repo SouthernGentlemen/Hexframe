@@ -113,6 +113,7 @@ function loadHitbox(raw: RawMove["hitboxes"][number], move: RawMove, path: strin
     pushbackHitDefender: px(raw.pushbackHitDefender),
     pushbackBlockAttacker: px(raw.pushbackBlockAttacker),
     pushbackBlockDefender: px(raw.pushbackBlockDefender),
+    launchVelocityY: px(raw.launchVelocityY ?? 0),
   };
 }
 
@@ -146,6 +147,18 @@ export function loadMove(raw: RawMove, path = `moves.${raw.key}`): MoveDef {
     }
   }
 
+  for (const [i, w] of [...raw.invulWindows, ...raw.armorWindows].entries()) {
+    if (w.endFrame < w.startFrame) {
+      throw new ContentError(`${path}.defenseWindows[${i}].endFrame`, "must be >= startFrame");
+    }
+    if (w.endFrame >= raw.duration) {
+      throw new ContentError(
+        `${path}.defenseWindows[${i}].endFrame`,
+        `must be < the move's duration of ${raw.duration}`,
+      );
+    }
+  }
+
   for (const [i, k] of raw.movement.entries()) {
     if (k.frame < 0 || k.frame >= raw.duration) {
       throw new ContentError(
@@ -167,6 +180,7 @@ export function loadMove(raw: RawMove, path = `moves.${raw.key}`): MoveDef {
     recovery: raw.recovery,
     requiresCrouch: raw.requiresCrouch,
     airOk: raw.airOk,
+    staminaCost: raw.staminaCost,
     hitboxes,
     hurtboxWindows: raw.hurtboxWindows.map((w) => ({
       startFrame: w.startFrame,
@@ -178,6 +192,7 @@ export function loadMove(raw: RawMove, path = `moves.${raw.key}`): MoveDef {
       endFrame: w.endFrame,
       kind: INVUL_KINDS[w.kind],
     })),
+    armorWindows: raw.armorWindows.map((w) => ({ ...w })),
     movement: raw.movement.map((k) => ({
       frame: k.frame,
       vx: px(k.vx),
@@ -243,6 +258,13 @@ export function loadCharacter(raw: RawCharacter, moves: RawMove[]): CharacterDef
     stamina: 100,
     armor: 0,
     resistances: { poison: 0, fire: 0, frost: 0, shock: 0 },
+    perks: {
+      graveStep: false,
+      venomEdge: false,
+      staticConductor: false,
+      voidChannel: false,
+      burningBrand: false,
+    },
     walkForwardSpeed: px(raw.walkForwardSpeed),
     walkBackwardSpeed: px(raw.walkBackwardSpeed),
     dashSpeed: px(raw.dashSpeed),

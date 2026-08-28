@@ -11,10 +11,10 @@ import { ADDITIONAL_ANIMATIONS } from "../../src/content/additional-animations";
 import { createSim } from "../helpers/harness";
 
 describe("move catalog and loadout", () => {
-  it("ships 24 uniquely named and tagged moves", () => {
-    expect(TEST_FIGHTER.moves).toHaveLength(24);
-    expect(new Set(TEST_FIGHTER.moves.map((move) => move.id)).size).toBe(24);
-    expect(new Set(TEST_FIGHTER.moves.map((move) => move.key)).size).toBe(24);
+  it("ships 28 uniquely named and tagged moves", () => {
+    expect(TEST_FIGHTER.moves).toHaveLength(28);
+    expect(new Set(TEST_FIGHTER.moves.map((move) => move.id)).size).toBe(28);
+    expect(new Set(TEST_FIGHTER.moves.map((move) => move.key)).size).toBe(28);
     expect(TEST_FIGHTER.moves.every((move) => move.tags.length >= 3)).toBe(true);
     expect(TEST_FIGHTER.moves.every((move) => move.description.trim().length >= 20)).toBe(true);
     expect(TEST_FIGHTER.moves.every((move) => move.startup > 0 && move.active > 0 && move.recovery > 0 && move.hitboxes[0]?.damage > 0)).toBe(true);
@@ -24,7 +24,7 @@ describe("move catalog and loadout", () => {
   });
 
   it("has a distinct presentation clip for every added move", () => {
-    expect(Object.keys(ADDITIONAL_ANIMATIONS)).toHaveLength(22);
+    expect(Object.keys(ADDITIONAL_ANIMATIONS)).toHaveLength(26);
     for (const move of TEST_FIGHTER.moves.slice(2)) {
       expect(ADDITIONAL_ANIMATIONS[move.animation]?.name).toBe(move.animation);
     }

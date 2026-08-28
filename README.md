@@ -65,7 +65,7 @@ values as Worker secrets.
 Movement is WASD or the left stick/D-pad. The arrow-key diamond maps spatially to
 Y/X/B/A. Shift or LT selects the Setup bank, E or RT selects Power, and holding both
 selects Finale: four named banks and 16 independent action inputs in total. The Arsenal
-assigns any 16 of the 24 moves to those inputs and persists the build locally.
+assigns any 16 of the 28 moves to those inputs and persists the build locally.
 
 The combo graph is authored rather than fully connected. Status primers are starters,
 their same-family follow-ups are links, and links reach only matching cashouts. Starters

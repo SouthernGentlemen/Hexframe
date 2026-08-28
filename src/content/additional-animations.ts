@@ -5,6 +5,7 @@ const MOVE_NAMES = [
   "bastion_break", "shadow_step", "ashen_sweep", "glacier_spike", "static_rush", "toxic_bloom",
   "blood_moon", "void_hook", "iron_reversal", "phoenix_drive", "permafrost", "plague_touch",
   "thunder_clap", "reaper_kick", "eclipse_breaker", "prism_burst",
+  "astral_jab", "witch_knee", "meteor_heel", "void_dive",
 ] as const;
 
 type Pose = Record<string, RawBonePose>;

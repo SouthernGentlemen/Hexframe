@@ -37,7 +37,7 @@ describe("lab accessibility contract", () => {
     expect(html).toContain('id="page-loadout"');
     expect(html).toContain('id="page-armor"');
     expect(html).toContain('id="page-craft"');
-    expect(html.match(/class="move-card"/g)).toHaveLength(24);
+    expect(html.match(/class="move-card"/g)).toHaveLength(28);
     expect(html).toContain('id="move-showcase-stage"');
     expect(html).toContain("Fast universal starter with short reach.");
     expect(html).toContain('id="combat-announcer" role="status" aria-live="polite"');

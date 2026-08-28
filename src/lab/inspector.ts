@@ -90,6 +90,8 @@ function fighterMarkup(fighter: FighterState, character: CharacterDef, player: n
       ${datum("FACING", fighter.facing === 1 ? "RIGHT" : "LEFT")}
       ${datum("HITSTOP", `${fighter.hitstop}f`)}
       ${datum("STUN", `${fighter.stun}f`)}
+      ${datum("STAMINA", `${fighter.stamina} / ${character.stamina}`)}
+      ${datum("ARMOR HITS", String(fighter.armorHits))}
     </dl>
   </article>`;
 }
@@ -103,6 +105,7 @@ export function moveTimelineMarkup(move: MoveDef): string {
   const hitCells = frames.map((frame) => cell(frame, data.activeFrames.has(frame) ? "on hit" : "")).join("");
   const cancelCells = frames.map((frame) => cell(frame, inWindow(move.cancelWindows, frame) ? "on cancel" : "")).join("");
   const invulCells = frames.map((frame) => cell(frame, inWindow(move.invulWindows, frame) ? "on invul" : "")).join("");
+  const armorCells = frames.map((frame) => cell(frame, inWindow(move.armorWindows, frame) ? "on armor" : "")).join("");
   const numberCells = frames.map((frame) => `<span class="timeline-cell frame-number" data-frame="${frame}">${frame + 1}</span>`).join("");
 
   return `<header class="move-timeline-header"><div><p>MOVE TIMELINE / EVENT-DERIVED</p><h2>${escapeHtml(move.key)}</h2></div><dl><div><dt>STARTUP</dt><dd>${data.startup}f</dd></div><div><dt>ACTIVE</dt><dd>${data.active}f</dd></div><div><dt>RECOVERY</dt><dd>${data.recovery}f</dd></div><div><dt>TOTAL</dt><dd>${move.duration}f</dd></div></dl></header>
@@ -115,6 +118,7 @@ export function moveTimelineMarkup(move: MoveDef): string {
       ${timelineRow("MOVE", fullCells)}
       ${timelineRow("CANCEL", cancelCells)}
       ${timelineRow("INVUL", invulCells)}
+      ${timelineRow("ARMOR", armorCells)}
     </div></div>`;
 }
 
@@ -144,11 +148,11 @@ function contactDetail(frame: number, contact: ContactEvent, characters: readonl
   const attacker = characters[contact.attacker];
   const defender = characters[contact.defender];
   const move = attacker?.moves.find((candidate) => candidate.id === contact.moveId);
-  const result = contact.kind === ContactKind.Hit ? "HIT" : "BLOCK";
+  const result = contact.kind === ContactKind.Hit ? contact.armored ? "ARMORED HIT" : "HIT" : "BLOCK";
   return `<header><div><p>INTERACTION INSPECTOR</p><h2>FRAME ${String(frame).padStart(6, "0")}</h2></div><strong>${result}</strong></header>
     <div class="interaction-columns">
       <section><h3>ATTACKER</h3><dl>${datum("FIGHTER", attacker?.name ?? `P${contact.attacker + 1}`)}${datum("MOVE", move?.key ?? String(contact.moveId))}${datum("HITBOX", `attack_${contact.hitboxId}`)}${datum("LEVEL", levelName(contact.level))}</dl></section>
-      <section><h3>DEFENDER</h3><dl>${datum("FIGHTER", defender?.name ?? `P${contact.defender + 1}`)}${datum("HURTBOX", `hurt_${contact.hurtboxId}`)}${datum("COUNTER HIT", contact.counterHit ? "TRUE" : "FALSE")}${datum("CONTACT", `${toPixels(contact.x)}, ${toPixels(contact.y)}`)}</dl></section>
+      <section><h3>DEFENDER</h3><dl>${datum("FIGHTER", defender?.name ?? `P${contact.defender + 1}`)}${datum("HURTBOX", `hurt_${contact.hurtboxId}`)}${datum("COUNTER HIT", contact.counterHit ? "TRUE" : "FALSE")}${datum("HYPER ARMOR", contact.armored ? "ABSORBED" : "NO")}${datum("CONTACT", `${toPixels(contact.x)}, ${toPixels(contact.y)}`)}</dl></section>
       <section><h3>COLLISION</h3><dl>${datum("AABB OVERLAP", `${toPixels(contact.overlapWidth)} × ${toPixels(contact.overlapHeight)}`)}${datum("RESULT", result, result.toLowerCase())}${datum("RAW DAMAGE", String(contact.rawDamage))}${datum("DAMAGE", String(contact.damage))}</dl></section>
       <section><h3>RESOLUTION</h3><dl>${datum("HITSTUN", `${contact.hitstun}f`)}${datum("BLOCKSTUN", `${contact.blockstun}f`)}${datum("HITSTOP", `${contact.hitstopAttacker}f / ${contact.hitstopDefender}f`)}${datum("PUSHBACK", `${toPixels(contact.pushbackAttacker)} / ${toPixels(contact.pushbackDefender)}`)}</dl></section>
     </div>`;

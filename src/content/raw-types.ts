@@ -60,6 +60,7 @@ export interface RawHitbox {
   pushbackHitDefender: number;
   pushbackBlockAttacker: number;
   pushbackBlockDefender: number;
+  launchVelocityY?: number;
 }
 
 /** Hurtboxes that replace the fighter's default set for part of a move. */
@@ -73,6 +74,12 @@ export interface RawInvulWindow {
   startFrame: number;
   endFrame: number;
   kind: RawInvulKind;
+}
+
+export interface RawArmorWindow {
+  startFrame: number;
+  endFrame: number;
+  hits: number;
 }
 
 /** A velocity set at a move frame. `vx` is along facing and the engine mirrors it. */
@@ -103,9 +110,11 @@ export interface RawMove {
   recovery: number;
   requiresCrouch: boolean;
   airOk: boolean;
+  staminaCost: number;
   hitboxes: RawHitbox[];
   hurtboxWindows: RawHurtboxWindow[];
   invulWindows: RawInvulWindow[];
+  armorWindows: RawArmorWindow[];
   movement: RawMovementKey[];
   cancelWindows: RawCancelWindow[];
 }

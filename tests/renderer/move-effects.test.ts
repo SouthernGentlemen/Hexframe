@@ -9,8 +9,8 @@ describe("move particle profiles", () => {
       const profile = moveEffectProfile(move.id, move.tags);
       return [profile.kind, profile.count, profile.radius, profile.spin, profile.rotation, profile.shape].join(":");
     });
-    expect(signatures).toHaveLength(24);
-    expect(new Set(signatures).size).toBe(24);
+    expect(signatures).toHaveLength(28);
+    expect(new Set(signatures).size).toBe(28);
   });
 
   it("maps status families to readable effect themes", () => {

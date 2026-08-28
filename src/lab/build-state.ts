@@ -31,8 +31,8 @@ export function createDefaultBuildState(): BuildState {
     activePreset: 0,
     presets: [
       { name: "The Unbound", loadout: DEFAULT_MOVE_LOADOUT.slice(), equipment: { ...DEFAULT_EQUIPMENT } },
-      { name: "Venom Engine", loadout: Array.from({ length: ACTION_SLOT_COUNT }, (_, slot) => 9 + slot), equipment: equipmentForSet("briarbone") },
-      { name: "Prism Lock", loadout: [3, 6, 5, 4, 11, 13, 12, 14, 18, 21, 19, 20, 7, 22, 23, 24], equipment: equipmentForSet("stormglass") },
+      { name: "Venom Engine", loadout: [4, 14, 20, 10, 11, 13, 16, 8, 25, 26, 27, 28, 17, 18, 23, 24], equipment: equipmentForSet("briarbone") },
+      { name: "Prism Lock", loadout: [3, 6, 5, 4, 11, 13, 12, 14, 8, 25, 26, 28, 18, 21, 23, 24], equipment: equipmentForSet("stormglass") },
     ],
     inventory: {
       armor: DEFAULT_ARMOR_INVENTORY.armor.slice(),

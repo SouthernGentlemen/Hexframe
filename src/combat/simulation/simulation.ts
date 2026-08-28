@@ -23,12 +23,22 @@ import type {
   SimState,
   StateIdValue,
 } from "../types";
-import { StateId } from "../types";
-import { COMMAND_HISTORY_FRAMES, GROUND_Y, NO_MOVE, PLAYER_COUNT } from "../constants";
+import { InputBit, StateId } from "../types";
+import {
+  COMMAND_HISTORY_FRAMES,
+  GROUND_Y,
+  NO_MOVE,
+  PLAYER_COUNT,
+  STAMINA_REGEN_DELAY,
+} from "../constants";
 import { advanceMove, canStartMove, moveOf, startMove } from "../commands/resolve";
 import { resolvePushboxes } from "../collision/pushbox";
 import { resolveContacts } from "../hit-resolution/resolve";
-import { applyGroundMotion, applyMovement } from "../movement/physics";
+import {
+  applyGroundMotion,
+  applyMovement,
+  DASH_STAMINA_COST,
+} from "../movement/physics";
 import {
   enterState,
   isActionable,
@@ -36,7 +46,7 @@ import {
   isInStun,
   tickTimers,
 } from "../state/machine";
-import { readInput, writeInput } from "../../input/buffer/history";
+import { pressedOn, readInput, writeInput } from "../../input/buffer/history";
 import { commandPressFrame, resolveCommand } from "../../input/parser/command-parser";
 import { isBackward, isForward } from "../../input/parser/numpad";
 import { isFrozen, tickDebuffs } from "../status/debuffs";
@@ -78,9 +88,12 @@ export class Simulation {
         hitstop: 0,
         stun: 0,
         health: c.health,
+        stamina: c.stamina,
+        staminaRegenDelay: 0,
         airborne: 0,
         hitFlags: 0,
         comboCount: 0,
+        armorHits: 0,
         // -1 rather than 0, so that a press on frame 0 is still newer than "nothing
         // consumed yet" and the very first button of a match is not swallowed.
         bufferConsumedFrame: -1,
@@ -177,6 +190,9 @@ export class Simulation {
 
       if (f.state === StateId.Attack) {
         advanceMove(f, c);
+      } else if (f.state === StateId.Dash && f.stateFrame >= c.dashDuration) {
+        enterState(f, StateId.Idle);
+        f.vx = 0;
       } else if (isInStun(f) && f.stun === 0) {
         this.recoverFromStun(f);
       } else if (f.state === StateId.JumpSquat && f.stateFrame >= c.jumpSquatFrames) {
@@ -187,12 +203,17 @@ export class Simulation {
 
       tickTimers(f);
 
+      if (f.staminaRegenDelay > 0) f.staminaRegenDelay--;
+      else if (f.stamina < c.stamina) f.stamina++;
+
       // The stance is established before the command is matched. Crouching is a stance
       // rather than a move, and a command that requires it — every low in the game — has
       // to be judged against the direction being held now. Deferring the stance to the
       // movement step would mean holding down and pressing light on the same frame gives
       // the standing normal, which is a frame of lag the player did nothing to deserve.
-      applyGroundMotion(f, c, readInput(s, p, s.frame));
+      if (!this.tryStartDash(s, p, f, c)) {
+        applyGroundMotion(f, c, readInput(s, p, s.frame));
+      }
 
       const wanted = resolveCommand(s, p, c, f);
       if (wanted === NO_MOVE) continue;
@@ -236,7 +257,7 @@ export class Simulation {
 
     // 11-13. Hitstop, stun and health were written by step 10. They are decremented at
     //        the top of the following frame, so a hitstop of 7 freezes exactly 7 frames.
-    //        Meters do not exist yet.
+    //        Stamina was updated during step 3 from deterministic frame counters.
 
     // 14. Spawn and advance deterministic entities. None exist in 0.1; the loop is here
     //     so that projectiles are content and a snapshot already covers them.
@@ -296,5 +317,29 @@ export class Simulation {
     else if (isBackward(held, f.facing)) f.vx = c.jumpVelocityXBackward * f.facing;
     else f.vx = 0;
     enterState(f, StateId.Airborne);
+  }
+
+  /** Start a grounded dash when the same horizontal direction is tapped twice in 8 frames. */
+  private tryStartDash(s: SimState, player: number, f: FighterState, c: CharacterDef): boolean {
+    if (!isActionable(f) || f.airborne === 1 || f.stamina < DASH_STAMINA_COST) return false;
+    const directions = [InputBit.Left, InputBit.Right] as const;
+    for (const direction of directions) {
+      if (!pressedOn(s, player, s.frame, direction)) continue;
+      let doubleTap = false;
+      for (let frame = s.frame - 2; frame >= Math.max(0, s.frame - 8); frame--) {
+        if (pressedOn(s, player, frame, direction)) {
+          doubleTap = true;
+          break;
+        }
+      }
+      if (!doubleTap) continue;
+      const sign = direction === InputBit.Left ? -1 : 1;
+      f.stamina -= DASH_STAMINA_COST;
+      f.staminaRegenDelay = STAMINA_REGEN_DELAY;
+      f.vx = c.dashSpeed * sign;
+      enterState(f, StateId.Dash);
+      return true;
+    }
+    return false;
   }
 }

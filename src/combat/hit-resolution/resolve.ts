@@ -18,7 +18,7 @@ import type {
 import { ContactKind, HitLevel, InputBit, InvulKind, StateId } from "../types";
 import { NO_MOVE } from "../constants";
 import { centerOf, intersection, overlaps } from "../collision/aabb";
-import { activeHitboxesOf, hurtboxesOf, isInvulnerable } from "../collision/boxes";
+import { activeHitboxesOf, armorRemaining, hurtboxesOf, isInvulnerable } from "../collision/boxes";
 import {
   blockstunStateFor,
   enterState,
@@ -130,6 +130,8 @@ export function resolveContacts(
         let dealtDamage = 0;
         let rawDamage = spec.damage;
         const counterHit = defender.state === StateId.Attack;
+        const armored = !blocked && armorRemaining(defender, defenderChar) > 0;
+        let appliedHitstun = spec.hitstun;
 
         attacker.hitstop = spec.hitstopAttacker;
         defender.hitstop = spec.hitstopDefender;
@@ -140,24 +142,46 @@ export function resolveContacts(
           attacker.vx = spec.pushbackBlockAttacker * dir;
           defender.vx = spec.pushbackBlockDefender * dir;
         } else {
-          // The stun state is chosen from the stance the defender was in when the attack
-          // arrived, before anything below has had a chance to change it.
-          const stunState = hitstunStateFor(defender);
           const move = attackerChar.moves.find((candidate) => candidate.id === attacker.moveId);
           const tags = move?.tags ?? [];
+          if (
+            attackerChar.perks.burningBrand &&
+            tags.includes("cashout") &&
+            defender.burnStacks > 0
+          ) {
+            appliedHitstun += 2;
+          }
           rawDamage = spec.damage + consumeDebuffBonuses(defender, tags, spec.damage, defenderChar.resistances, a, d, report);
           dealtDamage = armorMitigatedDamage(rawDamage, defenderChar.armor);
           defender.health = Math.max(0, defender.health - dealtDamage);
           defender.comboCount++;
-          defender.stun = spec.hitstun;
-          // Being hit ends whatever the defender was doing, including their own attack.
-          defender.moveId = NO_MOVE;
-          defender.moveFrame = 0;
-          defender.hitFlags = 0;
-          enterState(defender, stunState);
           attacker.vx = spec.pushbackHitAttacker * dir;
-          defender.vx = spec.pushbackHitDefender * dir;
-          applyTaggedDebuffs(defender, tags, defenderChar.resistances, a, d, report);
+          if (armored) {
+            defender.armorHits++;
+          } else {
+            if (spec.launchVelocityY > 0) {
+              defender.airborne = 1;
+              defender.vy = spec.launchVelocityY;
+            }
+            const stunState = hitstunStateFor(defender);
+            defender.stun = appliedHitstun;
+            // Being hit ends whatever the defender was doing, including their own attack.
+            defender.moveId = NO_MOVE;
+            defender.moveFrame = 0;
+            defender.hitFlags = 0;
+            defender.armorHits = 0;
+            enterState(defender, stunState);
+            defender.vx = spec.pushbackHitDefender * dir;
+          }
+          applyTaggedDebuffs(
+            defender,
+            tags,
+            defenderChar.resistances,
+            a,
+            d,
+            report,
+            attackerChar.perks.staticConductor ? 4 : 3,
+          );
           if (defender.health === 0) state.roundOver = 1;
         }
 
@@ -171,7 +195,7 @@ export function resolveContacts(
           level: spec.level,
           damage: dealtDamage,
           rawDamage,
-          hitstun: spec.hitstun,
+          hitstun: appliedHitstun,
           blockstun: spec.blockstun,
           hitstopAttacker: spec.hitstopAttacker,
           hitstopDefender: spec.hitstopDefender,
@@ -184,6 +208,7 @@ export function resolveContacts(
           overlapWidth: overlap.x1 - overlap.x0,
           overlapHeight: overlap.y1 - overlap.y0,
           counterHit,
+          armored,
           x: where.x,
           y: where.y,
         };

@@ -49,11 +49,14 @@ export const NO_MOVE = -1;
  */
 export const INPUT_BUFFER_FRAMES = 4;
 
+/** Frames after a stamina spend before one point per frame starts regenerating. */
+export const STAMINA_REGEN_DELAY = 36;
+
 /** How many past input frames the command parser can see when matching motions. */
 export const COMMAND_HISTORY_FRAMES = 32;
 
 /** Snapshot format tag. Bump when the serialised layout changes; readers reject others. */
-export const SNAPSHOT_VERSION = 3;
+export const SNAPSHOT_VERSION = 4;
 
 /** FNV-1a 32-bit parameters, used for every determinism hash in the project. */
 export const FNV_OFFSET_BASIS = 0x811c9dc5;

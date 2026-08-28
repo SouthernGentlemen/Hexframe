@@ -1,4 +1,4 @@
-import type { CharacterDef, ElementalResistances } from "../combat/types";
+import type { CharacterDef, CombatPerks, ElementalResistances } from "../combat/types";
 
 export const ARMOR_SLOTS = ["head", "chest", "arms", "waist", "legs"] as const;
 export type ArmorSlot = (typeof ARMOR_SLOTS)[number];
@@ -13,6 +13,11 @@ export const ARMOR_SKILL_IDS = [
   "fire-resistance",
   "frost-resistance",
   "shock-resistance",
+  "grave-step",
+  "venom-edge",
+  "static-conductor",
+  "void-channel",
+  "burning-brand",
 ] as const;
 export type ArmorSkillId = (typeof ARMOR_SKILL_IDS)[number];
 export type ResistanceId = keyof ElementalResistances;
@@ -21,6 +26,7 @@ export interface SkillEffect {
   vitality?: number;
   stamina?: number;
   resistance?: { type: ResistanceId; value: number };
+  perk?: keyof CombatPerks;
 }
 
 export interface SkillThreshold {
@@ -78,6 +84,7 @@ export interface ResolvedArmorStats {
   stamina: number;
   armor: number;
   resistances: ElementalResistances;
+  perks: CombatPerks;
   skillPoints: Record<ArmorSkillId, number>;
 }
 
@@ -114,6 +121,56 @@ export const ARMOR_SKILLS: readonly ArmorSkillDef[] = [
       { points: 3, description: `+25 ${type} resistance`, effect: { resistance: { type, value: 25 } } },
     ],
   })),
+  {
+    id: "grave-step",
+    name: "Grave Step",
+    shortName: "STEP",
+    description: "Three Gravecloth pieces make backdash startup strike-invulnerable.",
+    thresholds: [
+      { points: 1, description: "Gravecloth set affinity", effect: {} },
+      { points: 3, description: "Backdash frames 1–3 ignore strikes", effect: { perk: "graveStep" } },
+    ],
+  },
+  {
+    id: "venom-edge",
+    name: "Venom Edge",
+    shortName: "VEN",
+    description: "Three Briarbone pieces reduce poison-technique stamina costs.",
+    thresholds: [
+      { points: 1, description: "Briarbone set affinity", effect: {} },
+      { points: 3, description: "Poison moves cost 5 less stamina", effect: { perk: "venomEdge" } },
+    ],
+  },
+  {
+    id: "static-conductor",
+    name: "Static Conductor",
+    shortName: "COND",
+    description: "Three Stormglass pieces raise the shock stack limit.",
+    thresholds: [
+      { points: 1, description: "Stormglass set affinity", effect: {} },
+      { points: 3, description: "Maximum shock stacks +1", effect: { perk: "staticConductor" } },
+    ],
+  },
+  {
+    id: "void-channel",
+    name: "Void Channel",
+    shortName: "VOID",
+    description: "Three Voidwarden pieces make air routes more stamina-efficient.",
+    thresholds: [
+      { points: 1, description: "Voidwarden set affinity", effect: {} },
+      { points: 3, description: "Air moves cost 5 less stamina", effect: { perk: "voidChannel" } },
+    ],
+  },
+  {
+    id: "burning-brand",
+    name: "Burning Brand",
+    shortName: "BRAND",
+    description: "Three Crownfire pieces empower cashouts against burning targets.",
+    thresholds: [
+      { points: 1, description: "Crownfire set affinity", effect: {} },
+      { points: 3, description: "Cashouts gain +2 hitstun vs burning", effect: { perk: "burningBrand" } },
+    ],
+  },
 ];
 
 export const MATERIAL_CATALOG: readonly MaterialDef[] = [
@@ -134,10 +191,11 @@ const SETS: ReadonlyArray<{
   baseArmor: number;
   material: string;
   secondary: string;
+  perkId: ArmorSkillId;
   skills: Readonly<Record<ArmorSlot, readonly ArmorSkillGrant[]>>;
 }> = [
   {
-    id: "gravecloth", name: "Gravecloth", grade: "white", baseArmor: 8, material: "grave-thread", secondary: "iron-scrap",
+    id: "gravecloth", name: "Gravecloth", grade: "white", baseArmor: 8, material: "grave-thread", secondary: "iron-scrap", perkId: "grave-step",
     skills: {
       head: [{ id: "vitality-up", points: 1 }],
       chest: [{ id: "poison-resistance", points: 1 }],
@@ -147,7 +205,7 @@ const SETS: ReadonlyArray<{
     },
   },
   {
-    id: "briarbone", name: "Briarbone", grade: "green", baseArmor: 14, material: "briar-hide", secondary: "venom-gland",
+    id: "briarbone", name: "Briarbone", grade: "green", baseArmor: 14, material: "briar-hide", secondary: "venom-gland", perkId: "venom-edge",
     skills: {
       head: [{ id: "poison-resistance", points: 2 }],
       chest: [{ id: "poison-resistance", points: 1 }, { id: "vitality-up", points: 1 }],
@@ -157,7 +215,7 @@ const SETS: ReadonlyArray<{
     },
   },
   {
-    id: "stormglass", name: "Stormglass", grade: "blue", baseArmor: 22, material: "stormglass", secondary: "frost-core",
+    id: "stormglass", name: "Stormglass", grade: "blue", baseArmor: 22, material: "stormglass", secondary: "frost-core", perkId: "static-conductor",
     skills: {
       head: [{ id: "shock-resistance", points: 2 }],
       chest: [{ id: "shock-resistance", points: 1 }, { id: "vitality-up", points: 1 }],
@@ -167,7 +225,7 @@ const SETS: ReadonlyArray<{
     },
   },
   {
-    id: "voidwarden", name: "Voidwarden", grade: "purple", baseArmor: 32, material: "umbral-cloth", secondary: "stormglass",
+    id: "voidwarden", name: "Voidwarden", grade: "purple", baseArmor: 32, material: "umbral-cloth", secondary: "stormglass", perkId: "void-channel",
     skills: {
       head: [{ id: "vitality-up", points: 2 }],
       chest: [{ id: "vitality-up", points: 1 }, { id: "poison-resistance", points: 1 }],
@@ -177,7 +235,7 @@ const SETS: ReadonlyArray<{
     },
   },
   {
-    id: "crownfire", name: "Crownfire", grade: "orange", baseArmor: 44, material: "cinder-heart", secondary: "umbral-cloth",
+    id: "crownfire", name: "Crownfire", grade: "orange", baseArmor: 44, material: "cinder-heart", secondary: "umbral-cloth", perkId: "burning-brand",
     skills: {
       head: [{ id: "fire-resistance", points: 3 }, { id: "vitality-up", points: 1 }],
       chest: [{ id: "vitality-up", points: 3 }],
@@ -208,7 +266,7 @@ export const ARMOR_CATALOG: readonly ArmorDef[] = SETS.flatMap((set) =>
     icon: SLOT_ICONS[slot],
     description: `${set.name} armor shaped for a ${slot} slot build.`,
     armor: set.baseArmor + index,
-    skills: set.skills[slot],
+    skills: [...set.skills[slot], { id: set.perkId, points: 1 }],
     recipe: [
       { materialId: set.material, quantity: 2 + index },
       { materialId: set.secondary, quantity: 1 + Math.trunc(index / 2) },
@@ -257,7 +315,7 @@ export function activeSkillThreshold(skill: ArmorSkillDef, points: number): Skil
 }
 
 export function resolveArmorStats(
-  character: Pick<CharacterDef, "health" | "stamina">,
+  character: Pick<CharacterDef, "health" | "stamina" | "perks">,
   equipment: Readonly<Partial<Record<ArmorSlot, string>>>,
 ): ResolvedArmorStats {
   const skillPoints = armorSkillPoints(equipment);
@@ -271,13 +329,21 @@ export function resolveArmorStats(
   let vitality = character.health;
   let stamina = character.stamina;
   const resistances: ElementalResistances = { poison: 0, fire: 0, frost: 0, shock: 0 };
+  const perks: CombatPerks = {
+    graveStep: false,
+    venomEdge: false,
+    staticConductor: false,
+    voidChannel: false,
+    burningBrand: false,
+  };
   for (const skill of ARMOR_SKILLS) {
     const effect = activeSkillThreshold(skill, skillPoints[skill.id])?.effect;
     vitality += effect?.vitality ?? 0;
     stamina += effect?.stamina ?? 0;
     if (effect?.resistance) resistances[effect.resistance.type] += effect.resistance.value;
+    if (effect?.perk) perks[effect.perk] = true;
   }
-  return { vitality, stamina, armor, resistances, skillPoints };
+  return { vitality, stamina, armor, resistances, perks, skillPoints };
 }
 
 export function armorSkillPoints(
@@ -304,6 +370,7 @@ export function applyArmor(
     stamina: stats.stamina,
     armor: stats.armor,
     resistances: stats.resistances,
+    perks: stats.perks,
   };
 }
 

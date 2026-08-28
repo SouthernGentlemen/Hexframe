@@ -142,6 +142,8 @@ export interface HitboxSpec {
   pushbackHitDefender: number;
   pushbackBlockAttacker: number;
   pushbackBlockDefender: number;
+  /** Upward launch applied to an unblocked defender, in sim units per frame. */
+  launchVelocityY: number;
 }
 
 /** Hurtboxes that replace the fighter's default ones for part of a move. */
@@ -159,6 +161,13 @@ export interface InvulWindow {
   startFrame: number;
   endFrame: number;
   kind: InvulKindValue;
+}
+
+/** A finite number of strikes a move can absorb without entering hitstun. */
+export interface ArmorWindow {
+  startFrame: number;
+  endFrame: number;
+  hits: number;
 }
 
 /**
@@ -198,9 +207,12 @@ export interface MoveDef {
   requiresCrouch: boolean;
   /** True for air normals. */
   airOk: boolean;
+  /** Deterministic resource cost paid once when the move starts. */
+  staminaCost: number;
   hitboxes: HitboxSpec[];
   hurtboxWindows: HurtboxWindow[];
   invulWindows: InvulWindow[];
+  armorWindows: ArmorWindow[];
   movement: MovementKey[];
   cancelWindows: CancelWindow[];
 }
@@ -235,6 +247,8 @@ export interface CharacterDef {
   armor: number;
   /** Integer elemental/status resistance ratings resolved before the match. */
   resistances: ElementalResistances;
+  /** Set-bonus behavior resolved from equipment before the deterministic match begins. */
+  perks: CombatPerks;
   walkForwardSpeed: number;
   walkBackwardSpeed: number;
   dashSpeed: number;
@@ -262,6 +276,19 @@ export interface ElementalResistances {
   fire: number;
   frost: number;
   shock: number;
+}
+
+export interface CombatPerks {
+  /** Backdash startup ignores strikes while the Gravecloth set bonus is active. */
+  graveStep: boolean;
+  /** Poison-tagged techniques cost less stamina. */
+  venomEdge: boolean;
+  /** Shock can hold one additional stack. */
+  staticConductor: boolean;
+  /** Air techniques cost less stamina. */
+  voidChannel: boolean;
+  /** Cashouts gain two hitstun frames against a burning target. */
+  burningBrand: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -312,12 +339,18 @@ export interface FighterState {
   /** Frames of hitstun or blockstun left, depending on `state`. */
   stun: number;
   health: number;
+  /** Current spendable stamina, clamped to the character's resolved maximum. */
+  stamina: number;
+  /** Frames before stamina regeneration resumes after a spend. */
+  staminaRegenDelay: number;
   /** 1 when off the ground. Redundant with `y` by design: it survives moves that lift. */
   airborne: number;
   /** Bitmask of `HitboxSpec.id`s that have already connected during the current move. */
   hitFlags: number;
   /** Hits taken since the defender was last actionable. Drives combo display and scaling. */
   comboCount: number;
+  /** Number of hits absorbed by the current move's hyper-armor windows. */
+  armorHits: number;
   /**
    * Absolute frame of the most recent button press that has already been turned into a
    * move. Without it the input buffer would fire the same press on every frame of its
@@ -402,6 +435,8 @@ export interface ContactEvent {
   overlapHeight: number;
   /** True when the defender was attacking at the instant the boxes touched. */
   counterHit: boolean;
+  /** True when damage landed but a hyper-armor point prevented hitstun. */
+  armored: boolean;
   /** Approximate world point of contact, for the renderer's effects. */
   x: number;
   y: number;
