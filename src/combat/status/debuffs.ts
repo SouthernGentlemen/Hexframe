@@ -1,4 +1,4 @@
-import type { DebuffEvent, FighterState, FrameReport, SimState } from "../types";
+import type { DebuffEvent, ElementalResistances, FighterState, FrameReport, SimState } from "../types";
 import { DebuffEventKind, DebuffKind } from "../types";
 
 const BURN_DURATION = 90;
@@ -50,13 +50,14 @@ export function consumeDebuffBonuses(
   defender: FighterState,
   tags: readonly string[],
   baseDamage: number,
+  resistances: Readonly<ElementalResistances>,
   source: number,
   target: number,
   report: FrameReport,
 ): number {
   let bonus = 0;
   if (defender.shockStacks > 0) {
-    const damage = Math.trunc((baseDamage * defender.shockStacks * 8) / 100);
+    const damage = resistDamage(Math.trunc((baseDamage * defender.shockStacks * 8) / 100), resistances.shock);
     bonus += damage;
     report.debuffs.push(event(source, target, DebuffKind.Shock, DebuffEventKind.Triggered, defender.shockStacks, defender.shockFrames, damage));
     defender.shockStacks = 0;
@@ -86,28 +87,29 @@ export function consumeDebuffBonuses(
 export function applyTaggedDebuffs(
   defender: FighterState,
   tags: readonly string[],
+  resistances: Readonly<ElementalResistances>,
   source: number,
   target: number,
   report: FrameReport,
 ): void {
   if (tags.includes("burn")) {
     defender.burnStacks = Math.min(3, defender.burnStacks + 1);
-    defender.burnFrames = BURN_DURATION;
+    defender.burnFrames = resistDuration(BURN_DURATION, resistances.fire);
     report.debuffs.push(event(source, target, DebuffKind.Burn, DebuffEventKind.Applied, defender.burnStacks, defender.burnFrames, 0));
   }
   if (tags.includes("poison")) {
     defender.poisonStacks = Math.min(5, defender.poisonStacks + 1);
-    defender.poisonFrames = POISON_DURATION;
+    defender.poisonFrames = resistDuration(POISON_DURATION, resistances.poison);
     report.debuffs.push(event(source, target, DebuffKind.Poison, DebuffEventKind.Applied, defender.poisonStacks, defender.poisonFrames, 0));
   }
   if (tags.includes("freeze")) {
     defender.freezeStacks = Math.min(3, defender.freezeStacks + 1);
-    defender.freezeFrames = defender.freezeStacks >= 3 ? FREEZE_DURATION : CHILL_DURATION;
+    defender.freezeFrames = resistDuration(defender.freezeStacks >= 3 ? FREEZE_DURATION : CHILL_DURATION, resistances.frost);
     report.debuffs.push(event(source, target, DebuffKind.Freeze, defender.freezeStacks >= 3 ? DebuffEventKind.Triggered : DebuffEventKind.Applied, defender.freezeStacks, defender.freezeFrames, 0));
   }
   if (tags.includes("shock")) {
     defender.shockStacks = Math.min(3, defender.shockStacks + 1);
-    defender.shockFrames = SHOCK_DURATION;
+    defender.shockFrames = resistDuration(SHOCK_DURATION, resistances.shock);
     report.debuffs.push(event(source, target, DebuffKind.Shock, DebuffEventKind.Applied, defender.shockStacks, defender.shockFrames, 0));
   }
   if (tags.includes("bleed")) {
@@ -115,6 +117,14 @@ export function applyTaggedDebuffs(
     defender.bleedFrames = BLEED_DURATION;
     report.debuffs.push(event(source, target, DebuffKind.Bleed, DebuffEventKind.Applied, defender.bleedStacks, defender.bleedFrames, 0));
   }
+}
+
+function resistDuration(duration: number, resistance: number): number {
+  return Math.max(1, Math.trunc((duration * (100 - Math.min(80, Math.max(0, resistance)))) / 100));
+}
+
+function resistDamage(damage: number, resistance: number): number {
+  return Math.max(0, Math.trunc((damage * (100 - Math.min(80, Math.max(0, resistance)))) / 100));
 }
 
 function damageTick(

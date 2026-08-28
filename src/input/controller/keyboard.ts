@@ -21,12 +21,15 @@ export class KeyboardController {
    * holds down.
    */
   private readonly held = new Set<string>();
+  /** A tap that began and ended between two samples still belongs to the next frame. */
+  private readonly pressed = new Set<string>();
   private disposed = false;
 
   private readonly onKeyDown = (ev: Event): void => {
     const e = ev as KeyboardEvent;
     if (!this.captures(e)) return;
     this.held.add(e.code);
+    this.pressed.add(e.code);
     e.preventDefault();
   };
 
@@ -43,6 +46,7 @@ export class KeyboardController {
    */
   private readonly onBlur = (): void => {
     this.held.clear();
+    this.pressed.clear();
   };
 
   constructor(target: EventTarget, map: KeyMap, actionMap: ActionKeyMap = {}) {
@@ -54,24 +58,26 @@ export class KeyboardController {
       ...Object.keys(actionMap),
       "ShiftLeft",
       "ShiftRight",
-      "Space",
+      "KeyE",
     ]);
     target.addEventListener("keydown", this.onKeyDown);
     target.addEventListener("keyup", this.onKeyUp);
     target.addEventListener("blur", this.onBlur);
   }
 
-  /** The bitmask for everything currently held. Sampling never mutates what is held. */
+  /** The bitmask for held keys plus taps queued since the previous sample. */
   sample(): InputFrame {
     let bits = 0;
-    for (const code of this.held) bits |= this.map[code] ?? 0;
+    const active = new Set([...this.held, ...this.pressed]);
+    for (const code of active) bits |= this.map[code] ?? 0;
 
-    const shift = this.held.has("ShiftLeft") || this.held.has("ShiftRight");
-    const space = this.held.has("Space");
-    const bank = (shift ? 1 : 0) + (space ? 2 : 0);
+    const shift = active.has("ShiftLeft") || active.has("ShiftRight");
+    const alternate = active.has("KeyE");
+    const bank = (shift ? 1 : 0) + (alternate ? 2 : 0);
     for (const [code, position] of Object.entries(this.actionMap)) {
-      if (this.held.has(code)) bits |= actionBit(bank * 4 + position);
+      if (active.has(code)) bits |= actionBit(bank * 4 + position);
     }
+    this.pressed.clear();
     return bits & INPUT_MASK;
   }
 
@@ -82,6 +88,7 @@ export class KeyboardController {
     this.target.removeEventListener("keyup", this.onKeyUp);
     this.target.removeEventListener("blur", this.onBlur);
     this.held.clear();
+    this.pressed.clear();
   }
 
   /**
@@ -93,7 +100,7 @@ export class KeyboardController {
     if (e.ctrlKey || e.metaKey || e.altKey) return false;
     const target = e.target;
     if (
-      target instanceof Element &&
+      typeof Element !== "undefined" && target instanceof Element &&
       target.closest("button, a, input, select, textarea, [contenteditable='true']")
     ) {
       return false;

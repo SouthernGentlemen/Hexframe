@@ -4,8 +4,15 @@ import { ContactKind, DebuffEventKind, DebuffKind, HitLevel } from "../combat/ty
 import { Simulation } from "../combat/simulation/simulation";
 import { DEFAULT_MOVE_LOADOUT, testFighterWithBuild, testFighterWithLoadout } from "../content/test-fighter";
 import { TEST_FIGHTER_ANIMATIONS, TEST_FIGHTER_MODEL, TEST_FIGHTER_RIG } from "../content/test-fighter-assets";
-import type { GearSlot } from "../content/gear";
-import { GEAR_SLOTS, gearById } from "../content/gear";
+import type { ArmorSlot } from "../content/armor";
+import {
+  ARMOR_CATALOG,
+  ARMOR_SLOTS,
+  armorById,
+  armorSkillPoints,
+  canCraftArmor,
+  materialById,
+} from "../content/armor";
 import { STATUS_RULES } from "../content/status-rules";
 import { gameAudio } from "../client/audio/audio-manager";
 import { GamepadController } from "../input/controller/gamepad";
@@ -23,7 +30,28 @@ import { applyPreferences, loadPreferences, persistPreferences, resetPreferences
 import type { LabPreferences } from "./preferences";
 import { Timeline } from "./timeline/timeline";
 import type { LabSpeed } from "./timeline/timeline";
-import { buildLabView } from "./view";
+import {
+  frameInspectorMarkup,
+  interactionHistoryMarkup,
+  moveTimelineMarkup,
+} from "./inspector";
+import type { InteractionSelection } from "./inspector";
+import {
+  captureScenario,
+  parseScenario,
+  replayScenario,
+  scenarioJson,
+} from "./scenario/scenario";
+import type { CombatScenario } from "./scenario/scenario";
+import {
+  armorDetailMarkup,
+  armorInventoryButton,
+  buildLabView,
+  craftDetailMarkup,
+  craftRecipeButton,
+  materialDetailMarkup,
+  skillBoardMarkup,
+} from "./view";
 import { MoveShowcase } from "./move-showcase";
 
 const FRAME_MS = 1000 / 60;
@@ -37,8 +65,9 @@ const DUMMY_OPTIONS: readonly [DummyModeValue, string][] = [
   [DummyMode.Reversal, "Reversal"],
 ];
 
-type MenuTab = "loadout" | "gear" | "status" | "settings" | "training" | "debug";
+type MenuTab = "loadout" | "armor" | "craft" | "status" | "settings" | "training" | "debug";
 type SettingsTab = "audio" | "video" | "accessibility" | "controls";
+type InventoryTab = "armor" | "materials";
 
 function edge(now: GamepadUiState, before: GamepadUiState, key: keyof GamepadUiState): boolean {
   return now[key] && !before[key];
@@ -46,6 +75,7 @@ function edge(now: GamepadUiState, before: GamepadUiState, key: keyof GamepadUiS
 
 /** Mounts the controller-first combat laboratory and returns its teardown. */
 export function startLab(mount: HTMLElement): () => void {
+  const publicPlay = window.location.pathname === "/play" || window.location.pathname.startsWith("/play/");
   const catalogCharacter = testFighterWithLoadout(DEFAULT_MOVE_LOADOUT);
   const validMoveIds = new Set(catalogCharacter.moves.map((move) => move.id));
   const buildState = loadBuildState(validMoveIds);
@@ -55,9 +85,11 @@ export function startLab(mount: HTMLElement): () => void {
   const preferences = loadPreferences();
   applyPreferences(preferences);
 
-  mount.innerHTML = buildLabView({ character: playerCharacter, buildState, preferences, dummyOptions: DUMMY_OPTIONS });
+  mount.innerHTML = buildLabView({ character: playerCharacter, buildState, preferences, dummyOptions: DUMMY_OPTIONS, publicPlay });
 
-  const config: SimConfig = { characters: [playerCharacter, dummyCharacter], startX: [px(-120), px(120)], seed: 0x5eed };
+  // The lab reset is a canonical contact setup: standing light reaches the dummy without
+  // hidden walking or timing, so the same move can be run, inspected, edited, and rerun.
+  const config: SimConfig = { characters: [playerCharacter, dummyCharacter], startX: [px(-18), px(18)], seed: 0x5eed };
   const sim = new Simulation(config);
   const timeline = new Timeline(sim, 900);
   const dummy = new DummyController();
@@ -72,7 +104,7 @@ export function startLab(mount: HTMLElement): () => void {
     rig: TEST_FIGHTER_RIG,
     animations: TEST_FIGHTER_ANIMATIONS,
   });
-  const panel = new DebugPanel(required("debug-panel"));
+  const panel = publicPlay ? null : new DebugPanel(required("debug-panel"));
   const toggles: DebugToggles = { hitboxes: false, hurtboxes: false, pushboxes: false, origins: false, skeleton: false, boneNames: false, velocity: false };
 
   timeline.inputProvider = () => {
@@ -93,8 +125,15 @@ export function startLab(mount: HTMLElement): () => void {
   let previousUi = gamepad.sampleUi();
   let focusBeforeMenu: HTMLElement | null = null;
   let captionTimer = 0;
-  let selectedGearSlot: GearSlot = "focus";
+  let selectedArmorSlot: ArmorSlot = "head";
+  let selectedCraftArmorId = ARMOR_CATALOG.find((item) => !buildState.inventory.armor.includes(item.id))?.id ?? ARMOR_CATALOG[0].id;
   let showcasedMoveId = -1;
+  let capturedScenario: CombatScenario | null = null;
+  let selectedInteraction: InteractionSelection | null = null;
+  let renderedTimelineMoveId = -1;
+  let renderedTimelinePlayhead = -2;
+  let timelinePinnedMoveId = -1;
+  let interactionRenderKey = "";
 
   gamepad.setDeadzone(preferences.controls.stickDeadzone);
   gameAudio.setCaptionHandler(showCaption);
@@ -103,11 +142,13 @@ export function startLab(mount: HTMLElement): () => void {
 
   const render = (now = performance.now()): void => {
     const state = sim.getState();
+    const stateHash = hashState(state);
     renderer.render(state, lastReport ?? timeline.lastReport, toggles);
-    panel.update(state, sim.characters(), lastReport ?? timeline.lastReport, hashState(state));
-    required("frame-readout").textContent = String(state.frame);
+    panel?.update(state, sim.characters(), lastReport ?? timeline.lastReport, stateHash);
+    required("frame-readout").textContent = String(state.frame).padStart(6, "0");
     required("play-state").textContent = timeline.paused ? "PAUSED" : "LIVE";
-    required("timeline-status").textContent = timeline.lastMessage ?? `Frame ${state.frame}${timeline.paused ? " · paused" : ""}`;
+    const range = timeline.bufferedRange();
+    required("timeline-status").textContent = timeline.lastMessage ?? `Frame ${state.frame} · ${timeline.paused ? "paused" : "live"} · buffer ${range.oldest}–${range.newest}`;
     required("controller-state").textContent = gamepad.connected ? `Gamepad · ${gamepad.name}` : "Keyboard ready · connect gamepad anytime";
     for (let player = 0; player < 2; player++) {
       const fighter = state.fighters[player];
@@ -120,8 +161,10 @@ export function startLab(mount: HTMLElement): () => void {
     const move = playerCharacter.moves.find((candidate) => candidate.id === state.fighters[0].moveId);
     required("active-move").textContent = move?.key.replaceAll("_", " ") ?? "Ready";
     required("active-tags").textContent = move?.tags.join(" · ") ?? "Choose any 16 of 24 moves";
-    const pause = mount.querySelector<HTMLButtonElement>("[data-action='pause']");
-    if (pause) pause.textContent = timeline.paused ? "Play" : "Pause";
+    for (const pause of mount.querySelectorAll<HTMLButtonElement>("[data-action='pause']")) pause.textContent = timeline.paused ? "Play" : "Pause";
+    required("frame-inspector").innerHTML = frameInspectorMarkup(state, sim.characters(), lastReport ?? timeline.lastReport, stateHash);
+    renderFrameTimeline(state.fighters[0].moveId, state.fighters[0].moveFrame);
+    renderInteractionHistory();
     moveShowcase.render(now);
   };
 
@@ -152,17 +195,29 @@ export function startLab(mount: HTMLElement): () => void {
     if (action === "pause") timeline.paused = !timeline.paused;
     if (action === "menu") openMenu();
     if (action === "close-menu") closeMenu();
+    if (action === "back-10") stepFrames(-10);
     if (action === "back") stepFrames(-1);
     if (action === "forward") stepFrames(1);
+    if (action === "forward-10") stepFrames(10);
     if (action === "reset") resetMatch();
+    if (action === "scenario-capture") captureCurrentScenario();
+    if (action === "scenario-replay") replayCapturedScenario();
+    if (action === "scenario-export") exportCapturedScenario();
     if (action === "default-loadout") resetActiveLoadout();
+    if (action === "craft-selected") craftSelectedArmor();
     if (action === "reset-preferences") replacePreferences(resetPreferences());
     if (button.dataset.menuTab) showTab(button.dataset.menuTab as MenuTab);
     if (button.dataset.settingsTab) showSettingsTab(button.dataset.settingsTab as SettingsTab);
+    if (button.dataset.inventoryTab) showInventoryTab(button.dataset.inventoryTab as InventoryTab);
     if (button.dataset.preset !== undefined) switchPreset(Number(button.dataset.preset));
     if (button.dataset.selectAction !== undefined) selectAction(Number(button.dataset.selectAction));
-    if (button.dataset.gearSlot) selectGearSlot(button.dataset.gearSlot as GearSlot);
-    if (button.dataset.gearItem) equipGear(button.dataset.gearItem);
+    if (button.dataset.armorSlot) selectArmorSlot(button.dataset.armorSlot as ArmorSlot);
+    if (button.dataset.armorItem) equipArmor(button.dataset.armorItem);
+    if (button.dataset.materialItem) renderMaterialDetail(button.dataset.materialItem);
+    if (button.dataset.craftItem) selectCraftArmor(button.dataset.craftItem);
+    if (button.dataset.contactFrame !== undefined && button.dataset.contactIndex !== undefined) {
+      inspectInteraction(Number(button.dataset.contactFrame), Number(button.dataset.contactIndex));
+    }
     const save = button.dataset.save;
     if (save) {
       timeline.saveState(Number(save));
@@ -180,8 +235,13 @@ export function startLab(mount: HTMLElement): () => void {
     const target = event.target as HTMLInputElement | HTMLSelectElement;
     if (target.dataset.control === "speed") timeline.speed = Number(target.value) as LabSpeed;
     if (target.dataset.control === "dummy") dummy.mode = Number(target.value) as DummyModeValue;
+    if (target.dataset.control === "pause-on-contact" && target instanceof HTMLInputElement) timeline.pauseOnContact = target.checked;
+    if (target.dataset.control === "scenario-import" && target instanceof HTMLInputElement) void importScenarioFile(target.files?.[0] ?? null);
     const debug = target.dataset.debug as keyof DebugToggles | undefined;
-    if (debug) toggles[debug] = (target as HTMLInputElement).checked;
+    if (debug) {
+      toggles[debug] = (target as HTMLInputElement).checked;
+      for (const control of mount.querySelectorAll<HTMLInputElement>(`[data-debug='${debug}']`)) control.checked = toggles[debug];
+    }
     const slotText = target.dataset.loadoutSlot;
     if (slotText !== undefined) assignMove(Number(slotText), Number(target.value));
     if (target.dataset.prefSection && target.dataset.prefKey) updatePreference(target);
@@ -193,13 +253,21 @@ export function startLab(mount: HTMLElement): () => void {
     if (target.type === "range" && target.dataset.prefSection && target.dataset.prefKey) updatePreference(target);
   };
 
-  const previewMove = (event: Event): void => {
-    const target = event.target instanceof Element
-      ? event.target.closest<HTMLElement>("select[data-loadout-slot], [data-move-preview]")
-      : null;
+  const previewContent = (event: Event): void => {
+    const target = event.target instanceof Element ? event.target.closest<HTMLElement>(
+      "select[data-loadout-slot], [data-move-preview], [data-armor-item], [data-material-item], [data-craft-item]",
+    ) : null;
     if (!target) return;
-    const moveId = target instanceof HTMLSelectElement ? Number(target.value) : Number(target.dataset.movePreview);
-    showMovePreview(moveId);
+    if (target instanceof HTMLSelectElement || target.dataset.movePreview) {
+      const moveId = target instanceof HTMLSelectElement ? Number(target.value) : Number(target.dataset.movePreview);
+      showMovePreview(moveId);
+    } else if (target.dataset.armorItem) {
+      renderArmorDetail(target.dataset.armorItem);
+    } else if (target.dataset.materialItem) {
+      renderMaterialDetail(target.dataset.materialItem);
+    } else if (target.dataset.craftItem) {
+      selectCraftArmor(target.dataset.craftItem);
+    }
   };
 
   const keydown = (event: KeyboardEvent): void => {
@@ -212,12 +280,15 @@ export function startLab(mount: HTMLElement): () => void {
     if (event.code === "Escape") {
       event.preventDefault();
       menuOpen() ? closeMenu() : openMenu();
-    } else if (event.code === "KeyP" && !isFormControl(event.target)) {
+    } else if ((event.code === "Space" || event.code === "KeyP") && !isFormControl(event.target)) {
+      if (event.repeat) return;
       event.preventDefault();
       timeline.paused = !timeline.paused;
-    } else if (event.code === "BracketLeft" && !isFormControl(event.target)) {
+    } else if ((event.code === "Comma" || event.code === "BracketLeft") && !isFormControl(event.target)) {
+      event.preventDefault();
       stepFrames(-1);
-    } else if (event.code === "BracketRight" && !isFormControl(event.target)) {
+    } else if ((event.code === "Period" || event.code === "BracketRight") && !isFormControl(event.target)) {
+      event.preventDefault();
       stepFrames(1);
     } else return;
     render();
@@ -232,17 +303,19 @@ export function startLab(mount: HTMLElement): () => void {
   mount.addEventListener("click", click);
   mount.addEventListener("change", change);
   mount.addEventListener("input", input);
-  mount.addEventListener("pointerover", previewMove);
-  mount.addEventListener("focusin", previewMove);
+  mount.addEventListener("pointerover", previewContent);
+  mount.addEventListener("focusin", previewContent);
   window.addEventListener("keydown", keydown);
   document.addEventListener("visibilitychange", visibility);
   motionQuery.addEventListener("change", motionChange);
-  void fetch("/api/lab/session")
-    .then((response) => (response.ok ? response.json() : null))
-    .then((session: unknown) => {
-      if (typeof session === "object" && session !== null && "username" in session && typeof session.username === "string") required("session-label").textContent = session.username;
-    })
-    .catch(() => undefined);
+  if (!publicPlay) {
+    void fetch("/api/lab/session")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((session: unknown) => {
+        if (typeof session === "object" && session !== null && "username" in session && typeof session.username === "string") required("session-label").textContent = session.username;
+      })
+      .catch(() => undefined);
+  }
   render();
   animationId = requestAnimationFrame(loop);
 
@@ -253,8 +326,8 @@ export function startLab(mount: HTMLElement): () => void {
     mount.removeEventListener("click", click);
     mount.removeEventListener("change", change);
     mount.removeEventListener("input", input);
-    mount.removeEventListener("pointerover", previewMove);
-    mount.removeEventListener("focusin", previewMove);
+    mount.removeEventListener("pointerover", previewContent);
+    mount.removeEventListener("focusin", previewContent);
     window.removeEventListener("keydown", keydown);
     document.removeEventListener("visibilitychange", visibility);
     motionQuery.removeEventListener("change", motionChange);
@@ -337,11 +410,11 @@ export function startLab(mount: HTMLElement): () => void {
     if (!Number.isInteger(index) || index < 0 || index >= buildState.presets.length) return;
     buildState.activePreset = index;
     activeBuild = buildState.presets[index];
-    selectedGearSlot = "focus";
+    selectedArmorSlot = "head";
     rebuildActiveBuild();
     showMovePreview(activeBuild.loadout[0], true);
-    const item = gearById(activeBuild.equipment[selectedGearSlot]);
-    if (item) renderGearDetail(item.id);
+    const item = armorById(activeBuild.equipment[selectedArmorSlot]);
+    if (item) renderArmorDetail(item.id);
   }
 
   function assignMove(slot: number, moveId: number): void {
@@ -365,21 +438,50 @@ export function startLab(mount: HTMLElement): () => void {
     select?.scrollIntoView({ block: "nearest", behavior: preferences.accessibility.motion === "reduced" ? "auto" : "smooth" });
   }
 
-  function selectGearSlot(slot: GearSlot): void {
-    if (!GEAR_SLOTS.includes(slot)) return;
-    selectedGearSlot = slot;
-    for (const button of mount.querySelectorAll<HTMLElement>("[data-gear-slot]")) button.classList.toggle("selected", button.dataset.gearSlot === slot);
-    const item = gearById(activeBuild.equipment[slot]);
-    if (item) renderGearDetail(item.id);
+  function showInventoryTab(tab: InventoryTab): void {
+    for (const button of mount.querySelectorAll<HTMLButtonElement>("[data-inventory-tab]")) {
+      const active = button.dataset.inventoryTab === tab;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+      button.tabIndex = active ? 0 : -1;
+    }
+    for (const panel of mount.querySelectorAll<HTMLElement>("[data-inventory-panel]")) panel.hidden = panel.dataset.inventoryPanel !== tab;
   }
 
-  function equipGear(itemId: string): void {
-    const item = gearById(itemId);
-    if (!item) return;
-    selectedGearSlot = item.slot;
+  function selectArmorSlot(slot: ArmorSlot): void {
+    if (!ARMOR_SLOTS.includes(slot)) return;
+    selectedArmorSlot = slot;
+    for (const button of mount.querySelectorAll<HTMLElement>("[data-armor-slot]")) button.classList.toggle("selected", button.dataset.armorSlot === slot);
+    const item = armorById(activeBuild.equipment[slot]);
+    if (item) renderArmorDetail(item.id);
+  }
+
+  function equipArmor(itemId: string): void {
+    const item = armorById(itemId);
+    if (!item || !buildState.inventory.armor.includes(item.id)) return;
+    selectedArmorSlot = item.slot;
     activeBuild.equipment[item.slot] = item.id;
     rebuildActiveBuild();
-    renderGearDetail(item.id);
+    renderArmorDetail(item.id);
+  }
+
+  function selectCraftArmor(itemId: string): void {
+    const item = armorById(itemId);
+    if (!item) return;
+    selectedCraftArmorId = item.id;
+    for (const button of mount.querySelectorAll<HTMLElement>("[data-craft-item]")) button.classList.toggle("selected", button.dataset.craftItem === item.id);
+    required("craft-detail").innerHTML = craftDetailMarkup(item, buildState.inventory);
+  }
+
+  function craftSelectedArmor(): void {
+    const item = armorById(selectedCraftArmorId);
+    if (!item || !canCraftArmor(item, buildState.inventory)) return;
+    for (const cost of item.recipe) buildState.inventory.materials[cost.materialId] -= cost.quantity;
+    buildState.inventory.armor.push(item.id);
+    persistBuildState(buildState);
+    if (!mount.querySelector(`[data-armor-item='${item.id}']`)) required("armor-inventory-grid").insertAdjacentHTML("beforeend", armorInventoryButton(item));
+    syncInventoryUi();
+    selectCraftArmor(item.id);
   }
 
   function rebuildActiveBuild(): void {
@@ -411,30 +513,60 @@ export function startLab(mount: HTMLElement): () => void {
     }
     for (const label of mount.querySelectorAll<HTMLElement>("[data-build-number]")) label.textContent = `BUILD ${String(buildState.activePreset + 1).padStart(2, "0")}`;
     required("character-sheet-title").textContent = activeBuild.name;
-    required("stat-vitality").textContent = String(Math.trunc(playerCharacter.health / 100));
-    for (const slot of GEAR_SLOTS) {
-      const item = gearById(activeBuild.equipment[slot]);
-      const button = mount.querySelector<HTMLButtonElement>(`[data-gear-slot='${slot}']`);
+    required("stat-vitality").textContent = String(playerCharacter.health);
+    required("stat-stamina").textContent = String(playerCharacter.stamina);
+    required("stat-armor").textContent = String(playerCharacter.armor);
+    required("stat-resist-poison").textContent = String(playerCharacter.resistances.poison);
+    required("stat-resist-fire").textContent = String(playerCharacter.resistances.fire);
+    required("stat-resist-frost").textContent = String(playerCharacter.resistances.frost);
+    required("stat-resist-shock").textContent = String(playerCharacter.resistances.shock);
+    required("skill-board").innerHTML = skillBoardMarkup(armorSkillPoints(activeBuild.equipment));
+    for (const slot of ARMOR_SLOTS) {
+      const item = armorById(activeBuild.equipment[slot]);
+      const button = mount.querySelector<HTMLButtonElement>(`[data-armor-slot='${slot}']`);
       if (!button || !item) continue;
-      button.className = `gear-slot rarity-${item.rarity}${selectedGearSlot === slot ? " selected" : ""}`;
+      button.className = `gear-slot grade-${item.grade}${selectedArmorSlot === slot ? " selected" : ""}`;
       button.setAttribute("aria-label", `${slot}: ${item.name}`);
       const icon = button.querySelector<HTMLElement>(".gear-icon");
       const name = button.querySelector<HTMLElement>("[data-equipped-name]");
+      const armor = button.querySelector<HTMLElement>("[data-equipped-armor]");
       if (icon) icon.textContent = item.icon;
       if (name) name.textContent = item.name;
+      if (armor) armor.textContent = `${item.armor} armor`;
     }
   }
 
-  function renderGearDetail(itemId: string): void {
-    const item = gearById(itemId);
+  function syncInventoryUi(): void {
+    required("owned-armor-count").textContent = String(buildState.inventory.armor.length);
+    required("craft-owned-count").textContent = String(buildState.inventory.armor.length);
+    for (const element of mount.querySelectorAll<HTMLElement>("[data-material-count]")) {
+      const id = element.dataset.materialCount ?? "";
+      element.textContent = String(buildState.inventory.materials[id] ?? 0);
+    }
+    for (const button of [...mount.querySelectorAll<HTMLButtonElement>("[data-craft-item]")]) {
+      const item = armorById(button.dataset.craftItem ?? "");
+      if (item) button.outerHTML = craftRecipeButton(item, buildState.inventory);
+    }
+  }
+
+  function renderArmorDetail(itemId: string): void {
+    const item = armorById(itemId);
     if (!item) return;
-    required("gear-detail").innerHTML = `<span class="gear-icon" aria-hidden="true">${item.icon}</span><div><small>${item.rarity} ${item.slot}</small><h4>${item.name}</h4><p>${item.description}</p></div><ul>${item.tags.map((tag) => `<li>${tag}</li>`).join("")}</ul>`;
+    required("gear-detail").innerHTML = armorDetailMarkup(item, armorById(activeBuild.equipment[item.slot]));
+  }
+
+  function renderMaterialDetail(materialId: string): void {
+    const material = materialById(materialId);
+    if (!material) return;
+    required("gear-detail").innerHTML = materialDetailMarkup(material, buildState.inventory);
   }
 
   function showMovePreview(moveId: number, force = false): void {
     const move = playerCharacter.moves.find((candidate) => candidate.id === moveId);
     if (!move || (!force && showcasedMoveId === move.id)) return;
     showcasedMoveId = move.id;
+    timelinePinnedMoveId = move.id;
+    renderedTimelineMoveId = -1;
     moveShowcase.select(move.id);
     const hitbox = move.hitboxes[0];
     const level = hitbox?.level === HitLevel.Low ? "LOW" : hitbox?.level === HitLevel.Overhead ? "OVERHEAD" : "MID";
@@ -449,6 +581,117 @@ export function startLab(mount: HTMLElement): () => void {
     required("move-stat-blockstun").textContent = `${hitbox?.blockstun ?? 0}f`;
     required("move-showcase-tags").innerHTML = move.tags.map((tag) => `<li>${tag}</li>`).join("");
     for (const card of mount.querySelectorAll<HTMLElement>(".move-card[data-move-preview]")) card.classList.toggle("previewing", Number(card.dataset.movePreview) === move.id);
+  }
+
+  function renderFrameTimeline(activeMoveId: number, activeMoveFrame: number): void {
+    const activeMove = playerCharacter.moves.find((candidate) => candidate.id === activeMoveId);
+    if (activeMove) timelinePinnedMoveId = activeMove.id;
+    if (timelinePinnedMoveId < 0) timelinePinnedMoveId = showcasedMoveId;
+    const move = activeMove
+      ?? playerCharacter.moves.find((candidate) => candidate.id === timelinePinnedMoveId)
+      ?? playerCharacter.moves[0];
+    if (!move) return;
+
+    if (renderedTimelineMoveId !== move.id) {
+      required("move-timeline-console").innerHTML = moveTimelineMarkup(move);
+      renderedTimelineMoveId = move.id;
+      renderedTimelinePlayhead = -2;
+    }
+
+    const playhead = activeMove ? activeMoveFrame : -1;
+    if (playhead === renderedTimelinePlayhead) return;
+    renderedTimelinePlayhead = playhead;
+    for (const cell of required("move-timeline-console").querySelectorAll<HTMLElement>("[data-frame]")) {
+      cell.classList.toggle("playhead", Number(cell.dataset.frame) === playhead);
+    }
+  }
+
+  function renderInteractionHistory(): void {
+    const reports = timeline.contactReports();
+    const key = `${reports.map((report) => `${report.frame}:${report.contacts.length}`).join(",")}|${selectedInteraction?.frame ?? "latest"}:${selectedInteraction?.index ?? 0}`;
+    if (key === interactionRenderKey) return;
+    interactionRenderKey = key;
+    required("interaction-history").innerHTML = interactionHistoryMarkup(reports, sim.characters(), selectedInteraction);
+  }
+
+  function inspectInteraction(frame: number, index: number): void {
+    const report = timeline.reportAt(frame);
+    if (!report || !report.contacts[index]) return;
+    timeline.paused = true;
+    if (!timeline.jumpToFrame(frame + 1)) return;
+    selectedInteraction = { frame, index };
+    lastReport = report;
+    interactionRenderKey = "";
+  }
+
+  function captureCurrentScenario(): void {
+    const state = sim.getState();
+    if (timeline.recordedInputs(state.frame).length !== state.frame) {
+      setScenarioStatus("Reset the match before capturing: this run did not begin at frame 0.", false);
+      return;
+    }
+    const move = playerCharacter.moves.find((candidate) => candidate.id === state.fighters[0].moveId)
+      ?? playerCharacter.moves.find((candidate) => candidate.id === timelinePinnedMoveId);
+    const name = `${playerCharacter.id}_${move?.key ?? "neutral"}_frame_${state.frame}`;
+    capturedScenario = captureScenario(sim, timeline, name);
+    setScenarioButtons(true);
+    setScenarioStatus(`Captured ${state.frame} frames · ${capturedScenario.expected.contacts.length} contacts · expected ${capturedScenario.expected.hash}`, true);
+  }
+
+  function replayCapturedScenario(): void {
+    if (!capturedScenario) return;
+    try {
+      const result = replayScenario(sim, timeline, capturedScenario);
+      lastReport = timeline.lastReport;
+      selectedInteraction = null;
+      interactionRenderKey = "";
+      setScenarioStatus(
+        result.matches
+          ? `PASS · ${result.reports} frames reproduced hash ${result.actualHash}`
+          : `FAIL · expected ${result.expectedHash}, received ${result.actualHash} at frame ${result.stateFrame}`,
+        result.matches,
+      );
+    } catch (error) {
+      setScenarioStatus(error instanceof Error ? error.message : "Scenario replay failed.", false);
+    }
+  }
+
+  function exportCapturedScenario(): void {
+    if (!capturedScenario) return;
+    const href = URL.createObjectURL(new Blob([scenarioJson(capturedScenario)], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = href;
+    link.download = `${capturedScenario.name}.json`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(href), 0);
+    setScenarioStatus(`Exported ${link.download}`, true);
+  }
+
+  async function importScenarioFile(file: File | null): Promise<void> {
+    if (!file) return;
+    try {
+      capturedScenario = parseScenario(JSON.parse(await file.text()) as unknown);
+      setScenarioButtons(true);
+      setScenarioStatus(`Imported ${capturedScenario.name} · ${capturedScenario.inputs.length} frames · expected ${capturedScenario.expected.hash}`, true);
+    } catch (error) {
+      capturedScenario = null;
+      setScenarioButtons(false);
+      setScenarioStatus(error instanceof Error ? error.message : "Scenario import failed.", false);
+    }
+  }
+
+  function setScenarioButtons(enabled: boolean): void {
+    for (const action of ["scenario-replay", "scenario-export"]) {
+      const button = mount.querySelector<HTMLButtonElement>(`[data-action='${action}']`);
+      if (button) button.disabled = !enabled;
+    }
+  }
+
+  function setScenarioStatus(message: string, success: boolean): void {
+    const status = required("scenario-status");
+    status.textContent = message;
+    status.classList.toggle("pass", success);
+    status.classList.toggle("fail", !success);
   }
 
   function updatePreference(target: HTMLInputElement | HTMLSelectElement): void {
@@ -497,12 +740,16 @@ export function startLab(mount: HTMLElement): () => void {
     timeline.reset();
     dummy.reset();
     lastReport = null;
+    selectedInteraction = null;
+    interactionRenderKey = "";
   }
 
   function stepFrames(count: number): void {
     timeline.paused = true;
-    timeline.stepFrames(count);
-    lastReport = count > 0 ? timeline.lastReport : null;
+    const reports = timeline.stepFrames(count);
+    lastReport = timeline.lastReport;
+    if (reports.length > 0) processReports(reports);
+    interactionRenderKey = "";
   }
 
   function processReports(reports: readonly FrameReport[]): void {
@@ -609,7 +856,9 @@ export function startLab(mount: HTMLElement): () => void {
   }
 
   function cycleTab(delta: number): void {
-    const tabs: MenuTab[] = ["loadout", "gear", "status", "settings", "training", "debug"];
+    const tabs = [...mount.querySelectorAll<HTMLElement>("[data-menu-tab]")]
+      .map((tab) => tab.dataset.menuTab)
+      .filter((tab): tab is MenuTab => tab !== undefined);
     const index = tabs.indexOf(activeTab);
     showTab(tabs[(index + delta + tabs.length) % tabs.length]);
     mount.querySelector<HTMLButtonElement>(`[data-menu-tab='${activeTab}']`)?.focus();
@@ -621,11 +870,16 @@ export function startLab(mount: HTMLElement): () => void {
     if (!target) return false;
     event.preventDefault();
     const settings = target.dataset.settingsTab !== undefined;
-    const tabs = settings ? [...mount.querySelectorAll<HTMLButtonElement>("[data-settings-tab]")] : [...mount.querySelectorAll<HTMLButtonElement>("[data-menu-tab]")];
+    const inventory = target.dataset.inventoryTab !== undefined;
+    const tabs = settings
+      ? [...mount.querySelectorAll<HTMLButtonElement>("[data-settings-tab]")]
+      : inventory ? [...mount.querySelectorAll<HTMLButtonElement>("[data-inventory-tab]")]
+        : [...mount.querySelectorAll<HTMLButtonElement>("[data-menu-tab]")];
     const index = tabs.indexOf(target);
     const next = event.code === "Home" ? 0 : event.code === "End" ? tabs.length - 1 : (index + (event.code === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
     const button = tabs[next];
     if (settings) showSettingsTab(button.dataset.settingsTab as SettingsTab);
+    else if (inventory) showInventoryTab(button.dataset.inventoryTab as InventoryTab);
     else showTab(button.dataset.menuTab as MenuTab);
     button.focus();
     return true;

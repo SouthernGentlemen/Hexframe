@@ -1,22 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { GEAR_CATALOG, DEFAULT_EQUIPMENT } from "../../src/content/gear";
-import { DEFAULT_MOVE_LOADOUT, TEST_FIGHTER } from "../../src/content/test-fighter";
-import type { BuildState } from "../../src/lab/build-state";
+import { ARMOR_CATALOG, MATERIAL_CATALOG } from "../../src/content/armor";
+import { DEFAULT_MOVE_LOADOUT, testFighterWithBuild } from "../../src/content/test-fighter";
+import { createDefaultBuildState } from "../../src/lab/build-state";
 import { DEFAULT_PREFERENCES } from "../../src/lab/preferences";
 import { buildLabView } from "../../src/lab/view";
 
-function view(): string {
-  const presets: BuildState["presets"] = ["The Unbound", "Venom Engine", "Prism Lock"].map((name) => ({
-    name,
-    loadout: DEFAULT_MOVE_LOADOUT.slice(),
-    equipment: { ...DEFAULT_EQUIPMENT },
-  })) as BuildState["presets"];
+function view(publicPlay = false): string {
+  const buildState = createDefaultBuildState();
   return buildLabView({
-    character: TEST_FIGHTER,
-    buildState: { activePreset: 0, presets },
+    character: testFighterWithBuild(DEFAULT_MOVE_LOADOUT, buildState.presets[0].equipment),
+    buildState,
     preferences: DEFAULT_PREFERENCES,
     dummyOptions: [[0, "Stand"]],
+    publicPlay,
   });
 }
 
@@ -25,22 +22,30 @@ describe("lab accessibility contract", () => {
     const html = view();
     expect(html.match(/data-loadout-slot=/g)).toHaveLength(16);
     expect(html.match(/data-select-action=/g)).toHaveLength(16);
-    expect(html.match(/data-gear-item=/g)).toHaveLength(GEAR_CATALOG.length);
+    expect(html.match(/data-armor-item=/g)).toHaveLength(buildStateArmorCount());
+    expect(html.match(/data-material-item=/g)).toHaveLength(MATERIAL_CATALOG.length);
+    expect(html.match(/data-craft-item=/g)).toHaveLength(ARMOR_CATALOG.length);
     expect(html).toContain('aria-label="Move for action 16"');
-    expect(html).toContain('aria-label="Action 16: Shift+Space+↓, LT+RT+A"');
+    expect(html).toContain('aria-label="Action 16: Shift+E+↓, LT+RT+A"');
   });
 
   it("keeps modal, tabs, live regions, and reduced-effect settings semantic", () => {
     const html = view();
     expect(html).toContain('role="dialog" aria-modal="true"');
-    expect(html.match(/role="tablist"/g)).toHaveLength(2);
-    expect(html.match(/role="tabpanel"/g)).toHaveLength(10);
+    expect(html.match(/role="tablist"/g)).toHaveLength(3);
+    expect(html.match(/role="tabpanel"/g)).toHaveLength(13);
     expect(html).toContain('id="page-loadout"');
-    expect(html).toContain('id="page-gear"');
+    expect(html).toContain('id="page-armor"');
+    expect(html).toContain('id="page-craft"');
     expect(html.match(/class="move-card"/g)).toHaveLength(24);
     expect(html).toContain('id="move-showcase-stage"');
     expect(html).toContain("Fast universal starter with short reach.");
     expect(html).toContain('id="combat-announcer" role="status" aria-live="polite"');
+    expect(html).toContain('aria-label="Frame transport controls"');
+    expect(html).toContain('id="move-timeline-console"');
+    expect(html).toContain('id="interaction-history"');
+    expect(html).toContain('data-action="scenario-capture"');
+    expect(html).toContain("Pause on contact");
     expect(html).toContain("Audio captions");
     expect(html).toContain("Combat flashes");
     expect(html).toContain("Status patterns");
@@ -48,4 +53,17 @@ describe("lab accessibility contract", () => {
     expect(html).not.toContain("Hear every opening.");
     expect(html).not.toContain("Sixteen actions, equipped relics");
   });
+
+  it("removes operator-only controls from the public playtest", () => {
+    const html = view(true);
+    expect(html).toContain("PUBLIC PLAYTEST");
+    expect(html).not.toContain('data-menu-tab="debug"');
+    expect(html).not.toContain('action="/logout"');
+    expect(html).not.toContain('id="debug-panel"');
+    expect(html.match(/role="tabpanel"/g)).toHaveLength(12);
+  });
 });
+
+function buildStateArmorCount(): number {
+  return createDefaultBuildState().inventory.armor.length;
+}

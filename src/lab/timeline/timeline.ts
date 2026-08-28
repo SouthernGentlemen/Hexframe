@@ -6,67 +6,61 @@ import { deserializeState, serializeState } from "../../rollback/snapshots/snaps
 /** How fast the laboratory drives the simulation, as a percentage of real time. */
 export type LabSpeed = 25 | 50 | 100 | 200;
 
-/**
- * `speed` is a percentage, so the accumulator counts hundredths of a simulation frame and
- * a whole frame is worth 100 of them. Keeping the ratio in integers means 25% is exactly
- * one frame every four rather than 0.25 frames a frame, which would drift.
- */
+/** One authoritative input row retained beside the snapshot it produced. */
+export interface RecordedInputFrame {
+  frame: number;
+  inputs: InputFrame[];
+}
+
+/** `speed` is a percentage, so one whole simulation frame is worth 100 units. */
 const SPEED_UNIT = 100;
 
 /** Inputs handed to `step()` before anything has supplied a provider: everyone neutral. */
 const NEUTRAL_INPUTS: readonly InputFrame[] = new Array<number>(PLAYER_COUNT).fill(0);
 
 /**
- * The laboratory's clock and its rewind buffer.
+ * The laboratory's deterministic clock, rewind buffer, and event history.
  *
- * Two decisions are worth stating because they could have gone otherwise.
- *
- * The timeline never receives a delta. `tick` is told how many whole *real* 60 Hz frames
- * have gone by and converts that to a whole number of simulation frames, so the
- * simulation only ever advances in fixed steps no matter what the display is doing. A
- * speed multiplier changes how many simulation frames one real second produces; it never
- * changes what a frame is.
- *
- * Stepping backwards restores a snapshot. The simulation is not reversible — hitstop,
- * pushbox separation and the input buffer all consume information — so the only honest
- * way back is a copy of where we were. Every frame is snapshotted before it runs, which
- * is what makes `-1` exact, and when the wanted frame has aged out of the ring the
- * timeline says so in `lastMessage` rather than landing on the nearest frame it still
- * has.
+ * Every state is stored under the frame number it describes. Every input row is stored
+ * under the frame on which it was consumed, and every report is stored under the frame
+ * that produced it. Rewinding therefore restores the exact state, while moving forward
+ * through already-recorded time reuses the original inputs instead of sampling whatever
+ * happens to be held now. That is the distinction between a real scrubber and a reset
+ * button wearing a `-1` label.
  */
 export class Timeline {
-  paused = false;
+  paused = true;
+  pauseOnContact = true;
   speed: LabSpeed = 100;
 
-  /**
-   * The report from the most recently *simulated* frame, or `null` when the current state
-   * did not come from running a frame — after a rewind, a load or a reset there is no
-   * frame that produced this state, and pretending otherwise would show the laboratory a
-   * report belonging to a frame it has since left.
-   */
+  /** The report that produced the state currently being displayed, when one exists. */
   lastReport: FrameReport | null = null;
 
-  /** Set when a request could not be honoured, for the laboratory to show. */
+  /** A short operator-facing explanation of the latest timeline action. */
   lastMessage: string | null = null;
 
-  /** Where the inputs for each simulated frame come from. Set by the laboratory. */
+  /** Where inputs for a frame at the live edge come from. Set by the laboratory. */
   inputProvider: (frame: number) => readonly InputFrame[] = () => NEUTRAL_INPUTS;
 
   private readonly sim: Simulation;
   private readonly ring: SnapshotRing;
   private readonly slots = new Map<number, Uint8Array>();
+  private readonly inputHistory = new Map<number, InputFrame[]>();
+  private readonly reportHistory = new Map<number, FrameReport>();
   private accumulator = 0;
+  private latestRecordedFrame: number;
 
   constructor(sim: Simulation, ringCapacity: number) {
     this.sim = sim;
     this.ring = new SnapshotRing(ringCapacity);
+    this.latestRecordedFrame = sim.getState().frame;
+    this.ring.save(sim.getState().frame, sim.getState());
   }
 
   /**
-   * Advance by whole simulation frames derived from whole real frames. The remainder is
-   * kept, so at 25% four real frames produce exactly one simulation frame and nothing is
-   * lost to repeated rounding. While paused the accumulator is emptied instead of
-   * carried, so resuming does not fire off a burst of frames that piled up unseen.
+   * Advance by whole simulation frames derived from whole real frames. Remainders stay
+   * integer, so slow motion never drifts. Contact can stop a multi-frame tick immediately,
+   * leaving the resolved contact state and its report together on screen.
    */
   tick(realFramesElapsed: number): FrameReport[] {
     if (this.paused) {
@@ -76,29 +70,43 @@ export class Timeline {
     if (realFramesElapsed <= 0) return [];
 
     this.accumulator += realFramesElapsed * this.speed;
-    // The accumulator is never negative, so truncation is a floor here.
     const frames = Math.trunc(this.accumulator / SPEED_UNIT);
     this.accumulator -= frames * SPEED_UNIT;
 
     const reports: FrameReport[] = [];
-    for (let i = 0; i < frames; i++) reports.push(this.stepOnce());
+    for (let i = 0; i < frames; i++) {
+      const report = this.stepOnce();
+      reports.push(report);
+      if (this.pauseForContact(report)) break;
+    }
     return reports;
   }
 
-  /** Forward by `n` frames, or back to a snapshot `n` frames ago when `n` is negative. */
-  stepFrames(n: number): void {
+  /** Forward by `n` exact frames, or restore a snapshot when `n` is negative. */
+  stepFrames(n: number): FrameReport[] {
     this.lastMessage = null;
-    if (n === 0) return;
+    if (n === 0) return [];
 
     if (n > 0) {
-      for (let i = 0; i < n; i++) this.stepOnce();
-      return;
+      const reports: FrameReport[] = [];
+      for (let i = 0; i < n; i++) {
+        const report = this.stepOnce();
+        reports.push(report);
+        if (this.pauseForContact(report)) break;
+      }
+      return reports;
     }
 
-    const target = this.sim.getState().frame + n;
-    if (target < 0) {
+    this.jumpToFrame(this.sim.getState().frame + n);
+    return [];
+  }
+
+  /** Restore one exact state frame from the snapshot window. */
+  jumpToFrame(target: number): boolean {
+    this.lastMessage = null;
+    if (!Number.isInteger(target) || target < 0) {
       this.lastMessage = `Frame ${target} is before the start of the match.`;
-      return;
+      return false;
     }
 
     const restored = this.ring.load(target);
@@ -106,22 +114,64 @@ export class Timeline {
       const oldest = this.ring.oldestFrame();
       this.lastMessage =
         oldest < 0
-          ? `Frame ${target} is not in the snapshot ring — no frames have been recorded yet.`
-          : `Frame ${target} has fallen out of the snapshot ring; the oldest frame still held is ${oldest}.`;
-      return;
+          ? `Frame ${target} is not in the snapshot ring.`
+          : `Frame ${target} is outside the ${oldest}–${this.ring.newestFrame()} snapshot window.`;
+      return false;
     }
 
     this.sim.setState(restored);
-    this.lastReport = null;
+    this.lastReport = this.reportHistory.get(target - 1) ?? null;
     this.accumulator = 0;
+    return true;
+  }
+
+  /** The report emitted while simulating `frame`, retained for inspectors and links. */
+  reportAt(frame: number): FrameReport | null {
+    return this.reportHistory.get(frame) ?? null;
+  }
+
+  /** Every retained report in frame order. */
+  reports(throughFrame = this.sim.getState().frame): FrameReport[] {
+    return [...this.reportHistory.values()]
+      .filter((report) => report.frame < throughFrame)
+      .sort((a, b) => a.frame - b.frame);
+  }
+
+  /** Only frames on which attack and hurt volumes resolved a hit or block. */
+  contactReports(throughFrame = this.latestRecordedFrame): FrameReport[] {
+    return this.reports(throughFrame + 1).filter((report) => report.contacts.length > 0);
+  }
+
+  /** The exact input script from the beginning of this run through `throughFrame`. */
+  recordedInputs(throughFrame = this.sim.getState().frame): RecordedInputFrame[] {
+    return [...this.inputHistory.entries()]
+      .filter(([frame]) => frame < throughFrame)
+      .sort(([a], [b]) => a - b)
+      .map(([frame, inputs]) => ({ frame, inputs: inputs.slice() }));
   }
 
   /**
-   * Save-state uses `serializeState` — the same bytes rollback stores and the same bytes
-   * the determinism hash is taken over. A second, laboratory-only copy of the state would
-   * be a second definition of what the state is, and the first time the two disagreed the
-   * laboratory would be lying about the engine it exists to inspect.
+   * Reset and execute a contiguous recorded input script without sampling live controls.
+   * Pause-on-contact is deliberately ignored: replay must reach the expected terminal
+   * state before its hash can be compared.
    */
+  replay(recording: readonly RecordedInputFrame[]): FrameReport[] {
+    this.reset();
+    const reports: FrameReport[] = [];
+    for (const row of recording) {
+      if (row.frame !== this.sim.getState().frame) {
+        throw new RangeError(
+          `Timeline replay expected frame ${this.sim.getState().frame}, received ${row.frame}`,
+        );
+      }
+      reports.push(this.stepOnce(row.inputs));
+    }
+    this.paused = true;
+    this.lastMessage = `Replayed ${reports.length} deterministic frame${reports.length === 1 ? "" : "s"}.`;
+    return reports;
+  }
+
+  /** Save the same canonical bytes used by rollback and determinism hashing. */
   saveState(slot: number): void {
     this.slots.set(slot, serializeState(this.sim.getState()));
   }
@@ -130,13 +180,9 @@ export class Timeline {
     const bytes = this.slots.get(slot);
     if (bytes === undefined) return false;
     this.sim.setState(deserializeState(bytes));
-    // The ring holds frames from the timeline we just abandoned. Frame numbers alone
-    // would make some of them look valid again, so they go rather than risk a rewind
-    // landing on a same-numbered frame from a different run.
-    this.ring.clear();
-    this.lastReport = null;
-    this.lastMessage = null;
-    this.accumulator = 0;
+    this.clearRunHistory();
+    this.latestRecordedFrame = this.sim.getState().frame;
+    this.ring.save(this.sim.getState().frame, this.sim.getState());
     return true;
   }
 
@@ -145,30 +191,51 @@ export class Timeline {
     return this.slots.has(slot);
   }
 
-  /** The span of frames a backward step can still reach; both `-1` when the ring is empty. */
+  /** The span of state frames the scrubber can currently reach. */
   bufferedRange(): { oldest: number; newest: number } {
     return { oldest: this.ring.oldestFrame(), newest: this.ring.newestFrame() };
   }
 
-  /** Back to frame zero. Save-state slots survive: they are the user's, not the run's. */
+  /** Back to the canonical initial state. Save-state slots survive. */
   reset(): void {
     this.sim.setState(Simulation.initialState(this.sim.config));
+    this.clearRunHistory();
+    this.latestRecordedFrame = this.sim.getState().frame;
+    this.ring.save(this.sim.getState().frame, this.sim.getState());
+  }
+
+  private clearRunHistory(): void {
     this.ring.clear();
+    this.inputHistory.clear();
+    this.reportHistory.clear();
     this.lastReport = null;
     this.lastMessage = null;
     this.accumulator = 0;
   }
 
-  /**
-   * The snapshot is taken *before* the frame runs, so the ring is keyed by the frame the
-   * state is at rather than the frame it produced. That is what makes stepping back one
-   * frame land exactly where the previous step began.
-   */
-  private stepOnce(): FrameReport {
-    const state = this.sim.getState();
-    this.ring.save(state.frame, state);
-    const report = this.sim.step(this.inputProvider(state.frame));
+  private pauseForContact(report: FrameReport): boolean {
+    if (!this.pauseOnContact || report.contacts.length === 0) return false;
+    this.paused = true;
+    this.accumulator = 0;
+    this.lastMessage = `Contact on frame ${report.frame}. Simulation paused.`;
+    return true;
+  }
+
+  /** Run exactly one frame, retaining the input, output report, and resulting state. */
+  private stepOnce(override?: readonly InputFrame[]): FrameReport {
+    const frame = this.sim.getState().frame;
+    const recorded = this.inputHistory.get(frame);
+    const source = override ?? (frame < this.latestRecordedFrame && recorded
+      ? recorded
+      : this.inputProvider(frame));
+    const inputs = Array.from({ length: PLAYER_COUNT }, (_, player) => source[player] ?? 0);
+
+    this.inputHistory.set(frame, inputs);
+    const report = this.sim.step(inputs);
+    this.reportHistory.set(report.frame, report);
     this.lastReport = report;
+    this.latestRecordedFrame = Math.max(this.latestRecordedFrame, this.sim.getState().frame);
+    this.ring.save(this.sim.getState().frame, this.sim.getState());
     return report;
   }
 }

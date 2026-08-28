@@ -110,9 +110,13 @@ export function resolveContacts(
         if (isInvulnerable(defender, defenderChar, InvulKind.Strike)) continue;
 
         let touched = null;
-        for (const hurt of hurtboxesOf(defender, defenderChar)) {
+        let hurtboxId = -1;
+        const hurtboxes = hurtboxesOf(defender, defenderChar);
+        for (let hurtIndex = 0; hurtIndex < hurtboxes.length; hurtIndex++) {
+          const hurt = hurtboxes[hurtIndex];
           if (overlaps(aabb, hurt)) {
             touched = hurt;
+            hurtboxId = hurtIndex;
             break;
           }
         }
@@ -120,9 +124,12 @@ export function resolveContacts(
 
         attacker.hitFlags |= bit;
         const blocked = isBlocking(defender, defenderChar, attacker, inputs[d] ?? 0, spec.level);
-        const where = centerOf(intersection(aabb, touched) ?? aabb);
+        const overlap = intersection(aabb, touched) ?? aabb;
+        const where = centerOf(overlap);
         const dir = attacker.facing;
         let dealtDamage = 0;
+        let rawDamage = spec.damage;
+        const counterHit = defender.state === StateId.Attack;
 
         attacker.hitstop = spec.hitstopAttacker;
         defender.hitstop = spec.hitstopDefender;
@@ -138,7 +145,8 @@ export function resolveContacts(
           const stunState = hitstunStateFor(defender);
           const move = attackerChar.moves.find((candidate) => candidate.id === attacker.moveId);
           const tags = move?.tags ?? [];
-          dealtDamage = spec.damage + consumeDebuffBonuses(defender, tags, spec.damage, a, d, report);
+          rawDamage = spec.damage + consumeDebuffBonuses(defender, tags, spec.damage, defenderChar.resistances, a, d, report);
+          dealtDamage = armorMitigatedDamage(rawDamage, defenderChar.armor);
           defender.health = Math.max(0, defender.health - dealtDamage);
           defender.comboCount++;
           defender.stun = spec.hitstun;
@@ -149,7 +157,7 @@ export function resolveContacts(
           enterState(defender, stunState);
           attacker.vx = spec.pushbackHitAttacker * dir;
           defender.vx = spec.pushbackHitDefender * dir;
-          applyTaggedDebuffs(defender, tags, a, d, report);
+          applyTaggedDebuffs(defender, tags, defenderChar.resistances, a, d, report);
           if (defender.health === 0) state.roundOver = 1;
         }
 
@@ -158,9 +166,24 @@ export function resolveContacts(
           defender: d,
           moveId: attacker.moveId,
           hitboxId: spec.id,
+          hurtboxId,
           kind: blocked ? ContactKind.Block : ContactKind.Hit,
           level: spec.level,
           damage: dealtDamage,
+          rawDamage,
+          hitstun: spec.hitstun,
+          blockstun: spec.blockstun,
+          hitstopAttacker: spec.hitstopAttacker,
+          hitstopDefender: spec.hitstopDefender,
+          pushbackAttacker: blocked
+            ? spec.pushbackBlockAttacker * dir
+            : spec.pushbackHitAttacker * dir,
+          pushbackDefender: blocked
+            ? spec.pushbackBlockDefender * dir
+            : spec.pushbackHitDefender * dir,
+          overlapWidth: overlap.x1 - overlap.x0,
+          overlapHeight: overlap.y1 - overlap.y0,
+          counterHit,
           x: where.x,
           y: where.y,
         };
@@ -168,4 +191,14 @@ export function resolveContacts(
       }
     }
   }
+}
+
+/**
+ * Flat armor is authored as an integer and resolved through one deterministic curve.
+ * Four hundred armor halves direct damage; every connecting hit still deals at least 1.
+ */
+export function armorMitigatedDamage(damage: number, armor: number): number {
+  if (damage <= 0) return 0;
+  const rating = Math.max(0, Math.trunc(armor));
+  return Math.max(1, Math.trunc((damage * 400) / (400 + rating)));
 }

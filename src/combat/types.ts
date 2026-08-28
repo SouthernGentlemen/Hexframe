@@ -227,7 +227,14 @@ export interface CommandDef {
 export interface CharacterDef {
   id: string;
   name: string;
+  /** Maximum health before equipment skills are resolved. */
   health: number;
+  /** Maximum stamina. The current combat prototype exposes it to builds before spending it. */
+  stamina: number;
+  /** Flat armor rating. Direct-hit mitigation derives from this integer. */
+  armor: number;
+  /** Integer elemental/status resistance ratings resolved before the match. */
+  resistances: ElementalResistances;
   walkForwardSpeed: number;
   walkBackwardSpeed: number;
   dashSpeed: number;
@@ -248,6 +255,13 @@ export interface CharacterDef {
   hurtboxesAir: Box[];
   moves: MoveDef[];
   commands: CommandDef[];
+}
+
+export interface ElementalResistances {
+  poison: number;
+  fire: number;
+  frost: number;
+  shock: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -369,9 +383,25 @@ export interface ContactEvent {
   defender: number;
   moveId: number;
   hitboxId: number;
+  /** Zero-based index of the resolved defender hurtbox for this frame. */
+  hurtboxId: number;
   kind: ContactKindValue;
   level: HitLevelValue;
+  /** Damage after armor. `rawDamage` is the pre-armor authored/status result. */
   damage: number;
+  rawDamage: number;
+  hitstun: number;
+  blockstun: number;
+  hitstopAttacker: number;
+  hitstopDefender: number;
+  /** Actual signed horizontal velocities applied by resolution, in sim units/frame. */
+  pushbackAttacker: number;
+  pushbackDefender: number;
+  /** Shared AABB area, retained so the inspector never has to recreate the collision. */
+  overlapWidth: number;
+  overlapHeight: number;
+  /** True when the defender was attacking at the instant the boxes touched. */
+  counterHit: boolean;
   /** Approximate world point of contact, for the renderer's effects. */
   x: number;
   y: number;
