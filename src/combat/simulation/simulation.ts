@@ -39,6 +39,7 @@ import {
 import { readInput, writeInput } from "../../input/buffer/history";
 import { commandPressFrame, resolveCommand } from "../../input/parser/command-parser";
 import { isBackward, isForward } from "../../input/parser/numpad";
+import { isFrozen, tickDebuffs } from "../status/debuffs";
 
 export class Simulation {
   readonly config: SimConfig;
@@ -83,6 +84,16 @@ export class Simulation {
         // -1 rather than 0, so that a press on frame 0 is still newer than "nothing
         // consumed yet" and the very first button of a match is not swallowed.
         bufferConsumedFrame: -1,
+        burnStacks: 0,
+        burnFrames: 0,
+        poisonStacks: 0,
+        poisonFrames: 0,
+        freezeStacks: 0,
+        freezeFrames: 0,
+        shockStacks: 0,
+        shockFrames: 0,
+        bleedStacks: 0,
+        bleedFrames: 0,
       });
     }
 
@@ -121,18 +132,23 @@ export class Simulation {
     const report: FrameReport = {
       frame: s.frame,
       contacts: [],
+      debuffs: [],
       moveStarts: [],
       stateChanges: [],
     };
 
     const before: StateIdValue[] = s.fighters.map((f) => f.state);
     const frozen: boolean[] = s.fighters.map(() => false);
+    const statusFrozen: boolean[] = s.fighters.map(isFrozen);
 
     // 1. Read input frames. Everything downstream reads the history rather than the
     //    argument, so a re-simulated frame and a live one take exactly the same path.
     for (let p = 0; p < s.fighters.length; p++) {
       writeInput(s, p, s.frame, inputs[p] ?? 0);
     }
+
+    // Status timers and damage-over-time are simulation time, never wall-clock time.
+    tickDebuffs(s, report);
 
     // 2-3. Resolve commands, and update fighter states.
     //
@@ -151,6 +167,10 @@ export class Simulation {
       // frame, its state frame and its stun all hang exactly where they were.
       if (f.hitstop > 0) {
         tickTimers(f);
+        frozen[p] = true;
+        continue;
+      }
+      if (statusFrozen[p]) {
         frozen[p] = true;
         continue;
       }

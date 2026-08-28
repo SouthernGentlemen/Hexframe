@@ -26,6 +26,7 @@ import {
   isCrouching,
   isInHitstun,
 } from "../state/machine";
+import { applyTaggedDebuffs, consumeDebuffBonuses } from "../status/debuffs";
 
 /**
  * Whether the defender is guarding this attack.
@@ -121,6 +122,7 @@ export function resolveContacts(
         const blocked = isBlocking(defender, defenderChar, attacker, inputs[d] ?? 0, spec.level);
         const where = centerOf(intersection(aabb, touched) ?? aabb);
         const dir = attacker.facing;
+        let dealtDamage = 0;
 
         attacker.hitstop = spec.hitstopAttacker;
         defender.hitstop = spec.hitstopDefender;
@@ -134,7 +136,10 @@ export function resolveContacts(
           // The stun state is chosen from the stance the defender was in when the attack
           // arrived, before anything below has had a chance to change it.
           const stunState = hitstunStateFor(defender);
-          defender.health = Math.max(0, defender.health - spec.damage);
+          const move = attackerChar.moves.find((candidate) => candidate.id === attacker.moveId);
+          const tags = move?.tags ?? [];
+          dealtDamage = spec.damage + consumeDebuffBonuses(defender, tags, spec.damage, a, d, report);
+          defender.health = Math.max(0, defender.health - dealtDamage);
           defender.comboCount++;
           defender.stun = spec.hitstun;
           // Being hit ends whatever the defender was doing, including their own attack.
@@ -144,6 +149,7 @@ export function resolveContacts(
           enterState(defender, stunState);
           attacker.vx = spec.pushbackHitAttacker * dir;
           defender.vx = spec.pushbackHitDefender * dir;
+          applyTaggedDebuffs(defender, tags, a, d, report);
           if (defender.health === 0) state.roundOver = 1;
         }
 
@@ -154,7 +160,7 @@ export function resolveContacts(
           hitboxId: spec.id,
           kind: blocked ? ContactKind.Block : ContactKind.Hit,
           level: spec.level,
-          damage: blocked ? 0 : spec.damage,
+          damage: dealtDamage,
           x: where.x,
           y: where.y,
         };

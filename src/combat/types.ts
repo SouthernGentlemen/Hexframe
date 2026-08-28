@@ -310,6 +310,17 @@ export interface FighterState {
    * window; with it, a press produces exactly one move however early it was made.
    */
   bufferConsumedFrame: number;
+  /** Deterministic stack counts and lifetimes for tag-driven status effects. */
+  burnStacks: number;
+  burnFrames: number;
+  poisonStacks: number;
+  poisonFrames: number;
+  freezeStacks: number;
+  freezeFrames: number;
+  shockStacks: number;
+  shockFrames: number;
+  bleedStacks: number;
+  bleedFrames: number;
 }
 
 /** A deterministic spawned entity — projectiles from 0.2. Present so rollback covers it. */
@@ -366,10 +377,27 @@ export interface ContactEvent {
   y: number;
 }
 
+export const DebuffKind = { Burn: 0, Poison: 1, Freeze: 2, Shock: 3, Bleed: 4 } as const;
+export type DebuffKindValue = (typeof DebuffKind)[keyof typeof DebuffKind];
+
+export const DebuffEventKind = { Applied: 0, Tick: 1, Consumed: 2, Triggered: 3 } as const;
+export type DebuffEventKindValue = (typeof DebuffEventKind)[keyof typeof DebuffEventKind];
+
+export interface DebuffEvent {
+  source: number;
+  target: number;
+  debuff: DebuffKindValue;
+  kind: DebuffEventKindValue;
+  stacks: number;
+  frames: number;
+  damage: number;
+}
+
 /** What one `step()` produced. Read by the renderer and the lab; never by the simulation. */
 export interface FrameReport {
   frame: number;
   contacts: ContactEvent[];
+  debuffs: DebuffEvent[];
   moveStarts: { player: number; moveId: number }[];
   /** A fighter's state changed this frame, for the lab's state log. */
   stateChanges: { player: number; from: StateIdValue; to: StateIdValue }[];

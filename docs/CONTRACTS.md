@@ -111,10 +111,23 @@ requires standing, `Mid` accepts either. Holding back against a level the stance
 guard is a **hit**, not a block. Air blocking does not exist in 0.1.
 
 On contact, in this order: set the `hitFlags` bit for `spec.id` on the attacker; apply
-hitstop to both; on hit apply damage (clamped at 0), `hitstun`, the hitstun state, reset
-`comboCount`+1, and pushback velocities; on block apply `blockstun`, the blockstun state
+hitstop to both; on hit consume any shock/bleed payoff, apply direct damage (clamped at
+0), apply the move's tagged debuffs, `hitstun`, the hitstun state, reset `comboCount`+1,
+and pushback velocities; on block apply `blockstun`, the blockstun state
 and block pushback. Push both fighters' `vx` along the **attacker's** facing. Append one
 `ContactEvent` to `report.contacts`.
+
+### `status/debuffs.ts`
+```ts
+export function tickDebuffs(state: SimState, report: FrameReport): void
+export function applyTaggedDebuffs(defender: FighterState, tags: readonly string[], source: number, target: number, report: FrameReport): void
+export function consumeDebuffBonuses(defender: FighterState, tags: readonly string[], baseDamage: number, source: number, target: number, report: FrameReport): number
+export function isFrozen(fighter: FighterState): boolean
+```
+Burn, poison, freeze, shock and bleed are integer stack/frame fields on `FighterState`.
+Ticks and applications append `DebuffEvent`s to `FrameReport.debuffs`. They are therefore
+fully snapshotted, hashed, rewound and rollback-safe; rendering and audio only consume
+the report after simulation.
 
 ### `simulation/rng.ts`
 ```ts
@@ -140,7 +153,7 @@ numbered step is a comment in the source:
 
 1. write both inputs into `state.inputHistory`
 2. resolve commands (`src/input/parser/command-parser.ts`) → possibly `startMove`
-3. update fighter states and tick timers
+3. update fighter states, debuffs and timers (a status-frozen fighter skips control and movement)
 4. apply movement
 5. resolve facing — only for a grounded, actionable fighter, toward the opponent
 6. pushboxes (`resolvePushboxes`) and stage clamp
@@ -339,11 +352,23 @@ export const MoveId: { readonly StandingLight: number; ... readonly PrismBurst: 
 export const DEFAULT_MOVE_LOADOUT: number[]                      // move ids 1..16
 export function commandsForLoadout(c: CharacterDef, loadout: readonly number[]): CommandDef[]
 export function testFighterWithLoadout(loadout: readonly number[]): CharacterDef
+export function testFighterWithBuild(loadout: readonly number[], equipment: Readonly<Partial<Record<GearSlot, string>>>): CharacterDef
 export function testFighterSimConfig(seed?: number): SimConfig
 ```
 The test fighter exposes 24 tagged moves with distinct animation names. A loadout maps
 the first 16 valid move ids to `Action1` through `Action16`; assignments are lab/client
 configuration and therefore never enter deterministic simulation state.
+
+### `gear.ts`
+```ts
+export const GEAR_SLOTS: readonly GearSlot[]
+export const GEAR_CATALOG: readonly GearDef[]
+export const DEFAULT_EQUIPMENT: Record<GearSlot, string>
+export function applyEquipment(character: CharacterDef, equipment: Readonly<Partial<Record<GearSlot, string>>>): CharacterDef
+```
+Equipment is resolved into a fresh runtime `CharacterDef` before match creation. Items
+may modify maximum health, damage for one tag, or hitstun for one tag. The in-match
+result remains ordinary deterministic character data.
 
 ---
 
@@ -414,6 +439,11 @@ export function startLab(mount: HTMLElement): () => void      // returns a teard
 The dummy is an **input source**. It never writes fighter state, which is what keeps the
 training modes out of the snapshot and out of the hash.
 
+`build-state.ts` persists three local loadout/equipment presets. `preferences.ts` is the
+single persisted source for audio, visual, accessibility and input options. `view.ts`
+provides the modal, WAI-ARIA tabs, labeled controls and keyboard/gamepad input diagram;
+`app.ts` owns focus trapping/restoration and the shared keyboard/gamepad navigation path.
+
 ---
 
 ## src/worker
@@ -466,9 +496,9 @@ default password.
 | directory | proves |
 |---|---|
 | `tests/collisions` | AABB overlap and mirroring; pushbox separation; corner behaviour |
-| `tests/simulation` | walking, crouching, jumping, landing, stage clamp, facing |
+| `tests/simulation` | walking, crouching, jumping, landing, stage clamp, facing, deterministic debuff ticks/stacks/payoffs |
 | `tests/moves` | standing light: startup, active, recovery, whiff, hit, block, damage, hitstop, hitstun, blockstun, one hit per move |
 | `tests/input` | numpad conversion, press edges, the buffer window, one move per press, standard gamepad movement and all four trigger-selected action banks |
 | `tests/determinism` | identical inputs ⇒ identical hash; snapshot round-trip is bit-exact; no `Math.random`/`Date.now` anywhere under src/combat, src/input, src/rollback |
 | `tests/rollback` | the specification's §6 scenario; misprediction correction; hash equality after re-simulation |
-| `tests/content` | every JSON under `characters/` validates against `schemas/` with ajv, the hand-written validator agrees with ajv, and the 24-move tagged catalog/loadout/animation contract is complete |
+| `tests/content` | every JSON under `characters/` validates against `schemas/` with ajv, the hand-written validator agrees with ajv, the 24-move catalog/loadout/animation contract is complete, and all gear slots/modifiers validate |

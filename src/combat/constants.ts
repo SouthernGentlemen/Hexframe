@@ -53,7 +53,7 @@ export const INPUT_BUFFER_FRAMES = 4;
 export const COMMAND_HISTORY_FRAMES = 32;
 
 /** Snapshot format tag. Bump when the serialised layout changes; readers reject others. */
-export const SNAPSHOT_VERSION = 2;
+export const SNAPSHOT_VERSION = 3;
 
 /** FNV-1a 32-bit parameters, used for every determinism hash in the project. */
 export const FNV_OFFSET_BASIS = 0x811c9dc5;
