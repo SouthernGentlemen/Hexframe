@@ -8,40 +8,79 @@ import playerRig from "../../characters/test_fighter/rig.json";
 import { BELL_WARDEN } from "../../src/content/bell-warden";
 import { BELL_WARDEN_ANIMATIONS, BELL_WARDEN_RIG } from "../../src/content/bell-warden-assets";
 import { ADDITIONAL_ANIMATIONS } from "../../src/content/additional-animations";
+import {
+  normalizeIdlePresentation,
+  normalizeMovePresentation,
+  normalizeWalkPresentation,
+} from "../../src/content/player-presentation";
 import { STATE_ANIMATIONS } from "../../src/content/state-animations";
+import type { RawAnimation, RawBonePose } from "../../src/content/raw-types";
+import { validateAnimation } from "../../src/content/validate";
 
-const READY = {
-  arm_upper_l: -14,
-  arm_lower_l: -34,
-  arm_upper_r: -20,
-  arm_lower_r: -46,
-} as const;
+function firstPose(animation: RawAnimation): Record<string, RawBonePose> {
+  return animation.keyframes[0]?.bones ?? {};
+}
 
-function armRotations(animation: { keyframes: readonly { bones: unknown }[] }): Record<keyof typeof READY, number | undefined> {
-  const bones = animation.keyframes[0].bones as Record<string, { rotation?: number } | undefined>;
-  return Object.fromEntries(Object.keys(READY).map((bone) => [bone, bones[bone]?.rotation])) as Record<keyof typeof READY, number | undefined>;
+function boneOrigin(name: string, pose: Record<string, RawBonePose>): { x: number; y: number } {
+  const parts = new Map(playerRig.parts.map((part) => [part.name, part]));
+  const chain: typeof playerRig.parts = [];
+  let current = parts.get(name);
+  while (current) {
+    chain.unshift(current);
+    current = current.parent === null ? undefined : parts.get(current.parent);
+  }
+
+  let x = 0;
+  let y = 0;
+  let degrees = 0;
+  for (const part of chain) {
+    const bone = pose[part.name];
+    const localX = part.pivot.x + (bone?.x ?? 0);
+    const localY = -(part.pivot.y + (bone?.y ?? 0));
+    const radians = degrees * Math.PI / 180;
+    x += localX * Math.cos(radians) - localY * Math.sin(radians);
+    y += localX * Math.sin(radians) + localY * Math.cos(radians);
+    degrees -= bone?.rotation ?? 0;
+  }
+  return { x, y };
+}
+
+function expectHandsForward(animation: RawAnimation): void {
+  const poses = [firstPose(animation), animation.keyframes.at(-1)?.bones ?? {}];
+  for (const pose of poses) {
+    for (const side of ["l", "r"] as const) {
+      const shoulder = boneOrigin(`arm_upper_${side}`, pose);
+      const hand = boneOrigin(`hand_${side}`, pose);
+      // Facing right: fighter-forward is +x. The renderer mirrors the entire node for
+      // facing left, so the same local relationship becomes hand.x < shoulder.x there.
+      expect(hand.x).toBeGreaterThan(shoulder.x);
+      expect(-hand.x).toBeLessThan(-shoulder.x);
+    }
+  }
 }
 
 describe("character presentation authoring", () => {
-  it("keeps every generated attack on the same authored player reference pose", () => {
+  it("keeps neutral and move-boundary hands fighter-forward on both facings", () => {
     const parts = Object.fromEntries(playerRig.parts.map((part) => [part.name, part]));
     expect(parts.arm_upper_l.pivot.x).toBe(-2);
     expect(parts.arm_upper_r.pivot.x).toBe(2);
-    expect(armRotations(idle)).toEqual(READY);
-    expect(armRotations(standingLight).arm_upper_r).toBe(READY.arm_upper_r);
-    expect(armRotations(standingLight).arm_lower_r).toBe(READY.arm_lower_r);
+
+    expectHandsForward(normalizeIdlePresentation(validateAnimation(idle)));
+    expectHandsForward(normalizeWalkPresentation(validateAnimation(walkForward)));
+    expectHandsForward(normalizeWalkPresentation(validateAnimation(walkBackward), true));
+    expectHandsForward(normalizeMovePresentation(validateAnimation(standingLight)));
     for (const animation of Object.values(ADDITIONAL_ANIMATIONS)) {
-      expect(armRotations(animation)).toEqual(READY);
+      expectHandsForward(normalizeMovePresentation(animation));
     }
 
-    // Both guards must put both hands in front of the torso. Negative lower-arm
-    // rotations turn the nested forearms backward and caused the sideways flail.
+    // Explicit block clips retain their stronger authored guard rather than being
+    // flattened to the neutral presentation correction.
     for (const name of ["block_stand", "block_crouch"] as const) {
-      const block = armRotations(STATE_ANIMATIONS[name]);
-      expect(block.arm_upper_l).toBeGreaterThan(0);
-      expect(block.arm_lower_l).toBeGreaterThan(0);
-      expect(block.arm_upper_r).toBeGreaterThan(0);
-      expect(block.arm_lower_r).toBeGreaterThan(0);
+      const block = firstPose(STATE_ANIMATIONS[name]);
+      expect(block.arm_upper_l?.rotation).toBeGreaterThan(0);
+      expect(block.arm_lower_l?.rotation).toBeGreaterThan(0);
+      expect(block.arm_upper_r?.rotation).toBeGreaterThan(0);
+      expect(block.arm_lower_r?.rotation).toBeGreaterThan(0);
     }
 
     expect(walkForward.keyframes).toHaveLength(9);
