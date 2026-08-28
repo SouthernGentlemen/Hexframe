@@ -6,7 +6,7 @@ if (shell) {
       <p class="eyebrow">DETERMINISTIC COMBAT SYSTEMS</p>
       <h1>Shadow<span>Money</span></h1>
       <p class="lede">A fighting-game simulator built from the frame outward: integer physics, authored boxes, snapshots, hashes, and rollback.</p>
-      <div class="hero-actions"><a class="button" href="/lab/">Open private lab</a><a class="text-link" href="https://wizardgang.ai">Wizard Gang ↗</a></div>
+      <div class="hero-actions"><a class="button" href="/play/">Play online</a><a class="text-link" href="/login?next=%2Flab%2F">Operator lab</a><a class="text-link" href="https://wizardgang.ai">Wizard Gang ↗</a></div>
     </section>
     <section class="system-card" aria-label="Prototype status">
       <div class="system-heading"><span class="status-dot"></span><span>PROTOTYPE ONLINE</span><code>v0.1</code></div>
@@ -19,5 +19,5 @@ if (shell) {
       <div class="scanline"></div>
     </section>
   </div>
-  <footer><span>HEXFRAME // INTERNAL BUILD</span><span>COMBAT FIRST. GAME SECOND.</span></footer>`;
+  <footer><span>HEXFRAME // PUBLIC PLAYTEST</span><span>COMBAT FIRST. GAME SECOND.</span></footer>`;
 }

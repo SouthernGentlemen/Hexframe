@@ -1,25 +1,23 @@
 /**
- * The gate in front of the laboratory.
+ * The operator gate in front of the laboratory.
  *
  * `run_worker_first` is set in `wrangler.jsonc` precisely so that this function runs
- * before the asset server does. Nothing under `/lab` is served — not the HTML, not a
- * sub-path, not a 404 that would confirm a file exists — until a session cookie verifies.
- * The laboratory bundle itself holds no secret; it is private because it is a development
- * instrument that should not be poked at from outside, and because an unguarded debug
- * console is the sort of thing that quietly becomes an incident later.
+ * before the asset server does. A verified operator receives the private laboratory.
+ * Everyone else is sent to the matching path under `/play`, which reuses the safe combat
+ * client without exposing the debug console or protected API. This makes `/lab/` useful
+ * as a universal link without weakening the operator surface behind it.
  */
 import type { Env } from "../env";
 import { credentialsConfigured } from "../auth/credentials";
 import { verifySessionCookie } from "../auth/session";
-import { credentialsUnavailable, safeNextPath } from "./login";
 
 /** The built shell for the laboratory, produced by the `lab` entry in `vite.config.ts`. */
 const LAB_DOCUMENT = "/lab/index.html";
 
-function loginRedirect(url: URL): Response {
-  const next = safeNextPath(`${url.pathname}${url.search}`);
-  const location = `/login?next=${encodeURIComponent(next)}`;
-  return new Response(`Sign in required. Redirecting to ${location}\n`, {
+function publicPlayRedirect(url: URL): Response {
+  const suffix = url.pathname.slice("/lab".length);
+  const location = `/play${suffix}${url.search}`;
+  return new Response(`Opening the public playtest at ${location}\n`, {
     status: 302,
     headers: {
       location,
@@ -50,8 +48,6 @@ async function asset(env: Env, url: URL, path: string): Promise<Response> {
  * without the Worker needing to know the client's routes.
  */
 export async function handleLab(request: Request, env: Env, url: URL): Promise<Response> {
-  if (!credentialsConfigured(env)) return credentialsUnavailable(env);
-
   if (request.method !== "GET" && request.method !== "HEAD") {
     return new Response("Method not allowed\n", {
       status: 405,
@@ -59,8 +55,10 @@ export async function handleLab(request: Request, env: Env, url: URL): Promise<R
     });
   }
 
-  const session = await verifySessionCookie(env, request.headers.get("cookie"));
-  if (!session) return loginRedirect(url);
+  const session = credentialsConfigured(env)
+    ? await verifySessionCookie(env, request.headers.get("cookie"))
+    : null;
+  if (!session) return publicPlayRedirect(url);
 
   const lastSegment = url.pathname.slice(url.pathname.lastIndexOf("/") + 1);
   const wantsFile = lastSegment.includes(".");

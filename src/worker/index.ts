@@ -15,6 +15,7 @@ import type { Env } from "./env";
 import { handleLogin, handleLogout } from "./routes/login";
 import { handleLab } from "./routes/lab";
 import { handleLabApi } from "./routes/api-lab";
+import { handlePlay } from "./routes/play";
 
 /**
  * Headers put on everything, gated or not.
@@ -88,6 +89,8 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
     }
     return handleLogout(url);
   }
+
+  if (path === "/play" || path.startsWith("/play/")) return handlePlay(request, env, url);
 
   if (path === "/lab" || path.startsWith("/lab/")) return handleLab(request, env, url);
 

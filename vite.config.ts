@@ -1,10 +1,9 @@
 import { defineConfig } from "vite";
 import { fileURLToPath } from "node:url";
 
-// Two pages, both plain HTML + TypeScript: the public shell at `/` and the combat
-// laboratory at `/lab/`. The laboratory is gated by the Worker, not by the bundler —
-// `dist/lab/index.html` is an ordinary static asset that the Worker refuses to hand
-// out without a valid session cookie. Nothing secret is ever built into it.
+// Two built pages, both plain HTML + TypeScript: the public shell and the combat client.
+// The Worker serves the combat client as a restricted public playtest at `/play/` and as
+// an authenticated operator laboratory at `/lab/`. Nothing secret is built into it.
 export default defineConfig({
   build: {
     outDir: "dist",

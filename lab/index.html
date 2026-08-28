@@ -10,11 +10,36 @@
   </head>
   <body>
     <!--
-      This page is an ordinary static asset. It is private because the Worker refuses to
-      serve it without a valid session cookie, never because anything is hidden inside
-      it: no credential, no secret and no privileged data is ever built into this bundle.
+      This page is an ordinary static asset. The operator route is private because the
+      Worker requires a valid session cookie. A restricted public playtest mode reuses
+      the same client bundle; no credential, secret or privileged data is built into it.
     -->
-    <div id="lab"></div>
+    <div id="lab">
+      <main aria-labelledby="fallback-title">
+        <p>HEXFRAME // PUBLIC PLAYTEST</p>
+        <h1 id="fallback-title">Hexframe combat laboratory</h1>
+        <p>
+          A browser-playable fighting-game prototype built around deterministic 60 Hz
+          simulation, authored hitboxes, rollback-ready state, and build crafting. The
+          interactive client requires JavaScript; no sign-in is required at
+          <a href="/play/">/play/</a>.
+        </p>
+        <h2>Keyboard controls</h2>
+        <ul>
+          <li>Move with A/D or the left and right arrow keys.</li>
+          <li>Jump with W, Space, or the up arrow key; crouch with S or the down arrow key.</li>
+          <li>Use light, medium, and heavy attacks with J, K, and L.</li>
+          <li>Use the special action with I and guard with U.</li>
+        </ul>
+        <h2>Current systems</h2>
+        <p>
+          The playtest includes a 16-slot move set, five armor slots, white through orange
+          armor grades, flat armor and elemental resistances, threshold-based armor skills,
+          a split equipment/material inventory, and armor crafting.
+        </p>
+        <p><a href="/play/">Open the public playtest</a></p>
+      </main>
+    </div>
     <script type="module" src="/src/client/lab-main.ts"></script>
   </body>
 </html>
