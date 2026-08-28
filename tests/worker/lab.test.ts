@@ -14,25 +14,27 @@ function environment(): Env {
   };
 }
 
-describe("retired laboratory route", () => {
-  it("sends an unauthenticated visitor to ordinary Training", async () => {
+describe("developer laboratory route", () => {
+  it("sends an unauthenticated visitor through sign in", async () => {
     const url = new URL("https://hexframe.test/lab/");
     const response = await handleLab(new Request(url), environment(), url);
 
     expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("/training/?mode=training");
+    expect(response.headers.get("location")).toBe("/login?next=%2Flab%2F");
     expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.text()).toBe("");
   });
 
-  it("preserves deep paths and query parameters in the public redirect", async () => {
+  it("preserves the requested lab path through the sign-in redirect", async () => {
     const url = new URL("https://hexframe.test/lab/moves/1?slot=2");
     const response = await handleLab(new Request(url), environment(), url);
 
     expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("/training/moves/1?slot=2&mode=training");
+    expect(response.headers.get("location")).toBe("/login?next=%2Flab%2Fmoves%2F1%3Fslot%3D2");
+    expect(await response.text()).toBe("");
   });
 
-  it("redirects a verified operator to Training developer tools", async () => {
+  it("redirects a verified operator to the Training Grid developer tools", async () => {
     const env = environment();
     const url = new URL("https://hexframe.test/lab/");
     const cookie = await createSessionCookie(env, "operator", 60, url);
@@ -40,9 +42,10 @@ describe("retired laboratory route", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("/training/?mode=training&debug=1");
+    expect(await response.text()).toBe("");
   });
 
-  it("still redirects safely when operator credentials are not configured", async () => {
+  it("fails into the sign-in configuration check when credentials are not configured", async () => {
     const env = {
       ASSETS: { fetch: async () => new Response("unused") } as unknown as Fetcher,
       ENVIRONMENT: "test",
@@ -51,6 +54,6 @@ describe("retired laboratory route", () => {
     const response = await handleLab(new Request(url), env, url);
 
     expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("/training/?mode=training");
+    expect(response.headers.get("location")).toBe("/login?next=%2Flab%2F");
   });
 });
