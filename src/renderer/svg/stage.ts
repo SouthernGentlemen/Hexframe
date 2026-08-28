@@ -11,6 +11,7 @@
  */
 
 import { SCALE, STAGE_HALF_WIDTH, toPixels } from "../../combat/index";
+import type { SimState, StageDef } from "../../combat/types";
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -39,6 +40,7 @@ export const VIEW_HEIGHT_PX = VIEW_HEADROOM_PX + VIEW_FLOOR_PX;
 export interface StageLayers {
   /** Sky, floor, wall markers. Static after `createStage`. */
   readonly background: SVGGElement;
+  readonly entities: SVGGElement;
   /** One posed fighter rig per player. */
   readonly fighters: SVGGElement;
   /** Contact sparks and anything else driven by `FrameReport`. */
@@ -52,6 +54,7 @@ export interface StageHandles {
   /** Parent of every layer. World coordinates, no transform: see the note above. */
   readonly world: SVGGElement;
   readonly layers: StageLayers;
+  setCamera(playerX: number, state: SimState): void;
 }
 
 /** Sim units to screen units, and the only y flip in the renderer. */
@@ -109,7 +112,7 @@ function rect(x: number, y: number, w: number, h: number, fill: string): SVGRect
  * being responsive — the viewBox is in world pixels and the browser scales it to whatever
  * the container is, so no code here ever reads an element's size.
  */
-export function createStage(mount: HTMLElement): StageHandles {
+export function createStage(mount: HTMLElement, stage?: StageDef): StageHandles {
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute(
     "viewBox",
@@ -131,6 +134,7 @@ export function createStage(mount: HTMLElement): StageHandles {
   const world = group("sm-world");
 
   const background = group("sm-background");
+  const entities = group("sm-entities");
   const fighters = group("sm-fighters");
   const effects = group("sm-effects");
   const debug = group("sm-debug");
@@ -139,11 +143,27 @@ export function createStage(mount: HTMLElement): StageHandles {
   effects.style.pointerEvents = "none";
   debug.style.pointerEvents = "none";
 
-  const halfW = VIEW_HALF_WIDTH_PX;
-  const wallX = toPixels(STAGE_HALF_WIDTH);
+  const halfW = stage ? toPixels(stage.width) / 2 + STAGE_MARGIN_PX : VIEW_HALF_WIDTH_PX;
+  const stageWidth = halfW * 2;
+  const wallX = stage ? toPixels(stage.width) / 2 : toPixels(STAGE_HALF_WIDTH);
 
-  background.appendChild(rect(-halfW, -VIEW_HEADROOM_PX, VIEW_WIDTH_PX, VIEW_HEIGHT_PX, "#0d1117"));
-  background.appendChild(rect(-halfW, 0, VIEW_WIDTH_PX, VIEW_FLOOR_PX, "#161b22"));
+  background.appendChild(rect(-halfW, -VIEW_HEADROOM_PX, stageWidth, VIEW_HEIGHT_PX, stage ? "#080a0f" : "#0d1117"));
+  background.appendChild(rect(-halfW, 0, stageWidth, VIEW_FLOOR_PX, stage ? "#121219" : "#161b22"));
+
+  if (stage?.backdrop === "black-belfry") {
+    for (let x = -1320; x <= 1320; x += 220) {
+      background.appendChild(rect(x, -250 - (Math.abs(x / 220) % 3) * 18, 112, 250, "#10131b"));
+      const slit = rect(x + 46, -205, 18, 58, "#343044");
+      slit.setAttribute("rx", "9");
+      background.appendChild(slit);
+      background.appendChild(line(x + 56, -250, x + 56, 0, "#242833", 2));
+    }
+    for (let x = -1240; x <= 1260; x += 360) {
+      const chain = line(x, -VIEW_HEADROOM_PX, x + 46, -85, "#4a443d", 3);
+      chain.setAttribute("stroke-dasharray", "7 5");
+      background.appendChild(chain);
+    }
+  }
 
   // The centre line and the two walls are the only landmarks a fixed camera gives the
   // eye, and they are exactly the three x positions the simulation cares about.
@@ -160,11 +180,25 @@ export function createStage(mount: HTMLElement): StageHandles {
   background.appendChild(line(-halfW, 0, halfW, 0, "#484f58", 2));
 
   world.appendChild(background);
+  world.appendChild(entities);
   world.appendChild(fighters);
   world.appendChild(effects);
   world.appendChild(debug);
   svg.appendChild(world);
   mount.appendChild(svg);
 
-  return { svg, world, layers: { background, fighters, effects, debug } };
+  const setCamera = (playerX: number, state: SimState): void => {
+    let center = toPixels(playerX);
+    const viewHalf = VIEW_HALF_WIDTH_PX;
+    if (state.stage.arenaLocked === 1) {
+      center = (toPixels(state.stage.arenaMinX) + toPixels(state.stage.arenaMaxX)) / 2;
+    } else {
+      const min = toPixels(state.stage.worldMinX) + viewHalf;
+      const max = toPixels(state.stage.worldMaxX) - viewHalf;
+      center = min <= max ? Math.max(min, Math.min(max, center)) : 0;
+    }
+    svg.setAttribute("viewBox", `${fmt(center - viewHalf)} ${fmt(-VIEW_HEADROOM_PX)} ${fmt(VIEW_WIDTH_PX)} ${fmt(VIEW_HEIGHT_PX)}`);
+  };
+
+  return { svg, world, layers: { background, entities, fighters, effects, debug }, setCamera };
 }
