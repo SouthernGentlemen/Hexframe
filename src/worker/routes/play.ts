@@ -42,10 +42,12 @@ export async function handlePlay(request: Request, env: Env, url: URL): Promise<
     });
   }
 
+  // The game is public and indexable. The developer routes are not: src/worker/routes/lab.ts
+  // and src/worker/routes/login.ts keep their own noindex, and Training gates its developer
+  // tools behind an operator session rather than behind obscurity.
   const headers = new Headers(upstream.headers);
   headers.set("x-content-type-options", "nosniff");
   headers.set("referrer-policy", "no-referrer");
-  headers.set("x-robots-tag", "noindex, nofollow");
   headers.set("cache-control", wantsFile ? "public, max-age=31536000, immutable" : "no-store");
 
   if (request.method === "HEAD") return new Response(null, { status: upstream.status, headers });
