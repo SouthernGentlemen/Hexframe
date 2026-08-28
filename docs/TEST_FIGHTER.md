@@ -128,11 +128,28 @@ There are 24 unique combat definitions and 24 distinct animation names. Moves 1 
 are the authored JSON normals above; moves 3–24 live in
 `src/content/additional-moves.ts` and cover fire/burn, chaos/poison, cold/freeze,
 lightning/shock, physical/bleed and void/control routes. Tags and descriptions are
-player-facing build vocabulary. They do not yet apply persistent status effects.
+player-facing build vocabulary and deterministic combat rules:
+
+- burn stacks three times, ticks for damage and empowers another burn hit;
+- poison stacks five times and increases each periodic tick;
+- freeze stacks slow movement, with the third stack freezing for 24 frames;
+- shock stacks are consumed by the next direct hit for bonus damage;
+- bleed deals movement-triggered damage and is consumed by an execute-tagged move.
+
+Every duration, tick cadence, stack cap and payoff uses integer frame state and is part
+of rollback snapshots and hashes.
 
 Every move has an on-hit cancel window into the other 23 moves. That makes the catalog a
 route-construction prototype while keeping actual combat resolution deterministic and
 data-driven.
+
+## Equipment and loadouts
+
+The lab stores three local presets. Each preset contains a 16-move assignment and one
+item in each of six slots: focus, ward, sigil, mantle, charm and relic. The 12-item
+prototype inventory applies deterministic health, tagged-damage or tagged-hitstun
+modifiers before the simulation is constructed. Equipment is build configuration, not
+mutable match state.
 
 ## Match setup
 

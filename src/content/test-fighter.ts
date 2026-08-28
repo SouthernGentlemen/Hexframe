@@ -21,6 +21,8 @@ import { px } from "../combat/constants";
 import { loadCharacter } from "./loader";
 import { validateCharacter, validateMove } from "./validate";
 import { ADDITIONAL_MOVES } from "./additional-moves";
+import type { GearSlot } from "./gear";
+import { applyEquipment } from "./gear";
 
 const BASE_TEST_FIGHTER: CharacterDef = loadCharacter(validateCharacter(characterJson), [
   validateMove(standingLightJson),
@@ -64,6 +66,15 @@ export function testFighterWithLoadout(loadout: readonly number[]): CharacterDef
   };
   character.commands = commandsForLoadout(character, loadout);
   return character;
+}
+
+export function testFighterWithBuild(
+  loadout: readonly number[],
+  equipment: Readonly<Partial<Record<GearSlot, string>>>,
+): CharacterDef {
+  const equipped = applyEquipment(testFighterWithLoadout(loadout), equipment);
+  equipped.commands = commandsForLoadout(equipped, loadout);
+  return equipped;
 }
 
 export const TEST_FIGHTER: CharacterDef = testFighterWithLoadout(DEFAULT_MOVE_LOADOUT);
