@@ -1,0 +1,52 @@
+# SHARED WIZARDGANG TEMPLATE.
+# A tag may only become a release if that exact tag reproduces the product state.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Reproduce the tagged state
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+
+      - name: Require an annotated tag
+        run: |
+          if [ "$(git cat-file -t "$GITHUB_REF_NAME")" != "tag" ]; then
+            echo "::error::$GITHUB_REF_NAME is not an annotated tag"
+            exit 1
+          fi
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Release notes live on the default branch. Reconstructed tags predate the
+          # docs/releases/ directory, so reading them from the tagged tree would fail for
+          # exactly the historical releases the record exists to describe.
+          git fetch --quiet origin main
+          notes=$(mktemp)
+          git show "origin/main:docs/releases/$GITHUB_REF_NAME.md" > "$notes"
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file "$notes" \
+            --verify-tag

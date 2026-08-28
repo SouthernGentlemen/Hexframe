@@ -136,7 +136,7 @@ function cueShape(cue: AudioCue): [number, number, number] {
   if (cue === "navigate") return [330, 390, 0.055];
   if (cue === "confirm") return [440, 660, 0.1];
   if (cue === "hit") return [170, 75, 0.16];
-  if (cue === "block") return [520, 260, 0.12];
+  if (cue === "block") return [145, 55, 0.15];
   if (cue === "burn") return [260, 620, 0.18];
   if (cue === "poison") return [220, 150, 0.2];
   if (cue === "freeze") return [740, 920, 0.16];

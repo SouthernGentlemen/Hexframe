@@ -20,11 +20,13 @@
 
 import type {
   RawAnimation,
+  RawArmorWindow,
   RawBonePose,
   RawBox,
   RawCancelWindow,
   RawCharacter,
   RawCommand,
+  RawDashProfile,
   RawHitbox,
   RawHurtboxWindow,
   RawInvulWindow,
@@ -269,6 +271,7 @@ const HITBOX_KEYS = [
   "pushbackHitDefender",
   "pushbackBlockAttacker",
   "pushbackBlockDefender",
+  "launchVelocityY",
 ] as const;
 
 function readHitbox(value: unknown, path: string): RawHitbox {
@@ -289,11 +292,30 @@ function readHitbox(value: unknown, path: string): RawHitbox {
     pushbackHitDefender: requireNumber(source, path, "pushbackHitDefender"),
     pushbackBlockAttacker: requireNumber(source, path, "pushbackBlockAttacker"),
     pushbackBlockDefender: requireNumber(source, path, "pushbackBlockDefender"),
+    launchVelocityY: source["launchVelocityY"] === undefined
+      ? 0
+      : requireNumberAtLeast(source, path, "launchVelocityY", 0),
   };
   if (hitbox.endFrame < hitbox.startFrame) {
     throw new ContentError(field(path, "endFrame"), "must be >= startFrame");
   }
   return hitbox;
+}
+
+const ARMOR_WINDOW_KEYS = ["startFrame", "endFrame", "hits"] as const;
+
+function readArmorWindow(value: unknown, path: string): RawArmorWindow {
+  const source = requireObject(value, path);
+  requireNoExtraKeys(source, path, ARMOR_WINDOW_KEYS);
+  const window: RawArmorWindow = {
+    startFrame: requireIntegerAtLeast(source, path, "startFrame", 0),
+    endFrame: requireIntegerAtLeast(source, path, "endFrame", 0),
+    hits: requireIntegerAtLeast(source, path, "hits", 1),
+  };
+  if (window.endFrame < window.startFrame) {
+    throw new ContentError(field(path, "endFrame"), "must be >= startFrame");
+  }
+  return window;
 }
 
 const HURTBOX_WINDOW_KEYS = ["startFrame", "endFrame", "boxes"] as const;
@@ -427,8 +449,8 @@ const CHARACTER_KEYS = [
   "health",
   "walkForwardSpeed",
   "walkBackwardSpeed",
-  "dashSpeed",
-  "dashDuration",
+  "dashForward",
+  "dashBackward",
   "jumpVelocityY",
   "jumpVelocityXForward",
   "jumpVelocityXBackward",
@@ -444,6 +466,29 @@ const CHARACTER_KEYS = [
   "hurtboxesAir",
   "commands",
 ] as const;
+
+const DASH_PROFILE_KEYS = ["velocities", "attackCancelFrame", "staminaCost", "recognitionWindow"] as const;
+
+function readDashProfile(value: unknown, path: string): RawDashProfile {
+  const source = requireObject(value, path);
+  requireNoExtraKeys(source, path, DASH_PROFILE_KEYS);
+  const velocities = requireArray(source, path, "velocities", 1).map((velocity, index) => {
+    if (typeof velocity !== "number" || !Number.isFinite(velocity) || velocity < 0) {
+      throw new ContentError(`${path}.velocities[${index}]`, "must be a finite number >= 0");
+    }
+    return velocity;
+  });
+  const attackCancelFrame = requireIntegerAtLeast(source, path, "attackCancelFrame", 0);
+  if (attackCancelFrame >= velocities.length) {
+    throw new ContentError(`${path}.attackCancelFrame`, "must name a frame inside velocities");
+  }
+  return {
+    velocities,
+    attackCancelFrame,
+    staminaCost: requireIntegerAtLeast(source, path, "staminaCost", 0),
+    recognitionWindow: requireIntegerAtLeast(source, path, "recognitionWindow", 2),
+  };
+}
 
 /**
  * Validate a `character.json`. The optional `path` is a prefix for the error paths, so a
@@ -464,8 +509,8 @@ export function validateCharacter(raw: unknown, path = ""): RawCharacter {
     health: requireIntegerAtLeast(source, path, "health", 1),
     walkForwardSpeed: requireNumberAtLeast(source, path, "walkForwardSpeed", 0),
     walkBackwardSpeed: requireNumberAtLeast(source, path, "walkBackwardSpeed", 0),
-    dashSpeed: requireNumberAtLeast(source, path, "dashSpeed", 0),
-    dashDuration: requireIntegerAtLeast(source, path, "dashDuration", 0),
+    dashForward: readDashProfile(requirePresent(source, path, "dashForward"), field(path, "dashForward")),
+    dashBackward: readDashProfile(requirePresent(source, path, "dashBackward"), field(path, "dashBackward")),
     jumpVelocityY: requireNumberAtLeast(source, path, "jumpVelocityY", 0),
     jumpVelocityXForward: requireNumber(source, path, "jumpVelocityXForward"),
     jumpVelocityXBackward: requireNumber(source, path, "jumpVelocityXBackward"),
@@ -497,9 +542,11 @@ const MOVE_KEYS = [
   "recovery",
   "requiresCrouch",
   "airOk",
+  "staminaCost",
   "hitboxes",
   "hurtboxWindows",
   "invulWindows",
+  "armorWindows",
   "movement",
   "cancelWindows",
 ] as const;
@@ -522,6 +569,11 @@ export function validateMove(raw: unknown, path = ""): RawMove {
   const invulWindowsPath = field(path, "invulWindows");
   const invulWindows = requireArray(source, path, "invulWindows", 0).map((item, i) =>
     readInvulWindow(item, at(invulWindowsPath, i)),
+  );
+
+  const armorWindowsPath = field(path, "armorWindows");
+  const armorWindows = requireArray(source, path, "armorWindows", 0).map((item, i) =>
+    readArmorWindow(item, at(armorWindowsPath, i)),
   );
 
   const movementPath = field(path, "movement");
@@ -558,9 +610,11 @@ export function validateMove(raw: unknown, path = ""): RawMove {
     recovery: requireIntegerAtLeast(source, path, "recovery", 0),
     requiresCrouch: requireBoolean(source, path, "requiresCrouch"),
     airOk: requireBoolean(source, path, "airOk"),
+    staminaCost: requireIntegerAtLeast(source, path, "staminaCost", 0),
     hitboxes,
     hurtboxWindows,
     invulWindows,
+    armorWindows,
     movement,
     cancelWindows,
   };

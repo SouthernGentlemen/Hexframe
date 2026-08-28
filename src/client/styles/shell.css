@@ -24,7 +24,7 @@ body {
 h1 { margin: 0; font-size: clamp(64px, 10vw, 144px); line-height: .78; letter-spacing: -.075em; text-transform: uppercase; }
 h1 span { display: block; color: transparent; -webkit-text-stroke: 1px #8c949e; }
 .lede { max-width: 590px; margin: 34px 0; color: #a9b0b8; font-size: clamp(17px, 2vw, 21px); line-height: 1.6; }
-.hero-actions { display: flex; align-items: center; gap: 24px; }
+.hero-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 16px 24px; }
 .button { display: inline-flex; padding: 13px 18px; color: #07090c; background: #baff24; border-radius: 3px; font-weight: 800; text-decoration: none; }
 .button:hover { background: #ceff69; }
 .text-link { color: #cbd0d6; text-decoration: none; font-size: 14px; }

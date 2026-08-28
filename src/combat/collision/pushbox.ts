@@ -14,19 +14,24 @@ import { pushboxOf } from "./boxes";
  * off-centre pushbox stops at the wall where its box says it should rather than where its
  * origin does.
  */
-export function clampToStage(f: FighterState, c: CharacterDef): void {
+export function clampToStage(
+  f: FighterState,
+  c: CharacterDef,
+  minX = -STAGE_HALF_WIDTH,
+  maxX = STAGE_HALF_WIDTH,
+): void {
   const box = pushboxOf(f, c);
-  if (box.x0 < -STAGE_HALF_WIDTH) {
-    f.x += -STAGE_HALF_WIDTH - box.x0;
-  } else if (box.x1 > STAGE_HALF_WIDTH) {
-    f.x -= box.x1 - STAGE_HALF_WIDTH;
+  if (box.x0 < minX) {
+    f.x += minX - box.x0;
+  } else if (box.x1 > maxX) {
+    f.x -= box.x1 - maxX;
   }
 }
 
 /** True when the fighter is standing against a wall, within a hundredth of a pixel. */
-function atWall(f: FighterState, c: CharacterDef): boolean {
+function atWall(f: FighterState, c: CharacterDef, minX: number, maxX: number): boolean {
   const box = pushboxOf(f, c);
-  return box.x0 <= -STAGE_HALF_WIDTH || box.x1 >= STAGE_HALF_WIDTH;
+  return box.x0 <= minX || box.x1 >= maxX;
 }
 
 /**
@@ -45,42 +50,57 @@ function atWall(f: FighterState, c: CharacterDef): boolean {
  */
 export function resolvePushboxes(state: SimState, chars: readonly CharacterDef[]): void {
   const fighters = state.fighters;
-  if (fighters.length >= 2) {
-    const a = fighters[0];
-    const b = fighters[1];
-    const boxA = pushboxOf(a, chars[0]);
-    const boxB = pushboxOf(b, chars[1]);
-
-    if (overlaps(boxA, boxB)) {
-      const overlapX = Math.min(boxA.x1, boxB.x1) - Math.max(boxA.x0, boxB.x0);
-      // `<=` rather than `<` is the index tie-break: at equal x, player 0 is the left one.
-      const aIsLeft = a.x <= b.x;
-      const left = aIsLeft ? a : b;
-      const right = aIsLeft ? b : a;
-      const half = Math.trunc(overlapX / 2);
-      left.x -= half;
-      right.x += overlapX - half;
+  const minX = state.stage.arenaLocked === 1 ? state.stage.arenaMinX : state.stage.worldMinX;
+  const maxX = state.stage.arenaLocked === 1 ? state.stage.arenaMaxX : state.stage.worldMaxX;
+  for (let a = 0; a < fighters.length; a++) {
+    for (let b = a + 1; b < fighters.length; b++) {
+      separatePair(fighters[a], chars[a], a, fighters[b], chars[b], b);
     }
   }
 
-  for (let p = 0; p < fighters.length; p++) clampToStage(fighters[p], chars[p]);
+  for (let p = 0; p < fighters.length; p++) clampToStage(fighters[p], chars[p], minX, maxX);
 
-  if (fighters.length >= 2) {
-    const a = fighters[0];
-    const b = fighters[1];
-    const boxA = pushboxOf(a, chars[0]);
-    const boxB = pushboxOf(b, chars[1]);
-    if (overlaps(boxA, boxB)) {
-      const overlapX = Math.min(boxA.x1, boxB.x1) - Math.max(boxA.x0, boxB.x0);
-      const aAtWall = atWall(a, chars[0]);
-      // Whoever is not against a wall takes the whole remaining overlap. If both are —
-      // a stage narrower than two pushboxes, which content should never produce — nothing
-      // moves, because there is nowhere legal for either fighter to go.
-      if (aAtWall && !atWall(b, chars[1])) {
-        b.x += a.x <= b.x ? overlapX : -overlapX;
-      } else if (!aAtWall) {
-        a.x += b.x <= a.x ? overlapX : -overlapX;
-      }
+  for (let a = 0; a < fighters.length; a++) {
+    for (let b = a + 1; b < fighters.length; b++) {
+      separatePairAtWalls(fighters[a], chars[a], fighters[b], chars[b], minX, maxX);
     }
   }
+}
+
+function separatePair(
+  a: FighterState,
+  charA: CharacterDef,
+  indexA: number,
+  b: FighterState,
+  charB: CharacterDef,
+  indexB: number,
+): void {
+  const boxA = pushboxOf(a, charA);
+  const boxB = pushboxOf(b, charB);
+  if (!overlaps(boxA, boxB)) return;
+  const overlapX = Math.min(boxA.x1, boxB.x1) - Math.max(boxA.x0, boxB.x0);
+  const aIsLeft = a.x < b.x || (a.x === b.x && indexA < indexB);
+  const left = aIsLeft ? a : b;
+  const right = aIsLeft ? b : a;
+  const half = Math.trunc(overlapX / 2);
+  left.x -= half;
+  right.x += overlapX - half;
+}
+
+function separatePairAtWalls(
+  a: FighterState,
+  charA: CharacterDef,
+  b: FighterState,
+  charB: CharacterDef,
+  minX: number,
+  maxX: number,
+): void {
+  const boxA = pushboxOf(a, charA);
+  const boxB = pushboxOf(b, charB);
+  if (!overlaps(boxA, boxB)) return;
+  const overlapX = Math.min(boxA.x1, boxB.x1) - Math.max(boxA.x0, boxB.x0);
+  const aAtWall = atWall(a, charA, minX, maxX);
+  const bAtWall = atWall(b, charB, minX, maxX);
+  if (aAtWall && !bAtWall) b.x += a.x <= b.x ? overlapX : -overlapX;
+  else if (!aAtWall) a.x += b.x <= a.x ? overlapX : -overlapX;
 }

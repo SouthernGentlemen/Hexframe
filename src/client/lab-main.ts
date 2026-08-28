@@ -1,7 +1,19 @@
 import { startLab } from "../lab/app";
+import { readGameSession } from "../game/session";
+import { collapseCampaignLoadoutMenu } from "./campaign-menu-cleanup";
+import { startFrontApp } from "./front-app";
+import { attachVersionBadge } from "./version-badge";
+import "./styles/front.css";
 
 const mount = document.querySelector<HTMLElement>("#lab");
-if (!mount) throw new Error("Lab mount is missing");
+if (!mount) throw new Error("Game mount is missing");
 
-const dispose = startLab(mount);
-if (import.meta.hot) import.meta.hot.dispose(dispose);
+let dispose = (): void => undefined;
+const session = readGameSession(new URL(window.location.href));
+void (session ? startLab(mount) : startFrontApp(mount)).then((teardown) => {
+  dispose = teardown;
+  if (session) collapseCampaignLoadoutMenu(mount, session);
+});
+void attachVersionBadge(document.body);
+
+if (import.meta.hot) import.meta.hot.dispose(() => dispose());

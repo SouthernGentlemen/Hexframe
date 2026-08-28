@@ -23,8 +23,15 @@ import type {
   SimState,
   StateIdValue,
 } from "../types";
-import { StateId } from "../types";
-import { COMMAND_HISTORY_FRAMES, GROUND_Y, NO_MOVE, PLAYER_COUNT } from "../constants";
+import { InputBit, StateId } from "../types";
+import {
+  COMMAND_HISTORY_FRAMES,
+  GROUND_Y,
+  MAX_FIGHTERS,
+  NO_MOVE,
+  STAGE_HALF_WIDTH,
+  STAMINA_REGEN_DELAY,
+} from "../constants";
 import { advanceMove, canStartMove, moveOf, startMove } from "../commands/resolve";
 import { resolvePushboxes } from "../collision/pushbox";
 import { resolveContacts } from "../hit-resolution/resolve";
@@ -36,10 +43,11 @@ import {
   isInStun,
   tickTimers,
 } from "../state/machine";
-import { readInput, writeInput } from "../../input/buffer/history";
+import { pressedOn, readInput, writeInput } from "../../input/buffer/history";
 import { commandPressFrame, resolveCommand } from "../../input/parser/command-parser";
 import { isBackward, isForward } from "../../input/parser/numpad";
 import { isFrozen, tickDebuffs } from "../status/debuffs";
+import { resolveEntities } from "../entities/resolve";
 
 export class Simulation {
   readonly config: SimConfig;
@@ -58,10 +66,20 @@ export class Simulation {
    */
   static initialState(config: SimConfig): SimState {
     const fighters: FighterState[] = [];
-    for (let p = 0; p < PLAYER_COUNT; p++) {
+    if (config.characters.length < 2 || config.characters.length > MAX_FIGHTERS) {
+      throw new RangeError(`Simulation requires 2..${MAX_FIGHTERS} fighters, got ${config.characters.length}`);
+    }
+    if (config.startX.length !== config.characters.length) {
+      throw new RangeError("Simulation requires one spawn position per fighter");
+    }
+    if (config.teams && config.teams.length !== config.characters.length) {
+      throw new RangeError("Simulation requires one team id per fighter");
+    }
+    for (let p = 0; p < config.characters.length; p++) {
       const c = config.characters[p];
       const x = config.startX[p];
-      const otherX = config.startX[p === 0 ? 1 : 0];
+      const target = nearestHostileIndex(config, p);
+      const otherX = target >= 0 ? config.startX[target] : x + 1;
       // At equal starting marks player 0 faces right, for the same reason every other tie
       // in the engine is broken by index: the answer has to be defined somewhere.
       const facing: Facing = x <= otherX ? 1 : -1;
@@ -78,12 +96,16 @@ export class Simulation {
         hitstop: 0,
         stun: 0,
         health: c.health,
+        stamina: c.stamina,
+        staminaRegenDelay: 0,
         airborne: 0,
         hitFlags: 0,
         comboCount: 0,
+        armorHits: 0,
         // -1 rather than 0, so that a press on frame 0 is still newer than "nothing
         // consumed yet" and the very first button of a match is not swallowed.
         bufferConsumedFrame: -1,
+        dashForward: 1,
         burnStacks: 0,
         burnFrames: 0,
         poisonStacks: 0,
@@ -94,15 +116,44 @@ export class Simulation {
         shockFrames: 0,
         bleedStacks: 0,
         bleedFrames: 0,
+        hitFlagsByTarget: [0, 0, 0, 0, 0, 0],
       });
     }
 
     const inputHistory: number[][] = [];
-    for (let p = 0; p < PLAYER_COUNT; p++) {
+    for (let p = 0; p < config.characters.length; p++) {
       inputHistory.push(new Array<number>(COMMAND_HISTORY_FRAMES).fill(0));
     }
 
-    return { frame: 0, rng: config.seed, fighters, entities: [], roundOver: 0, inputHistory };
+    const stage = config.stage;
+    const entities = stage
+      ? [...stage.breakables, ...stage.interactables, ...stage.hazards].map((entity) => ({
+          ...entity,
+          vx: 0,
+          vy: 0,
+          life: entity.life ?? -1,
+          hitFlags: 0,
+        }))
+      : [];
+    return {
+      frame: 0,
+      rng: config.seed,
+      fighters,
+      entities,
+      stage: {
+        worldMinX: stage?.cameraBounds.minX ?? -STAGE_HALF_WIDTH,
+        worldMaxX: stage?.cameraBounds.maxX ?? STAGE_HALF_WIDTH,
+        arenaMinX: stage?.bossArena.minX ?? -STAGE_HALF_WIDTH,
+        arenaMaxX: stage?.bossArena.maxX ?? STAGE_HALF_WIDTH,
+        arenaLocked: 0,
+        bossActive: stage ? 0 : 1,
+        checkpoint: 0,
+        rewardSpawned: 0,
+        bossActivatedFrame: 0,
+      },
+      roundOver: 0,
+      inputHistory,
+    };
   }
 
   getState(): SimState {
@@ -135,6 +186,7 @@ export class Simulation {
       debuffs: [],
       moveStarts: [],
       stateChanges: [],
+      entityEvents: [],
     };
 
     const before: StateIdValue[] = s.fighters.map((f) => f.state);
@@ -148,7 +200,7 @@ export class Simulation {
     }
 
     // Status timers and damage-over-time are simulation time, never wall-clock time.
-    tickDebuffs(s, report);
+    tickDebuffs(s, report, this.config.teams);
 
     // 2-3. Resolve commands, and update fighter states.
     //
@@ -177,6 +229,9 @@ export class Simulation {
 
       if (f.state === StateId.Attack) {
         advanceMove(f, c);
+      } else if (f.state === StateId.Dash && f.stateFrame >= this.dashProfile(f, c).velocities.length) {
+        enterState(f, StateId.Idle);
+        f.vx = 0;
       } else if (isInStun(f) && f.stun === 0) {
         this.recoverFromStun(f);
       } else if (f.state === StateId.JumpSquat && f.stateFrame >= c.jumpSquatFrames) {
@@ -187,12 +242,23 @@ export class Simulation {
 
       tickTimers(f);
 
+      if (f.state === StateId.Dash) {
+        const profile = this.dashProfile(f, c);
+        const velocity = profile.velocities[Math.min(f.stateFrame, profile.velocities.length - 1)] ?? 0;
+        f.vx = velocity * (f.dashForward === 1 ? f.facing : -f.facing);
+      }
+
+      if (f.staminaRegenDelay > 0) f.staminaRegenDelay--;
+      else if (f.stamina < c.stamina) f.stamina++;
+
       // The stance is established before the command is matched. Crouching is a stance
       // rather than a move, and a command that requires it — every low in the game — has
       // to be judged against the direction being held now. Deferring the stance to the
       // movement step would mean holding down and pressing light on the same frame gives
       // the standing normal, which is a frame of lag the player did nothing to deserve.
-      applyGroundMotion(f, c, readInput(s, p, s.frame));
+      if (!this.tryStartDash(s, p, f, c)) {
+        applyGroundMotion(f, c, readInput(s, p, s.frame));
+      }
 
       const wanted = resolveCommand(s, p, c, f);
       if (wanted === NO_MOVE) continue;
@@ -219,7 +285,8 @@ export class Simulation {
     //    middle of a move or while being hit, which is what keeps a crossup a crossup.
     for (let p = 0; p < s.fighters.length; p++) {
       const f = s.fighters[p];
-      const other = s.fighters[p === 0 ? 1 : 0];
+      const target = nearestLivingHostileIndex(s, this.config, p);
+      const other = target >= 0 ? s.fighters[target] : undefined;
       if (other === undefined || frozen[p]) continue;
       if (f.airborne === 1 || !isActionable(f)) continue;
       if (other.x > f.x) f.facing = 1;
@@ -232,11 +299,12 @@ export class Simulation {
     // 7-10. Hurtboxes, attack hitboxes, intersection, and hits, blocks and throws.
     //       All four are one call: a box is only interesting at the moment it is tested,
     //       and building intermediate lists nobody keeps would be work for its own sake.
-    resolveContacts(s, this.chars, inputs, report);
+    resolveContacts(s, this.chars, inputs, report, this.config.teams, this.config.friendlyFire === true);
+    resolveEntities(s, this.chars, inputs, report, this.config.stage, this.config.teams);
 
     // 11-13. Hitstop, stun and health were written by step 10. They are decremented at
     //        the top of the following frame, so a hitstop of 7 freezes exactly 7 frames.
-    //        Meters do not exist yet.
+    //        Stamina was updated during step 3 from deterministic frame counters.
 
     // 14. Spawn and advance deterministic entities. None exist in 0.1; the loop is here
     //     so that projectiles are content and a snapshot already covers them.
@@ -245,7 +313,7 @@ export class Simulation {
       e.y += e.vy;
       if (e.life > 0) e.life--;
     }
-    s.entities = s.entities.filter((e) => e.life > 0);
+    s.entities = s.entities.filter((e) => e.life !== 0);
 
     // 15-17. A state entered during this frame is on its frame 0 for the whole of it and
     //        ages at the end, which is what lets the checks at the top of the next frame
@@ -297,4 +365,68 @@ export class Simulation {
     else f.vx = 0;
     enterState(f, StateId.Airborne);
   }
+
+  /** Start a grounded authored dash when the same horizontal direction is tapped twice. */
+  private tryStartDash(s: SimState, player: number, f: FighterState, c: CharacterDef): boolean {
+    if (!isActionable(f) || f.airborne === 1) return false;
+    const directions = [InputBit.Left, InputBit.Right] as const;
+    for (const direction of directions) {
+      if (!pressedOn(s, player, s.frame, direction)) continue;
+      const sign = direction === InputBit.Left ? -1 : 1;
+      const forward = sign === f.facing;
+      const profile = forward ? c.dashForward : c.dashBackward;
+      if (f.stamina < profile.staminaCost) continue;
+      let doubleTap = false;
+      for (let frame = s.frame - 2; frame >= Math.max(0, s.frame - profile.recognitionWindow); frame--) {
+        if (pressedOn(s, player, frame, direction)) {
+          doubleTap = true;
+          break;
+        }
+      }
+      if (!doubleTap) continue;
+      f.stamina -= profile.staminaCost;
+      f.staminaRegenDelay = STAMINA_REGEN_DELAY;
+      f.dashForward = forward ? 1 : 0;
+      f.vx = (profile.velocities[0] ?? 0) * sign;
+      enterState(f, StateId.Dash);
+      return true;
+    }
+    return false;
+  }
+
+  private dashProfile(f: FighterState, c: CharacterDef) {
+    return f.dashForward === 1 ? c.dashForward : c.dashBackward;
+  }
+}
+
+function nearestHostileIndex(config: SimConfig, fighterIndex: number): number {
+  const ownTeam = config.teams?.[fighterIndex] ?? fighterIndex;
+  let best = -1;
+  let bestDistance = Number.MAX_SAFE_INTEGER;
+  for (let index = 0; index < config.characters.length; index++) {
+    if (index === fighterIndex || (config.teams?.[index] ?? index) === ownTeam) continue;
+    const distance = Math.abs(config.startX[index] - config.startX[fighterIndex]);
+    if (distance < bestDistance || (distance === bestDistance && index < best)) {
+      best = index;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+function nearestLivingHostileIndex(state: SimState, config: SimConfig, fighterIndex: number): number {
+  const ownTeam = config.teams?.[fighterIndex] ?? fighterIndex;
+  const fighter = state.fighters[fighterIndex];
+  let best = -1;
+  let bestDistance = Number.MAX_SAFE_INTEGER;
+  for (let index = 0; index < state.fighters.length; index++) {
+    const candidate = state.fighters[index];
+    if (index === fighterIndex || candidate.health === 0 || (config.teams?.[index] ?? index) === ownTeam) continue;
+    const distance = Math.abs(candidate.x - fighter.x);
+    if (distance < bestDistance || (distance === bestDistance && index < best)) {
+      best = index;
+      bestDistance = distance;
+    }
+  }
+  return best;
 }

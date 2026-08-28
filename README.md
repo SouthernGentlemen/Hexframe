@@ -1,101 +1,103 @@
 # Hexframe
 
-A deterministic 2D fighting-game simulator, and the laboratory used to build it.
+A deterministic 2D fighting-game architecture built around authored combat, rollback
+infrastructure, deterministic party AI, and first-class training tools.
 
-The order of work is deliberate: this is a **combat simulator first and a game second**.
-The current build carries one stage, one fighter, one dummy, 24 tagged moves, five
-deterministic status systems, three persistent loadouts and 12 equippable items. Around
-them is the machinery that everything later depends on — a fixed 60 Hz integer
-simulation, snapshots, state hashes, rollback, and a lab that can pause, step, rewind and
-inspect it.
+**[Live](https://hexframe.wizardgang.ai)** · **[Architecture](docs/ARCHITECTURE.md)** ·
+**[Releases](../../releases)** · **[Engineering record](docs/RECONSTRUCTION.md)**
 
-## Layout
+## What it does
 
-```
-src/combat      the simulation. integers only, no DOM, no clock, no randomness
-src/input       input frames, the buffer, and the command parser
-src/rollback    serialisation, hashing, the snapshot ring, the rollback session
-src/content     JSON → runtime combat data, and the validator that guards the door
-src/renderer    SVG. downstream of the simulation and never able to influence it
-src/lab         the laboratory: timeline, armory, settings, dummy, debug panel
-src/worker      Cloudflare Worker: routing, the /lab session gate, static assets
-characters/     authored content, in world pixels and frames
-schemas/        JSON Schema for every content type
-tests/          simulation, determinism, rollback, collision, move and content suites
-docs/           CONTRACTS.md — the module surface every part is written against
-```
+Hexframe runs a fixed 60 Hz, integer-only simulation in the browser. One frame of inputs
+goes in, one frame of authoritative state comes out — no clock is read, no ambient
+randomness is sampled, and nothing outside that state can change the outcome. Everything
+else is downstream: rendering, tooling, the AI that plays a party slot, and the server.
 
-## Running it
+- **Fight, Training and Campaign** as three configurations of one simulation, not three
+  code paths that happen to look alike.
+- **The Black Belfry**, a campaign slice with traversal, breakables, hazards, checkpoints
+  and the Bell Warden.
+- **An Armory and a Moves Codex**, where every technique demonstrates itself from an
+  authored scenario instead of asking you to read frame data.
+- **Party members played by deterministic AI** that reads the same authored loadouts a
+  human player uses.
+
+## Interesting engineering
+
+**Determinism is a property of the data, not a convention.** Every stored quantity is a
+32-bit integer; positions are sim units at 1/100 pixel, converted from authored pixels once
+in the loader. Two machines that disagree in the last bit of a double eventually disagree
+about whether an attack hit.
+
+**Command parsing happens inside the step.** If it ran in front of the simulation, a
+rollback would depend on the caller faithfully re-running a parser the simulation cannot
+see, and the first disagreement would surface frames later as an unexplained divergence.
+
+**The random generator lives inside the snapshot.** A generator held at module scope
+desynchronises the moment anything uses it, because restoring a snapshot would not restore
+it.
+
+**Rendering cannot influence the simulation.** `src/combat`, `src/rollback`, `src/input`
+and `src/game` import nothing from `src/renderer`, `src/lab` or `src/client`.
+
+**The training tools are the debugger.** Scenarios capture exact per-frame inputs and a
+terminal state hash, so a bug report replays to the same bits.
+
+## Run locally
 
 ```bash
-npm install
-cp .env.example .env        # then fill in the account id and three ADMIN_* values
-npm run dev                 # vite build, then wrangler dev on :8788
+npm ci
+cp .env.example .env   # fill in the developer credentials you want locally
+npm run dev
 ```
 
-`/` is the public shell. `/lab` is private: the Worker checks a signed session cookie and
-sends you to `/login` if you have not got one. Nothing under `/lab` is served until that
-check passes.
+## Testing
 
 ```bash
-npm test          # simulation, determinism, rollback, collision, move, input, content
+npm test          # 140 tests across 33 files
 npm run typecheck
+npm run build
 ```
 
-## Credentials
+The suite covers deterministic replay and state hashing, snapshot round-trips, collision
+and hit resolution, command parsing, content conformance against the published schemas,
+AI determinism, worker route separation, and accessibility contracts for the interface.
 
-Three values, by the same names in every environment:
+## Release model
 
-| name | local (`.env`) | production |
-|---|---|---|
-| `ADMIN_USERNAME` | yes | synchronized by the deploy script |
-| `ADMIN_PASSWORD` | yes | synchronized by the deploy script |
-| `ADMIN_SESSION_SECRET` | yes | synchronized by the deploy script |
+Releases are semantic versions, and a tag only exists if checking it out reproduces that
+product state. Production deploys a release tag, never an arbitrary `main` commit, and the
+running deployment states its own identity at
+[`/version.json`](https://hexframe.wizardgang.ai/version.json).
 
-None of them reaches the browser. If any is missing the protected routes answer `503`
-and name the one that is absent — they never fall open and never fall back to a default.
-`.env`, `.env.*` and `.dev.vars` are ignored by git. `npm run deploy` reads the root
-`.env`, deploys to the selected Cloudflare account, and synchronizes the three admin
-values as Worker secrets.
+See [docs/RELEASE-MANAGEMENT.md](docs/RELEASE-MANAGEMENT.md) and
+[docs/CHANGE-MANAGEMENT.md](docs/CHANGE-MANAGEMENT.md).
 
-## Controls and move building
+## Engineering record
 
-Movement is WASD or the left stick/D-pad. The arrow-key diamond maps spatially to
-Y/X/B/A. Shift or LT selects action bank two, Space or RT selects bank three, and holding
-both selects bank four: 16 independent action inputs in total. The private lab's loadout
-menu assigns any 16 of the 24 moves to those inputs and persists the build locally.
+This public history was **reconstructed** from the original private development repository,
+its deployed artifacts, and its tests. The reconstructed commit structure does not assert
+that each public commit originally existed as an independent Git commit. Original source
+commits and dates are kept in
+[docs/history/CHANGE-MAP.csv](docs/history/CHANGE-MAP.csv), and the method — including what
+was changed on purpose — is documented in [docs/RECONSTRUCTION.md](docs/RECONSTRUCTION.md).
 
-The Armory separates Loadout and Gear so neither screen has competing nested panels.
-Loadout contains the keyboard/gamepad diagram, 16-action assignment deck, full frame-data
-catalog, and an animated hover/focus showcase. Gear contains equipped slots, character
-stats, inventory and item detail. The status codex explains primer/payoff routes;
-training internals and hitbox overlays remain on separate tabs.
+Development, release, security and change-management controls here are designed to support
+evidence aligned with ISO/IEC 27001:2022 and ISO/IEC 42001:2023. **No certification is
+claimed**, and a Git repository does not by itself make a project compliant.
 
-Every attack has a deterministic presentation profile. The 24 profiles combine authored
-fighter clips with distinct elemental colors, particle shapes, orbit counts, sizes,
-rotations and motion, while remaining downstream of combat state.
+## Security
 
-Settings are also keyboard/gamepad navigable and persist locally. Audio mixing, audio
-captions, visual-effect reduction, reduced motion, text scaling, high contrast, color
-vision palettes, status patterns, dyslexia-friendly type, strong focus indicators,
-screen-reader combat announcements, deadzone and vibration controls all have explicit
-user-facing controls. System motion preferences are honored by default.
+Reported privately through GitHub's advisory flow. See [SECURITY.md](SECURITY.md) and
+[docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md).
 
-## The two rules worth restating
+## AI applicability
 
-**Visual data is not combat data.** Changing a torso lean in `characters/*/animations/`
-cannot change damage, startup or a hitbox, because the simulation never reads an
-animation. It reads `characters/*/moves/`.
+Hexframe contains **no machine learning**. Its "AI" is a deterministic rule system that
+plays a party slot from authored loadouts and emits ordinary input frames. See
+[docs/AI-APPLICABILITY.md](docs/AI-APPLICABILITY.md), which states what is verifiable and
+how to verify it.
 
-**Rendering is downstream.** Nothing under `src/renderer` or `src/lab` may decide game
-state. The simulation runs at a fixed 60 frames per second on integers, and the browser's
-refresh rate, `deltaTime`, and floating-point maths are kept out of it entirely — because
-a rollback that re-runs the same frames has to land on the same bits.
+## License
 
-## Not here yet
-
-0.1 is the foundation: the deterministic core, rollback, the armory/training lab, gear,
-status routes, accessibility preferences and the tagged move catalog. Still to come —
-the projectile and throw archetypes, the `MatchRoom` Durable Object, the two-browser
-WebSocket match, and the network condition simulator. They are additions on top of this
-core, not changes to it.
+MIT — see [LICENSE](LICENSE) and [docs/LICENSING.md](docs/LICENSING.md).

@@ -45,4 +45,8 @@ describe("standard gamepad mapping", () => {
     expect(new GamepadController(0, sourceWith([6, 7, 3])).sample()).toBe(actionBit(12));
     expect(new GamepadController(0, sourceWith([6, 7, 0])).sample()).toBe(actionBit(15));
   });
+
+  it("maps right bumper to deterministic interaction", () => {
+    expect(new GamepadController(0, sourceWith([5])).sample()).toBe(InputBit.Interact);
+  });
 });

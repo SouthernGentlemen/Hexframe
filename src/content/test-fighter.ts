@@ -21,8 +21,8 @@ import { px } from "../combat/constants";
 import { loadCharacter } from "./loader";
 import { validateCharacter, validateMove } from "./validate";
 import { ADDITIONAL_MOVES } from "./additional-moves";
-import type { GearSlot } from "./gear";
-import { applyEquipment } from "./gear";
+import type { ArmorSlot } from "./armor";
+import { applyArmor } from "./armor";
 
 const BASE_TEST_FIGHTER: CharacterDef = loadCharacter(validateCharacter(characterJson), [
   validateMove(standingLightJson),
@@ -30,10 +30,49 @@ const BASE_TEST_FIGHTER: CharacterDef = loadCharacter(validateCharacter(characte
   ...ADDITIONAL_MOVES,
 ]);
 
-export const DEFAULT_MOVE_LOADOUT: number[] = Array.from(
-  { length: ACTION_SLOT_COUNT },
-  (_, slot) => slot + 1,
-);
+/** Move ids by name, so callers never spell a bare number. */
+export const MoveId = {
+  StandingLight: 1,
+  CrouchingLight: 2,
+  EmberPalm: 3,
+  VenomFang: 4,
+  FrostHeel: 5,
+  StormKnuckle: 6,
+  CrimsonArc: 7,
+  RiftUppercut: 8,
+  BastionBreak: 9,
+  ShadowStep: 10,
+  AshenSweep: 11,
+  GlacierSpike: 12,
+  StaticRush: 13,
+  ToxicBloom: 14,
+  BloodMoon: 15,
+  VoidHook: 16,
+  IronReversal: 17,
+  PhoenixDrive: 18,
+  Permafrost: 19,
+  PlagueTouch: 20,
+  ThunderClap: 21,
+  ReaperKick: 22,
+  EclipseBreaker: 23,
+  PrismBurst: 24,
+  AstralJab: 25,
+  WitchKnee: 26,
+  MeteorHeel: 27,
+  VoidDive: 28,
+  GraveToll: 29,
+} as const;
+
+/**
+ * The beginner build reads vertically: direction chooses a family and modifiers advance
+ * its route. The final bank stays utility-heavy until every family has a fourth stage.
+ */
+export const DEFAULT_MOVE_LOADOUT: number[] = [
+  MoveId.EmberPalm, MoveId.VenomFang, MoveId.FrostHeel, MoveId.StormKnuckle,
+  MoveId.AshenSweep, MoveId.ToxicBloom, MoveId.GlacierSpike, MoveId.StaticRush,
+  MoveId.PhoenixDrive, MoveId.PlagueTouch, MoveId.Permafrost, MoveId.ThunderClap,
+  MoveId.RiftUppercut, MoveId.ShadowStep, MoveId.IronReversal, MoveId.BastionBreak,
+];
 
 export function commandsForLoadout(
   character: CharacterDef,
@@ -70,42 +109,14 @@ export function testFighterWithLoadout(loadout: readonly number[]): CharacterDef
 
 export function testFighterWithBuild(
   loadout: readonly number[],
-  equipment: Readonly<Partial<Record<GearSlot, string>>>,
+  equipment: Readonly<Partial<Record<ArmorSlot, string>>>,
 ): CharacterDef {
-  const equipped = applyEquipment(testFighterWithLoadout(loadout), equipment);
+  const equipped = applyArmor(testFighterWithLoadout(loadout), equipment);
   equipped.commands = commandsForLoadout(equipped, loadout);
   return equipped;
 }
 
 export const TEST_FIGHTER: CharacterDef = testFighterWithLoadout(DEFAULT_MOVE_LOADOUT);
-
-/** Move ids by name, so callers never spell a bare number. */
-export const MoveId = {
-  StandingLight: 1,
-  CrouchingLight: 2,
-  EmberPalm: 3,
-  VenomFang: 4,
-  FrostHeel: 5,
-  StormKnuckle: 6,
-  CrimsonArc: 7,
-  RiftUppercut: 8,
-  BastionBreak: 9,
-  ShadowStep: 10,
-  AshenSweep: 11,
-  GlacierSpike: 12,
-  StaticRush: 13,
-  ToxicBloom: 14,
-  BloodMoon: 15,
-  VoidHook: 16,
-  IronReversal: 17,
-  PhoenixDrive: 18,
-  Permafrost: 19,
-  PlagueTouch: 20,
-  ThunderClap: 21,
-  ReaperKick: 22,
-  EclipseBreaker: 23,
-  PrismBurst: 24,
-} as const;
 
 /**
  * A match of Test Fighter against itself.

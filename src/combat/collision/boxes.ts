@@ -17,7 +17,7 @@ import type {
   MoveDef,
   SimState,
 } from "../types";
-import { InvulKind } from "../types";
+import { InvulKind, StateId } from "../types";
 import { NO_MOVE } from "../constants";
 import { boxToWorld } from "./aabb";
 import { isCrouching } from "../state/machine";
@@ -97,6 +97,15 @@ export function isInvulnerable(
   c: CharacterDef,
   kind: InvulKindValue,
 ): boolean {
+  if (
+    kind === InvulKind.Strike &&
+    c.perks.graveStep &&
+    f.state === StateId.Dash &&
+    f.stateFrame < 3 &&
+    f.dashForward === 0
+  ) {
+    return true;
+  }
   const move = activeMoveOf(f, c);
   if (move === null) return false;
   for (const w of move.invulWindows) {
@@ -104,6 +113,17 @@ export function isInvulnerable(
     if (w.kind === InvulKind.Full || w.kind === kind) return true;
   }
   return false;
+}
+
+/** Remaining strike armor on the current move frame. */
+export function armorRemaining(f: FighterState, c: CharacterDef): number {
+  const move = activeMoveOf(f, c);
+  if (move === null) return 0;
+  for (const window of move.armorWindows) {
+    if (f.moveFrame < window.startFrame || f.moveFrame > window.endFrame) continue;
+    return Math.max(0, window.hits - f.armorHits);
+  }
+  return 0;
 }
 
 /** Every volume in the match this frame, in player order, for the overlay and for tests. */

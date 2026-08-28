@@ -1,7 +1,7 @@
 import { Simulation } from "../../src/combat/simulation/simulation";
 import { px } from "../../src/combat/constants";
 import type { FrameReport, InputFrame } from "../../src/combat/types";
-import { testFighterSimConfig } from "../../src/content/test-fighter";
+import { DEFAULT_MOVE_LOADOUT, testFighterSimConfig, testFighterWithLoadout } from "../../src/content/test-fighter";
 
 /**
  * A scripted input source for a run of frames.
@@ -16,8 +16,10 @@ export type InputScript =
   | ((frame: number, player: number) => InputFrame)
   | readonly (readonly InputFrame[])[];
 
-export function createSim(seed?: number): Simulation {
-  return new Simulation(testFighterSimConfig(seed));
+export function createSim(seed?: number, loadout: readonly number[] = DEFAULT_MOVE_LOADOUT): Simulation {
+  const config = testFighterSimConfig(seed);
+  const character = testFighterWithLoadout(loadout);
+  return new Simulation({ ...config, characters: [character, character] });
 }
 
 /** Both players' inputs for one frame. Anything the script does not cover is neutral. */

@@ -116,7 +116,7 @@ function authHeaders(contentType: string): Headers {
 export function credentialsUnavailable(env: Env): Response {
   const missing = missingCredentialBindings(env);
   const list = missing.join(", ");
-  const body = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Unavailable</title></head><body><h1>503 — laboratory unavailable</h1><p>Missing Worker binding: ${escapeHtml(list)}.</p><p>Set it with <code>wrangler secret put</code>, or in <code>.dev.vars</code> for local development.</p></body></html>`;
+  const body = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Unavailable</title></head><body><h1>503 — developer tools unavailable</h1><p>Missing Worker binding: ${escapeHtml(list)}.</p><p>Set it with <code>wrangler secret put</code>, or in <code>.dev.vars</code> for local development.</p></body></html>`;
   const headers = authHeaders("text/html; charset=utf-8");
   headers.set("retry-after", "60");
   return new Response(body, { status: 503, headers });
@@ -141,7 +141,7 @@ export function loginPage(error: string | null, next: string): Response {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
 <meta name="robots" content="noindex, nofollow">
-<title>Hexframe — laboratory sign in</title>
+<title>Hexframe — developer tools sign in</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -175,7 +175,7 @@ export function loginPage(error: string | null, next: string): Response {
 <body>
 <main>
   <h1>Hexframe</h1>
-  <p class="lede">This is a private development laboratory. It is not a public service, and access is restricted to the project operator.</p>
+  <p class="lede">Advanced Training developer tools are private. Access is restricted to the project operator.</p>
   ${errorBlock}
   <form method="post" action="/login" autocomplete="off">
     <input type="hidden" name="next" value="${escapeHtml(safeNext)}">

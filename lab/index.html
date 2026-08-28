@@ -4,17 +4,40 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
-    <title>Hexframe Lab</title>
+    <title>Hexframe</title>
     <meta name="robots" content="noindex" />
     <link rel="stylesheet" href="/src/client/styles/lab.css" />
   </head>
   <body>
     <!--
-      This page is an ordinary static asset. It is private because the Worker refuses to
-      serve it without a valid session cookie, never because anything is hidden inside
-      it: no credential, no secret and no privileged data is ever built into this bundle.
+      One browser bundle serves independent routed menu screens and active combat. The
+      legacy /lab route redirects authenticated operators to Training developer tools.
     -->
-    <div id="lab"></div>
+    <div id="lab">
+      <main aria-labelledby="fallback-title">
+        <p>HEXFRAME</p>
+        <h1 id="fallback-title">Hexframe</h1>
+        <p>
+          A browser-playable fighting-game prototype built around deterministic 60 Hz
+          simulation, authored hitboxes, rollback-ready state, and build crafting. The
+          interactive game requires JavaScript; no sign-in is required.
+        </p>
+        <h2>Keyboard controls</h2>
+        <ul>
+          <li>Move with WASD and attack with the arrow-key diamond.</li>
+          <li>Hold Shift for Setup, Ctrl/Command for Power, or both for Finale techniques.</li>
+          <li>Interact with doors, chests, and rewards using E.</li>
+          <li>Open the mode-specific pause menu with Escape.</li>
+        </ul>
+        <h2>Current systems</h2>
+        <p>
+          The playtest includes a 16-slot move set, five armor slots, white through orange
+          armor grades, flat armor and elemental resistances, threshold-based armor skills,
+          a split equipment/material inventory, and armor crafting.
+        </p>
+        <p><a href="/play/">Open Hexframe</a></p>
+      </main>
+    </div>
     <script type="module" src="/src/client/lab-main.ts"></script>
   </body>
 </html>

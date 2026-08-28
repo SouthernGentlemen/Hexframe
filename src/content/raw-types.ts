@@ -60,6 +60,7 @@ export interface RawHitbox {
   pushbackHitDefender: number;
   pushbackBlockAttacker: number;
   pushbackBlockDefender: number;
+  launchVelocityY?: number;
 }
 
 /** Hurtboxes that replace the fighter's default set for part of a move. */
@@ -73,6 +74,12 @@ export interface RawInvulWindow {
   startFrame: number;
   endFrame: number;
   kind: RawInvulKind;
+}
+
+export interface RawArmorWindow {
+  startFrame: number;
+  endFrame: number;
+  hits: number;
 }
 
 /** A velocity set at a move frame. `vx` is along facing and the engine mirrors it. */
@@ -103,9 +110,11 @@ export interface RawMove {
   recovery: number;
   requiresCrouch: boolean;
   airOk: boolean;
+  staminaCost: number;
   hitboxes: RawHitbox[];
   hurtboxWindows: RawHurtboxWindow[];
   invulWindows: RawInvulWindow[];
+  armorWindows: RawArmorWindow[];
   movement: RawMovementKey[];
   cancelWindows: RawCancelWindow[];
 }
@@ -121,6 +130,15 @@ export interface RawCommand {
   priority: number;
 }
 
+export interface RawDashProfile {
+  /** Positive pixels-per-frame magnitudes, one authored value per dash frame. */
+  velocities: number[];
+  /** Zero-based first frame on which an attack may cancel the dash. */
+  attackCancelFrame: number;
+  staminaCost: number;
+  recognitionWindow: number;
+}
+
 /**
  * A fighter's authored definition. Moves live in sibling files and are handed to
  * `loadCharacter` separately: a move is edited far more often than a stat block, and
@@ -133,9 +151,8 @@ export interface RawCharacter {
   /** Pixels per frame. */
   walkForwardSpeed: number;
   walkBackwardSpeed: number;
-  dashSpeed: number;
-  /** Frames. Not scaled. */
-  dashDuration: number;
+  dashForward: RawDashProfile;
+  dashBackward: RawDashProfile;
   jumpVelocityY: number;
   jumpVelocityXForward: number;
   /** Negative means away from facing. */

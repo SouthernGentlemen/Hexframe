@@ -10,6 +10,7 @@
  */
 export interface Env {
   ASSETS: Fetcher;
+  PLAYER_SAVES?: DurableObjectNamespace;
   ENVIRONMENT: string;
   ADMIN_USERNAME?: string;
   ADMIN_PASSWORD?: string;

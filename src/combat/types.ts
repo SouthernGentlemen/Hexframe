@@ -51,6 +51,8 @@ export const InputBit = {
   Action14: 1 << 17,
   Action15: 1 << 18,
   Action16: 1 << 19,
+  /** Deterministic world interaction: doors, shrines, chests, forges and rewards. */
+  Interact: 1 << 20,
   // Compatibility names for authored 0.1 content and existing replay scripts.
   Light: 1 << 4,
   Medium: 1 << 5,
@@ -67,10 +69,10 @@ export function actionBit(slot: number): number {
 }
 
 /** Every bit the engine defines. Anything outside this mask is dropped on the way in. */
-export const INPUT_MASK = (1 << (ACTION_SLOT_COUNT + 4)) - 1;
+export const INPUT_MASK = (1 << (ACTION_SLOT_COUNT + 5)) - 1;
 
 /** All attack buttons, for "is any attack pressed" tests. */
-export const ATTACK_BUTTONS = INPUT_MASK & ~0x0f;
+export const ATTACK_BUTTONS = ((1 << ACTION_SLOT_COUNT) - 1) << 4;
 
 /** All directions. */
 export const DIRECTION_BITS = InputBit.Up | InputBit.Down | InputBit.Left | InputBit.Right;
@@ -126,7 +128,7 @@ export type HitLevelValue = (typeof HitLevel)[keyof typeof HitLevel];
  * compared against `FighterState.moveFrame`.
  */
 export interface HitboxSpec {
-  /** Unique within its move. Indexes the once-per-move gate in `FighterState.hitFlags`. */
+  /** Unique within its move. Indexes the aggregate and per-target hit gates. */
   id: number;
   box: Box;
   startFrame: number;
@@ -142,6 +144,8 @@ export interface HitboxSpec {
   pushbackHitDefender: number;
   pushbackBlockAttacker: number;
   pushbackBlockDefender: number;
+  /** Upward launch applied to an unblocked defender, in sim units per frame. */
+  launchVelocityY: number;
 }
 
 /** Hurtboxes that replace the fighter's default ones for part of a move. */
@@ -159,6 +163,13 @@ export interface InvulWindow {
   startFrame: number;
   endFrame: number;
   kind: InvulKindValue;
+}
+
+/** A finite number of strikes a move can absorb without entering hitstun. */
+export interface ArmorWindow {
+  startFrame: number;
+  endFrame: number;
+  hits: number;
 }
 
 /**
@@ -181,6 +192,14 @@ export interface CancelWindow {
   onHitOnly: boolean;
 }
 
+export interface TelegraphDef {
+  startFrame: number;
+  endFrame: number;
+  shape: "ground-band" | "vertical-sigil" | "floor-pulse" | "tracking-line";
+  pattern: "diagonal" | "rings" | "runes" | "chain";
+  cue: string;
+}
+
 /** A move: what the game *does*. Its `animation` is only a name the renderer resolves. */
 export interface MoveDef {
   id: number;
@@ -198,11 +217,16 @@ export interface MoveDef {
   requiresCrouch: boolean;
   /** True for air normals. */
   airOk: boolean;
+  /** Deterministic resource cost paid once when the move starts. */
+  staminaCost: number;
   hitboxes: HitboxSpec[];
   hurtboxWindows: HurtboxWindow[];
   invulWindows: InvulWindow[];
+  armorWindows: ArmorWindow[];
   movement: MovementKey[];
   cancelWindows: CancelWindow[];
+  /** Presentation-only warning metadata; combat resolution never reads it. */
+  telegraph?: TelegraphDef;
 }
 
 /** How a player asks for a move. Motions are facing-relative numpad digits. */
@@ -227,11 +251,20 @@ export interface CommandDef {
 export interface CharacterDef {
   id: string;
   name: string;
+  /** Maximum health before equipment skills are resolved. */
   health: number;
+  /** Maximum stamina. The current combat prototype exposes it to builds before spending it. */
+  stamina: number;
+  /** Flat armor rating. Direct-hit mitigation derives from this integer. */
+  armor: number;
+  /** Integer elemental/status resistance ratings resolved before the match. */
+  resistances: ElementalResistances;
+  /** Set-bonus behavior resolved from equipment before the deterministic match begins. */
+  perks: CombatPerks;
   walkForwardSpeed: number;
   walkBackwardSpeed: number;
-  dashSpeed: number;
-  dashDuration: number;
+  dashForward: DashProfile;
+  dashBackward: DashProfile;
   jumpVelocityY: number;
   jumpVelocityXForward: number;
   jumpVelocityXBackward: number;
@@ -248,6 +281,34 @@ export interface CharacterDef {
   hurtboxesAir: Box[];
   moves: MoveDef[];
   commands: CommandDef[];
+}
+
+export interface ElementalResistances {
+  poison: number;
+  fire: number;
+  frost: number;
+  shock: number;
+}
+
+export interface CombatPerks {
+  /** Backdash startup ignores strikes while the Gravecloth set bonus is active. */
+  graveStep: boolean;
+  /** Poison-tagged techniques cost less stamina. */
+  venomEdge: boolean;
+  /** Shock can hold one additional stack. */
+  staticConductor: boolean;
+  /** Air techniques cost less stamina. */
+  voidChannel: boolean;
+  /** Cashouts gain two hitstun frames against a burning target. */
+  burningBrand: boolean;
+}
+
+/** Authored per-frame ground speed and cancel rules for one dash direction. */
+export interface DashProfile {
+  velocities: number[];
+  attackCancelFrame: number;
+  staminaCost: number;
+  recognitionWindow: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -270,6 +331,8 @@ export const StateId = {
   BlockstunCrouch: 12,
   Dash: 13,
   Knockdown: 14,
+  GuardBreak: 15,
+  Defeat: 16,
 } as const;
 export type StateIdValue = (typeof StateId)[keyof typeof StateId];
 
@@ -298,18 +361,26 @@ export interface FighterState {
   /** Frames of hitstun or blockstun left, depending on `state`. */
   stun: number;
   health: number;
+  /** Current spendable stamina, clamped to the character's resolved maximum. */
+  stamina: number;
+  /** Frames before stamina regeneration resumes after a spend. */
+  staminaRegenDelay: number;
   /** 1 when off the ground. Redundant with `y` by design: it survives moves that lift. */
   airborne: number;
-  /** Bitmask of `HitboxSpec.id`s that have already connected during the current move. */
+  /** Aggregate bitmask of hitboxes that connected with any target during this move. */
   hitFlags: number;
   /** Hits taken since the defender was last actionable. Drives combo display and scaling. */
   comboCount: number;
+  /** Number of hits absorbed by the current move's hyper-armor windows. */
+  armorHits: number;
   /**
    * Absolute frame of the most recent button press that has already been turned into a
    * move. Without it the input buffer would fire the same press on every frame of its
    * window; with it, a press produces exactly one move however early it was made.
    */
   bufferConsumedFrame: number;
+  /** 1 for a forward dash, 0 for a backdash. Meaningful only in `StateId.Dash`. */
+  dashForward: number;
   /** Deterministic stack counts and lifetimes for tag-driven status effects. */
   burnStacks: number;
   burnFrames: number;
@@ -321,11 +392,19 @@ export interface FighterState {
   shockFrames: number;
   bleedStacks: number;
   bleedFrames: number;
+  /**
+   * One hitbox bitmask per possible defender index. The simulation supports at most six
+   * fighters, so this fixed tuple lets an area attack connect once with every target
+   * without turning snapshot layout into a variable nested structure.
+   */
+  hitFlagsByTarget: [number, number, number, number, number, number];
 }
 
 /** A deterministic spawned entity — projectiles from 0.2. Present so rollback covers it. */
 export interface EntityState {
+  id: number;
   kind: number;
+  /** Entity subtype or owning fighter, depending on kind. */
   owner: number;
   x: number;
   y: number;
@@ -333,6 +412,67 @@ export interface EntityState {
   vy: number;
   life: number;
   hitFlags: number;
+  w: number;
+  h: number;
+  value: number;
+}
+
+export const EntityKind = {
+  Breakable: 0,
+  HealthPickup: 1,
+  StaminaPickup: 2,
+  MaterialPickup: 3,
+  Interactable: 4,
+  Hazard: 5,
+  Projectile: 6,
+} as const;
+
+export const InteractableKind = {
+  ArsenalShrine: 0,
+  Checkpoint: 1,
+  Forge: 2,
+  BossGate: 3,
+  Chest: 4,
+  BossReward: 5,
+} as const;
+
+export interface StageEntityDef {
+  id: number;
+  kind: number;
+  owner: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  value: number;
+  life?: number;
+}
+
+export interface StageDef {
+  id: string;
+  width: number;
+  spawnX: number;
+  cameraBounds: { minX: number; maxX: number };
+  bossArena: { gateX: number; minX: number; maxX: number };
+  checkpoints: number[];
+  interactables: StageEntityDef[];
+  breakables: StageEntityDef[];
+  hazards: StageEntityDef[];
+  backdrop: string;
+  bossReward?: StageEntityDef;
+}
+
+export interface StageState {
+  worldMinX: number;
+  worldMaxX: number;
+  arenaMinX: number;
+  arenaMaxX: number;
+  arenaLocked: number;
+  bossActive: number;
+  checkpoint: number;
+  rewardSpawned: number;
+  /** Frame the arena gate sealed, keeping boss sequencing rollback-authoritative. */
+  bossActivatedFrame: number;
 }
 
 /** The complete authoritative state of a match on one frame. */
@@ -340,10 +480,11 @@ export interface SimState {
   frame: number;
   /** Deterministic RNG word. Part of the state, so a rollback replays the same rolls. */
   rng: number;
-  /** Always exactly `PLAYER_COUNT` entries, in player-index order. */
+  /** One entry per configured fighter, in fighter-index order. */
   fighters: FighterState[];
   entities: EntityState[];
-  /** 1 once a fighter has reached zero health. The lab does not stop the clock. */
+  stage: StageState;
+  /** 1 once only one living team remains. The lab does not stop the clock. */
   roundOver: number;
   /**
    * The last `COMMAND_HISTORY_FRAMES` input frames per player, as a ring indexed by
@@ -369,9 +510,31 @@ export interface ContactEvent {
   defender: number;
   moveId: number;
   hitboxId: number;
+  /** Zero-based index of the resolved defender hurtbox for this frame. */
+  hurtboxId: number;
   kind: ContactKindValue;
   level: HitLevelValue;
+  /** Damage after armor. `rawDamage` is the pre-armor authored/status result. */
   damage: number;
+  rawDamage: number;
+  hitstun: number;
+  blockstun: number;
+  hitstopAttacker: number;
+  hitstopDefender: number;
+  /** Actual signed horizontal velocities applied by resolution, in sim units/frame. */
+  pushbackAttacker: number;
+  pushbackDefender: number;
+  /** Shared AABB area, retained so the inspector never has to recreate the collision. */
+  overlapWidth: number;
+  overlapHeight: number;
+  /** True when the defender was attacking at the instant the boxes touched. */
+  counterHit: boolean;
+  /** True when damage landed but a hyper-armor point prevented hitstun. */
+  armored: boolean;
+  /** Stamina removed by this guard contact. Zero on a perfect guard. */
+  guardStaminaDamage: number;
+  perfectGuard: boolean;
+  guardBreak: boolean;
   /** Approximate world point of contact, for the renderer's effects. */
   x: number;
   y: number;
@@ -401,6 +564,24 @@ export interface FrameReport {
   moveStarts: { player: number; moveId: number }[];
   /** A fighter's state changed this frame, for the lab's state log. */
   stateChanges: { player: number; from: StateIdValue; to: StateIdValue }[];
+  entityEvents: EntityEvent[];
+}
+
+export const EntityEventKind = {
+  Broken: 0,
+  PickedUp: 1,
+  Interacted: 2,
+  Damaged: 3,
+  Spawned: 4,
+} as const;
+
+export interface EntityEvent {
+  entityId: number;
+  kind: number;
+  entityKind: number;
+  owner: number;
+  value: number;
+  player: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -408,11 +589,16 @@ export interface FrameReport {
 // ---------------------------------------------------------------------------
 
 export interface SimConfig {
-  characters: [CharacterDef, CharacterDef];
+  /** One authored definition per fighter. Two-player rollback may still use exactly two. */
+  characters: readonly CharacterDef[];
   /** Starting ground origins in sim units. */
-  startX: [number, number];
+  startX: readonly number[];
+  /** Fighters sharing a team cannot damage one another unless friendly fire is enabled. */
+  teams?: readonly number[];
+  friendlyFire?: boolean;
   /** Seed for the deterministic RNG. */
   seed: number;
+  stage?: StageDef;
 }
 
 /** World-space collision volumes for one frame, for the debug overlay and for tests. */

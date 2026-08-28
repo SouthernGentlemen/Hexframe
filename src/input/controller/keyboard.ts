@@ -9,10 +9,16 @@ import type { InputFrame } from "../../combat/types";
 import { actionBit, INPUT_MASK } from "../../combat/types";
 import type { ActionKeyMap, KeyMap } from "./keymap";
 
+export interface KeyboardControllerOptions {
+  /** True only while the active play surface owns modified action-key shortcuts. */
+  ownsModifiedActions?: () => boolean;
+}
+
 export class KeyboardController {
   private readonly target: EventTarget;
   private readonly map: KeyMap;
   private readonly actionMap: ActionKeyMap;
+  private readonly ownsModifiedActions: () => boolean;
   /** Own keys of `map`, so a code like `constructor` cannot match through the prototype. */
   private readonly mapped: Set<string>;
   /**
@@ -21,20 +27,36 @@ export class KeyboardController {
    * holds down.
    */
   private readonly held = new Set<string>();
+  /** A tap that began and ended between two samples still belongs to the next frame. */
+  private readonly pressed = new Set<string>();
+  /** Action presses remember the bank selected at keydown, even for sub-frame taps. */
+  private readonly heldActions = new Map<string, number>();
+  private pressedActionBits = 0;
   private disposed = false;
 
   private readonly onKeyDown = (ev: Event): void => {
     const e = ev as KeyboardEvent;
     if (!this.captures(e)) return;
-    this.held.add(e.code);
+    const position = this.actionMap[e.code];
+    if (position !== undefined) {
+      const bank = (e.shiftKey ? 1 : 0) + (e.ctrlKey || e.metaKey ? 2 : 0);
+      const bit = actionBit(bank * 4 + position);
+      this.heldActions.set(e.code, bit);
+      this.pressedActionBits |= bit;
+    } else {
+      this.held.add(e.code);
+      this.pressed.add(e.code);
+    }
     e.preventDefault();
   };
 
   private readonly onKeyUp = (ev: Event): void => {
     const e = ev as KeyboardEvent;
-    if (!this.captures(e)) return;
+    const wasHeld = this.held.has(e.code) || this.heldActions.has(e.code);
+    if (!this.captures(e) && !wasHeld) return;
     this.held.delete(e.code);
-    e.preventDefault();
+    this.heldActions.delete(e.code);
+    if (wasHeld || this.captures(e)) e.preventDefault();
   };
 
   /**
@@ -43,35 +65,38 @@ export class KeyboardController {
    */
   private readonly onBlur = (): void => {
     this.held.clear();
+    this.pressed.clear();
+    this.heldActions.clear();
+    this.pressedActionBits = 0;
   };
 
-  constructor(target: EventTarget, map: KeyMap, actionMap: ActionKeyMap = {}) {
+  constructor(
+    target: EventTarget,
+    map: KeyMap,
+    actionMap: ActionKeyMap = {},
+    options: KeyboardControllerOptions = {},
+  ) {
     this.target = target;
     this.map = map;
     this.actionMap = actionMap;
+    this.ownsModifiedActions = options.ownsModifiedActions ?? (() => false);
     this.mapped = new Set([
       ...Object.keys(map),
       ...Object.keys(actionMap),
-      "ShiftLeft",
-      "ShiftRight",
-      "Space",
     ]);
     target.addEventListener("keydown", this.onKeyDown);
     target.addEventListener("keyup", this.onKeyUp);
     target.addEventListener("blur", this.onBlur);
   }
 
-  /** The bitmask for everything currently held. Sampling never mutates what is held. */
+  /** The bitmask for held keys plus taps queued since the previous sample. */
   sample(): InputFrame {
-    let bits = 0;
-    for (const code of this.held) bits |= this.map[code] ?? 0;
-
-    const shift = this.held.has("ShiftLeft") || this.held.has("ShiftRight");
-    const space = this.held.has("Space");
-    const bank = (shift ? 1 : 0) + (space ? 2 : 0);
-    for (const [code, position] of Object.entries(this.actionMap)) {
-      if (this.held.has(code)) bits |= actionBit(bank * 4 + position);
-    }
+    let bits = this.pressedActionBits;
+    const active = new Set([...this.held, ...this.pressed]);
+    for (const code of active) bits |= this.map[code] ?? 0;
+    for (const bit of this.heldActions.values()) bits |= bit;
+    this.pressed.clear();
+    this.pressedActionBits = 0;
     return bits & INPUT_MASK;
   }
 
@@ -82,6 +107,9 @@ export class KeyboardController {
     this.target.removeEventListener("keyup", this.onKeyUp);
     this.target.removeEventListener("blur", this.onBlur);
     this.held.clear();
+    this.pressed.clear();
+    this.heldActions.clear();
+    this.pressedActionBits = 0;
   }
 
   /**
@@ -90,14 +118,18 @@ export class KeyboardController {
    * left alone as well — Ctrl+L belongs to the address bar, not to heavy punch.
    */
   private captures(e: KeyboardEvent): boolean {
-    if (e.ctrlKey || e.metaKey || e.altKey) return false;
+    if (e.altKey) return false;
     const target = e.target;
     if (
-      target instanceof Element &&
+      typeof Element !== "undefined" && target instanceof Element &&
       target.closest("button, a, input, select, textarea, [contenteditable='true']")
     ) {
       return false;
     }
-    return this.mapped.has(e.code);
+    if (!this.mapped.has(e.code)) return false;
+    if (e.ctrlKey || e.metaKey) {
+      return Object.prototype.hasOwnProperty.call(this.actionMap, e.code) && this.ownsModifiedActions();
+    }
+    return true;
   }
 }
