@@ -2,6 +2,7 @@ import { startLab } from "../lab/app";
 import { readGameSession } from "../game/session";
 import { collapseCampaignLoadoutMenu } from "./campaign-menu-cleanup";
 import { startFrontApp } from "./front-app";
+import { attachVersionBadge } from "./version-badge";
 import "./styles/front.css";
 
 const mount = document.querySelector<HTMLElement>("#lab");
@@ -13,4 +14,6 @@ void (session ? startLab(mount) : startFrontApp(mount)).then((teardown) => {
   dispose = teardown;
   if (session) collapseCampaignLoadoutMenu(mount, session);
 });
+void attachVersionBadge(document.body);
+
 if (import.meta.hot) import.meta.hot.dispose(() => dispose());
