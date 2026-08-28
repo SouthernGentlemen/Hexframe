@@ -1,0 +1,34 @@
+{
+  // Hexframe Worker. Routing, the laboratory session gate, static asset delivery and
+  // (from 0.2) match transport. It never decides whether an attack hits: combat is
+  // deterministic simulation inside the browser.
+  "name": "hexframe",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-06-28",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": { "ENVIRONMENT": "development" },
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    // Every request passes through the Worker first so that /lab and /lab/* can be
+    // refused before any laboratory asset is served.
+    "run_worker_first": true
+  },
+  "observability": { "enabled": true },
+  "env": {
+    "production": {
+      "name": "hexframe",
+      "workers_dev": false,
+      // account_id is deliberately absent: it is an account identifier and this file is
+      // tracked. Supply it as CLOUDFLARE_ACCOUNT_ID in the environment when deploying.
+      "routes": [{ "pattern": "hexframe.wizardgang.ai", "custom_domain": true }],
+      "vars": { "ENVIRONMENT": "production" },
+      "observability": { "enabled": true },
+      "assets": {
+        "directory": "./dist",
+        "binding": "ASSETS",
+        "run_worker_first": true
+      }
+    }
+  }
+}

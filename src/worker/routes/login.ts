@@ -1,0 +1,284 @@
+/**
+ * The login form and the two endpoints behind it.
+ *
+ * The page is rendered here rather than built as a static asset so that it cannot pick up
+ * a stylesheet, a script or an analytics tag by accident: a credential form should have
+ * exactly one job and no third-party surface at all. It is plain HTML with an inline
+ * stylesheet, and it carries no JavaScript.
+ */
+import type { Env } from "../env";
+import { missingCredentialBindings } from "../env";
+import { checkCredentials, credentialsConfigured } from "../auth/credentials";
+import { clearSessionCookie, createSessionCookie, SESSION_TTL_SECONDS } from "../auth/session";
+
+/** The destination when `next` is absent or fails the same-origin test. */
+export const DEFAULT_NEXT = "/lab";
+
+/** A login body is a username and a password; anything larger is not one. */
+const MAX_LOGIN_BODY_BYTES = 4096;
+
+const LOGIN_ATTEMPT_WINDOW_MS = 60_000;
+const LOGIN_ATTEMPT_LIMIT = 8;
+
+/**
+ * A per-isolate attempt counter.
+ *
+ * Be clear about what this is: an isolate-local limiter is a speed bump, not a control.
+ * Cloudflare runs many isolates, they come and go, and a determined attacker spreads
+ * their guesses across them and never meets the same counter twice. It exists to stop a
+ * script hammering one connection, and nothing more. The real limiter arrives with the
+ * `MatchRoom` Durable Object work, where a single object can hold the count for everyone.
+ */
+const loginAttempts = new Map<string, { windowStart: number; count: number }>();
+
+/** Keeps a hostile spread of source addresses from growing the map without bound. */
+const LOGIN_ATTEMPT_MAX_KEYS = 512;
+
+function attemptKey(request: Request): string {
+  return request.headers.get("CF-Connecting-IP") ?? "unknown";
+}
+
+function rateLimited(key: string, now: number): boolean {
+  const entry = loginAttempts.get(key);
+  if (!entry || now - entry.windowStart >= LOGIN_ATTEMPT_WINDOW_MS) return false;
+  return entry.count >= LOGIN_ATTEMPT_LIMIT;
+}
+
+function recordAttempt(key: string, now: number): void {
+  const entry = loginAttempts.get(key);
+  if (!entry || now - entry.windowStart >= LOGIN_ATTEMPT_WINDOW_MS) {
+    if (loginAttempts.size >= LOGIN_ATTEMPT_MAX_KEYS) loginAttempts.clear();
+    loginAttempts.set(key, { windowStart: now, count: 1 });
+    return;
+  }
+  entry.count += 1;
+}
+
+function clearAttempts(key: string): void {
+  loginAttempts.delete(key);
+}
+
+/**
+ * Reduce a submitted `next` to something that can only point back at this origin.
+ *
+ * An open redirect on a login form is a real hole — it lets a phishing link send a
+ * freshly authenticated operator somewhere else — so this is an allow-list, not a
+ * blocklist. A single leading slash and no backslashes or control characters means the
+ * browser must resolve it against this origin; `//evil.example` is protocol-relative and
+ * is exactly what the double-slash test rejects.
+ */
+export function safeNextPath(raw: string | null | undefined): string {
+  if (typeof raw !== "string" || raw.length === 0 || raw.length > 512) return DEFAULT_NEXT;
+  if (raw[0] !== "/") return DEFAULT_NEXT;
+  if (raw.startsWith("//") || raw.startsWith("/\\")) return DEFAULT_NEXT;
+  // Control characters would be a header-splitting attempt rather than a path, and a
+  // backslash is normalised to a slash by enough clients to be worth refusing outright.
+  if (/[\x00-\x1f\x7f\\]/.test(raw)) return DEFAULT_NEXT;
+  return raw;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * Headers for anything that is part of the credential flow.
+ *
+ * `no-store` keeps the form and its error out of the back button and out of any shared
+ * cache. The CSP allows the inline stylesheet and nothing else at all — no scripts, no
+ * images, no fonts, no frames, and a form that can only post to this origin.
+ */
+function authHeaders(contentType: string): Headers {
+  return new Headers({
+    "content-type": contentType,
+    "cache-control": "no-store",
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "no-referrer",
+    "x-robots-tag": "noindex, nofollow",
+    "content-security-policy":
+      "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+  });
+}
+
+/**
+ * The 503 every protected route answers when a credential binding is missing.
+ *
+ * It names the absent binding on purpose. The operator is the only person who can reach
+ * this — there is no session to leak to anyone else — and "ADMIN_SESSION_SECRET is not
+ * configured" turns a mystifying failure into a one-line fix. What it must never do is
+ * carry on with a default, which is why this is a hard stop rather than a warning.
+ */
+export function credentialsUnavailable(env: Env): Response {
+  const missing = missingCredentialBindings(env);
+  const list = missing.join(", ");
+  const body = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Unavailable</title></head><body><h1>503 — laboratory unavailable</h1><p>Missing Worker binding: ${escapeHtml(list)}.</p><p>Set it with <code>wrangler secret put</code>, or in <code>.dev.vars</code> for local development.</p></body></html>`;
+  const headers = authHeaders("text/html; charset=utf-8");
+  headers.set("retry-after", "60");
+  return new Response(body, { status: 503, headers });
+}
+
+/**
+ * The login page.
+ *
+ * `error` is never the submitted username, the reason a password failed, or anything else
+ * derived from what was typed — only one of a small set of fixed strings this file
+ * writes. Nothing on the page hints at what the expected username is.
+ */
+export function loginPage(error: string | null, next: string): Response {
+  const safeNext = safeNextPath(next);
+  const status = error === null ? 200 : 401;
+  const errorBlock = error === null ? "" : `<p class="error" role="alert">${escapeHtml(error)}</p>`;
+
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex, nofollow">
+<title>Hexframe — laboratory sign in</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: #0b0d10; color: #e6e8ea; padding: 24px;
+    font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { width: 100%; max-width: 22rem; }
+  h1 { margin: 0 0 4px; font-size: 1.25rem; letter-spacing: 0.01em; }
+  .lede { margin: 0 0 20px; color: #98a0a8; font-size: 0.875rem; }
+  form { display: grid; gap: 14px; }
+  label { display: grid; gap: 6px; font-size: 0.8125rem; color: #b9c0c7; }
+  input {
+    width: 100%; padding: 10px 12px; border-radius: 6px; font-size: 0.9375rem;
+    border: 1px solid #2a3138; background: #14181c; color: #e6e8ea;
+  }
+  input:focus-visible { outline: 2px solid #4c8dff; outline-offset: 1px; border-color: #4c8dff; }
+  button {
+    padding: 10px 12px; border: 0; border-radius: 6px; font-size: 0.9375rem; font-weight: 600;
+    background: #4c8dff; color: #0b0d10; cursor: pointer;
+  }
+  button:hover { background: #6ba0ff; }
+  .error {
+    margin: 0; padding: 10px 12px; border-radius: 6px; font-size: 0.875rem;
+    border: 1px solid #7a2a2a; background: #241416; color: #ffb4b4;
+  }
+  footer { margin-top: 20px; color: #6d757d; font-size: 0.75rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Hexframe</h1>
+  <p class="lede">This is a private development laboratory. It is not a public service, and access is restricted to the project operator.</p>
+  ${errorBlock}
+  <form method="post" action="/login" autocomplete="off">
+    <input type="hidden" name="next" value="${escapeHtml(safeNext)}">
+    <label>Username
+      <input type="text" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+    </label>
+    <label>Password
+      <input type="password" name="password" autocomplete="current-password" required>
+    </label>
+    <button type="submit">Sign in</button>
+  </form>
+  <footer>Sessions last 12 hours and are held in a signed, HttpOnly cookie.</footer>
+</main>
+</body>
+</html>`;
+
+  return new Response(html, { status, headers: authHeaders("text/html; charset=utf-8") });
+}
+
+function redirect(location: string, cookie: string | null): Response {
+  const headers = authHeaders("text/plain; charset=utf-8");
+  headers.set("location", location);
+  if (cookie) headers.append("set-cookie", cookie);
+  // 303 rather than 302: the browser must follow a POST with a GET, so a refresh on the
+  // destination never re-submits the credential.
+  return new Response(`Redirecting to ${location}\n`, { status: 303, headers });
+}
+
+/**
+ * `POST /login`, and `GET /login` by way of the router.
+ *
+ * Nothing that was submitted is echoed back. The response to a wrong username and the
+ * response to a wrong password are byte-identical, so neither the page nor the status
+ * code tells an attacker which half they got right.
+ */
+export async function handleLogin(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+
+  if (request.method === "GET" || request.method === "HEAD") {
+    if (!credentialsConfigured(env)) return credentialsUnavailable(env);
+    return loginPage(null, safeNextPath(url.searchParams.get("next")));
+  }
+
+  if (request.method !== "POST") {
+    const headers = authHeaders("text/plain; charset=utf-8");
+    headers.set("allow", "GET, HEAD, POST");
+    return new Response("Method not allowed\n", { status: 405, headers });
+  }
+
+  if (!credentialsConfigured(env)) return credentialsUnavailable(env);
+
+  const declaredLength = Number(request.headers.get("content-length") ?? "0");
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_LOGIN_BODY_BYTES) {
+    return loginPage("That request was too large.", DEFAULT_NEXT);
+  }
+
+  const key = attemptKey(request);
+  const now = Date.now();
+  if (rateLimited(key, now)) {
+    const response = loginPage("Too many attempts. Wait a minute and try again.", DEFAULT_NEXT);
+    const headers = new Headers(response.headers);
+    headers.set("retry-after", "60");
+    return new Response(response.body, { status: 429, headers });
+  }
+
+  let form: FormData;
+  try {
+    form = await request.formData();
+  } catch {
+    recordAttempt(key, now);
+    return loginPage("That form could not be read.", DEFAULT_NEXT);
+  }
+
+  const next = safeNextPath(readField(form, "next"));
+  const username = readField(form, "username") ?? "";
+  const password = readField(form, "password") ?? "";
+
+  if (!checkCredentials(env, username, password)) {
+    recordAttempt(key, now);
+    return loginPage("Those credentials were not accepted.", next);
+  }
+
+  clearAttempts(key);
+  const cookie = await createSessionCookie(env, username, SESSION_TTL_SECONDS, url);
+  return redirect(next, cookie);
+}
+
+/** `FormData.get` returns `File | string | null`; only a string is ever a credential. */
+function readField(form: FormData, name: string): string | null {
+  const value = form.get(name);
+  return typeof value === "string" ? value : null;
+}
+
+/**
+ * `POST /logout`.
+ *
+ * POST-only on purpose: a `GET /logout` can be triggered by any image tag on any page,
+ * and while being logged out is a mild thing to have done to you, an endpoint that
+ * changes state on GET is a habit worth not forming.
+ *
+ * The optional `url` lets the expiring cookie match the `Secure` flag of the one being
+ * cleared, which is what makes logout work over plain http under `wrangler dev`.
+ */
+export function handleLogout(url?: URL): Response {
+  return redirect("/login", clearSessionCookie(url));
+}
