@@ -15,20 +15,85 @@ import characterJson from "../../characters/test_fighter/character.json";
 import standingLightJson from "../../characters/test_fighter/moves/standing_light.json";
 import crouchingLightJson from "../../characters/test_fighter/moves/crouching_light.json";
 
-import type { CharacterDef, SimConfig } from "../combat/types";
+import type { CharacterDef, CommandDef, SimConfig } from "../combat/types";
+import { ACTION_SLOT_COUNT, actionBit } from "../combat/types";
 import { px } from "../combat/constants";
 import { loadCharacter } from "./loader";
 import { validateCharacter, validateMove } from "./validate";
+import { ADDITIONAL_MOVES } from "./additional-moves";
 
-export const TEST_FIGHTER: CharacterDef = loadCharacter(validateCharacter(characterJson), [
+const BASE_TEST_FIGHTER: CharacterDef = loadCharacter(validateCharacter(characterJson), [
   validateMove(standingLightJson),
   validateMove(crouchingLightJson),
+  ...ADDITIONAL_MOVES,
 ]);
+
+export const DEFAULT_MOVE_LOADOUT: number[] = Array.from(
+  { length: ACTION_SLOT_COUNT },
+  (_, slot) => slot + 1,
+);
+
+export function commandsForLoadout(
+  character: CharacterDef,
+  loadout: readonly number[],
+): CommandDef[] {
+  const commands: CommandDef[] = [];
+  for (let slot = 0; slot < ACTION_SLOT_COUNT; slot++) {
+    const moveId = loadout[slot];
+    const move = character.moves.find((candidate) => candidate.id === moveId);
+    if (!move) continue;
+    commands.push({
+      moveId,
+      buttons: actionBit(slot),
+      motion: [],
+      motionWindow: 0,
+      requiresCrouch: move.requiresCrouch,
+      requiresAir: move.airOk,
+      priority: ACTION_SLOT_COUNT - slot,
+    });
+  }
+  return commands;
+}
+
+/** A fresh definition so a lab loadout can change without mutating global content. */
+export function testFighterWithLoadout(loadout: readonly number[]): CharacterDef {
+  const character: CharacterDef = {
+    ...BASE_TEST_FIGHTER,
+    moves: BASE_TEST_FIGHTER.moves,
+    commands: [],
+  };
+  character.commands = commandsForLoadout(character, loadout);
+  return character;
+}
+
+export const TEST_FIGHTER: CharacterDef = testFighterWithLoadout(DEFAULT_MOVE_LOADOUT);
 
 /** Move ids by name, so callers never spell a bare number. */
 export const MoveId = {
   StandingLight: 1,
   CrouchingLight: 2,
+  EmberPalm: 3,
+  VenomFang: 4,
+  FrostHeel: 5,
+  StormKnuckle: 6,
+  CrimsonArc: 7,
+  RiftUppercut: 8,
+  BastionBreak: 9,
+  ShadowStep: 10,
+  AshenSweep: 11,
+  GlacierSpike: 12,
+  StaticRush: 13,
+  ToxicBloom: 14,
+  BloodMoon: 15,
+  VoidHook: 16,
+  IronReversal: 17,
+  PhoenixDrive: 18,
+  Permafrost: 19,
+  PlagueTouch: 20,
+  ThunderClap: 21,
+  ReaperKick: 22,
+  EclipseBreaker: 23,
+  PrismBurst: 24,
 } as const;
 
 /**

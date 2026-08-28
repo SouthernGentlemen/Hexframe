@@ -80,9 +80,9 @@ pushbackBlockAttacker -1.8      pushbackBlockDefender 2.4
 ```
 
 Pushback is signed along the **attacker's** facing, which is why the attacker's own value
-is negative — it moves them backwards. `hurtboxWindows`, `invulWindows`, `movement` and
-`cancelWindows` are all empty: this move changes nothing about the fighter's vulnerability
-and moves them nowhere. That is deliberate for the first move.
+is negative — it moves them backwards. `hurtboxWindows`, `invulWindows` and `movement`
+are empty: this move changes nothing about the fighter's vulnerability and moves them
+nowhere. Its on-hit cancel window opens the route builder to every other catalog move.
 
 Reach, given the boxes above: the hitbox spans 26–70 px in front of the origin and the
 opponent's hurtboxes span ±18 px around theirs, so standing light connects at a separation
@@ -114,13 +114,25 @@ pushbackBlockAttacker -1.4     pushbackBlockDefender 1.8
 
 ## Commands
 
-```
-{ "moveId": 2, "buttons": ["light"], "motion": [], "motionWindow": 0, "requiresCrouch": true,  "requiresAir": false, "priority": 20 }
-{ "moveId": 1, "buttons": ["light"], "motion": [], "motionWindow": 0, "requiresCrouch": false, "requiresAir": false, "priority": 10 }
-```
+The lab builds 16 commands from the active loadout. Slots map directly to `Action1`
+through `Action16`; their default move ids are 1 through 16. Commands have no motion,
+inherit the move's stance requirement, and receive descending priority by slot. The
+chosen assignment is client configuration and does not change move definitions.
 
-Crouching light is listed first and carries the higher priority, so holding down and
-pressing light gives the low, and pressing light otherwise gives the standing normal.
+Keyboard arrows and gamepad Y/X/B/A form the same spatial diamond. Shift/LT and Space/RT
+select the other three banks, yielding 16 independently assignable inputs.
+
+## Tagged move catalog
+
+There are 24 unique combat definitions and 24 distinct animation names. Moves 1 and 2
+are the authored JSON normals above; moves 3–24 live in
+`src/content/additional-moves.ts` and cover fire/burn, chaos/poison, cold/freeze,
+lightning/shock, physical/bleed and void/control routes. Tags and descriptions are
+player-facing build vocabulary. They do not yet apply persistent status effects.
+
+Every move has an on-hit cancel window into the other 23 moves. That makes the catalog a
+route-construction prototype while keeping actual combat resolution deterministic and
+data-driven.
 
 ## Match setup
 
@@ -133,7 +145,7 @@ nothing connects until someone walks in. Default RNG seed `0x5eed`.
 `rig.json` declares the hierarchy of §15 — pelvis → torso → head and the four limb chains
 — with a pivot per part. `model.svg` supplies one `<g id="…">` per part, drawn around its
 own pivot at the origin. Animations exist for `idle`, `walk_forward`, `walk_backward`,
-`crouch`, `jump`, `standing_light` and `crouching_light`.
+`crouch`, `jump`, both authored light attacks and all 22 generated catalog attacks.
 
 Animation keyframes are sparse: a frame index and the bones that change on it. The
 renderer interpolates between keyframes. **The simulation never reads any of this.** An

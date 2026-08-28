@@ -15,7 +15,7 @@ describe("command parsing", () => {
   it("selects the higher-priority crouching normal while down is held", () => {
     const sim = createSim();
     const reports = runFrames(sim, 1, (_frame, player) =>
-      player === 0 ? InputBit.Down | InputBit.Light : 0,
+      player === 0 ? InputBit.Down | InputBit.Action2 : 0,
     );
     expect(reports[0].moveStarts).toEqual([{ player: 0, moveId: MoveId.CrouchingLight }]);
   });

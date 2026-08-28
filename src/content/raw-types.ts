@@ -28,7 +28,12 @@ export interface RawBox {
 export type RawHitLevel = "overhead" | "mid" | "low";
 
 /** Attack button names. Maps onto the `InputBit` attack bits in the loader. */
-export type RawButton = "light" | "medium" | "heavy" | "throw";
+export type RawButton =
+  | "light"
+  | "medium"
+  | "heavy"
+  | "throw"
+  | `action${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16}`;
 
 /** What a fighter cannot be touched by. Maps onto `InvulKind` in the loader. */
 export type RawInvulKind = "full" | "strike" | "throw";
@@ -90,6 +95,8 @@ export interface RawMove {
   key: string;
   /** A name the renderer resolves against the animation files. The simulation ignores it. */
   animation: string;
+  tags?: string[];
+  description?: string;
   duration: number;
   startup: number;
   active: number;

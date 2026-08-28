@@ -33,7 +33,7 @@ describe("contact resolution", () => {
     const sim = createSim();
     placeFighters(sim, -18, 18);
     const reports = runFrames(sim, 5, (frame, player) => {
-      if (player === 0) return InputBit.Down | (frame === 0 ? InputBit.Light : 0);
+      if (player === 0) return InputBit.Down | (frame === 0 ? InputBit.Action2 : 0);
       return InputBit.Right;
     });
     expect(reports.flatMap((report) => report.contacts)[0].kind).toBe(ContactKind.Hit);

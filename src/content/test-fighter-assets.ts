@@ -19,6 +19,7 @@ import crouchJson from "../../characters/test_fighter/animations/crouch.json";
 import jumpJson from "../../characters/test_fighter/animations/jump.json";
 import standingLightJson from "../../characters/test_fighter/animations/standing_light.json";
 import crouchingLightJson from "../../characters/test_fighter/animations/crouching_light.json";
+import { ADDITIONAL_ANIMATIONS } from "./additional-animations";
 
 import type { RawAnimation, RawRig } from "./raw-types";
 import { validateAnimation, validateRig } from "./validate";
@@ -36,4 +37,10 @@ export const TEST_FIGHTER_ANIMATIONS: Record<string, RawAnimation> = {
   jump: validateAnimation(jumpJson),
   standing_light: validateAnimation(standingLightJson),
   crouching_light: validateAnimation(crouchingLightJson),
+  ...Object.fromEntries(
+    Object.entries(ADDITIONAL_ANIMATIONS).map(([name, animation]) => [
+      name,
+      validateAnimation(animation, `animations.${name}`),
+    ]),
+  ),
 };

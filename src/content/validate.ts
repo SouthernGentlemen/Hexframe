@@ -375,7 +375,11 @@ const COMMAND_KEYS = [
   "priority",
 ] as const;
 
-const BUTTON_NAMES = ["light", "medium", "heavy", "throw"] as const;
+const BUTTON_NAMES = [
+  "light", "medium", "heavy", "throw",
+  "action1", "action2", "action3", "action4", "action5", "action6", "action7", "action8",
+  "action9", "action10", "action11", "action12", "action13", "action14", "action15", "action16",
+] as const;
 
 function readCommand(value: unknown, path: string): RawCommand {
   const source = requireObject(value, path);
@@ -485,6 +489,8 @@ const MOVE_KEYS = [
   "id",
   "key",
   "animation",
+  "tags",
+  "description",
   "duration",
   "startup",
   "active",
@@ -528,10 +534,24 @@ export function validateMove(raw: unknown, path = ""): RawMove {
     readCancelWindow(item, at(cancelWindowsPath, i)),
   );
 
+  const tagsValue = source["tags"];
+  const tags = tagsValue === undefined
+    ? []
+    : requireArray(source, path, "tags", 0).map((tag, index) => {
+        if (typeof tag !== "string" || !KEY_PATTERN.test(tag)) {
+          throw new ContentError(at(field(path, "tags"), index), "must be a lowercase tag");
+        }
+        return tag;
+      });
+
   return {
     id: requireIntegerAtLeast(source, path, "id", 1),
     key: requireIdentifier(source, path, "key"),
     animation: requireIdentifier(source, path, "animation"),
+    tags,
+    description: source["description"] === undefined
+      ? ""
+      : requireNonEmptyString(source, path, "description"),
     duration: requireIntegerAtLeast(source, path, "duration", 1),
     startup: requireIntegerAtLeast(source, path, "startup", 0),
     active: requireIntegerAtLeast(source, path, "active", 0),

@@ -198,18 +198,34 @@ export class InputBuffer {
 }
 ```
 
-### `controller/keymap.ts`, `controller/keyboard.ts` — browser only
+### `controller/keymap.ts`, `controller/keyboard.ts`, `controller/gamepad.ts` — browser only
 ```ts
 export interface KeyMap { [code: string]: number }              // KeyboardEvent.code → InputBit
-export const DEFAULT_KEYMAP_P1: KeyMap                          // WASD + J/K/L + U
-export const DEFAULT_KEYMAP_P2: KeyMap                          // arrows + numpad 1/2/3 + 0
+export interface ActionKeyMap { [code: string]: 0 | 1 | 2 | 3 } // physical key → diamond position
+export const DEFAULT_KEYMAP_P1: KeyMap                          // WASD movement
+export const DEFAULT_KEYMAP_P2: KeyMap                          // IJKL movement
+export const DEFAULT_ACTION_KEYMAP: ActionKeyMap                // arrows → Y/X/B/A positions
 export class KeyboardController {
-  constructor(target: EventTarget, map: KeyMap)
+  constructor(target: EventTarget, map: KeyMap, actionMap?: ActionKeyMap)
   sample(): InputFrame
   dispose(): void
 }
+export class GamepadController {
+  constructor(index?: number, source?: GamepadSource)
+  sample(): InputFrame
+  sampleUi(): GamepadUiState
+  get connected(): boolean
+}
 ```
-Never call `preventDefault` on keys outside the map.
+The four action positions repeat across four banks: unmodified, Shift/LT, Space/RT and
+Shift+Space/LT+RT. This creates `Action1` through `Action16`; `actionBit(slot)` is the
+only supported way to derive an action bit from a zero-based slot. A standard gamepad's
+left stick or D-pad drives movement, and Y/X/B/A is the same spatial diamond as
+up/left/right/down arrows. `sampleUi` exposes edge-detected menu controls to the lab:
+D-pad navigation, A confirm, B back, View menu, Start pause and LB/RB tabs.
+
+Keyboard controllers never call `preventDefault` on keys outside their maps and leave
+native form controls alone so the complete lab remains keyboard navigable.
 
 ### `recording/recorder.ts`
 ```ts
@@ -319,9 +335,15 @@ This is the **only** place `px()` is applied. A move's `duration` must equal
 ### `test-fighter.ts`
 ```ts
 export const TEST_FIGHTER: CharacterDef
-export const MoveId: { readonly StandingLight: number; ... }
+export const MoveId: { readonly StandingLight: number; ... readonly PrismBurst: number }
+export const DEFAULT_MOVE_LOADOUT: number[]                      // move ids 1..16
+export function commandsForLoadout(c: CharacterDef, loadout: readonly number[]): CommandDef[]
+export function testFighterWithLoadout(loadout: readonly number[]): CharacterDef
 export function testFighterSimConfig(seed?: number): SimConfig
 ```
+The test fighter exposes 24 tagged moves with distinct animation names. A loadout maps
+the first 16 valid move ids to `Action1` through `Action16`; assignments are lab/client
+configuration and therefore never enter deterministic simulation state.
 
 ---
 
@@ -446,7 +468,7 @@ default password.
 | `tests/collisions` | AABB overlap and mirroring; pushbox separation; corner behaviour |
 | `tests/simulation` | walking, crouching, jumping, landing, stage clamp, facing |
 | `tests/moves` | standing light: startup, active, recovery, whiff, hit, block, damage, hitstop, hitstun, blockstun, one hit per move |
-| `tests/input` | numpad conversion, press edges, the buffer window, one move per press |
+| `tests/input` | numpad conversion, press edges, the buffer window, one move per press, standard gamepad movement and all four trigger-selected action banks |
 | `tests/determinism` | identical inputs ⇒ identical hash; snapshot round-trip is bit-exact; no `Math.random`/`Date.now` anywhere under src/combat, src/input, src/rollback |
 | `tests/rollback` | the specification's §6 scenario; misprediction correction; hash equality after re-simulation |
-| `tests/content` | every JSON under `characters/` validates against `schemas/` with ajv, and the hand-written validator agrees with ajv on both good and deliberately broken input |
+| `tests/content` | every JSON under `characters/` validates against `schemas/` with ajv, the hand-written validator agrees with ajv, and the 24-move tagged catalog/loadout/animation contract is complete |

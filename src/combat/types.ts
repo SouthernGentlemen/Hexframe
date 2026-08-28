@@ -35,17 +35,42 @@ export const InputBit = {
   Down: 1 << 1,
   Left: 1 << 2,
   Right: 1 << 3,
+  Action1: 1 << 4,
+  Action2: 1 << 5,
+  Action3: 1 << 6,
+  Action4: 1 << 7,
+  Action5: 1 << 8,
+  Action6: 1 << 9,
+  Action7: 1 << 10,
+  Action8: 1 << 11,
+  Action9: 1 << 12,
+  Action10: 1 << 13,
+  Action11: 1 << 14,
+  Action12: 1 << 15,
+  Action13: 1 << 16,
+  Action14: 1 << 17,
+  Action15: 1 << 18,
+  Action16: 1 << 19,
+  // Compatibility names for authored 0.1 content and existing replay scripts.
   Light: 1 << 4,
   Medium: 1 << 5,
   Heavy: 1 << 6,
   Throw: 1 << 7,
 } as const;
 
+export const ACTION_SLOT_COUNT = 16;
+
+/** The input bit for a zero-based action slot. Invalid slots map to no input. */
+export function actionBit(slot: number): number {
+  if (!Number.isInteger(slot) || slot < 0 || slot >= ACTION_SLOT_COUNT) return 0;
+  return 1 << (slot + 4);
+}
+
 /** Every bit the engine defines. Anything outside this mask is dropped on the way in. */
-export const INPUT_MASK = 0xff;
+export const INPUT_MASK = (1 << (ACTION_SLOT_COUNT + 4)) - 1;
 
 /** All attack buttons, for "is any attack pressed" tests. */
-export const ATTACK_BUTTONS = InputBit.Light | InputBit.Medium | InputBit.Heavy | InputBit.Throw;
+export const ATTACK_BUTTONS = INPUT_MASK & ~0x0f;
 
 /** All directions. */
 export const DIRECTION_BITS = InputBit.Up | InputBit.Down | InputBit.Left | InputBit.Right;
@@ -161,6 +186,10 @@ export interface MoveDef {
   id: number;
   key: string;
   animation: string;
+  /** Searchable build-crafting vocabulary: fire, burn, projectile, guard-break, and so on. */
+  tags: string[];
+  /** Short player-facing explanation used by the loadout builder. */
+  description: string;
   duration: number;
   startup: number;
   active: number;
