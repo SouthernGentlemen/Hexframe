@@ -63,9 +63,11 @@ values as Worker secrets.
 ## Controls and move building
 
 Movement is WASD or the left stick/D-pad. The arrow-key diamond maps spatially to
-Y/X/B/A. Shift or LT selects the Setup bank, E or RT selects Power, and holding both
-selects Finale: four named banks and 16 independent action inputs in total. The Arsenal
-assigns any 16 of the 28 moves to those inputs and persists the build locally.
+Y/X/B/A. Direction chooses a status route: up is Fire, left is Poison, right is Freeze,
+and down is Shock. Shift or LT advances to the Link bank, E or RT advances to Cashout,
+and holding both selects the utility row: four route columns and 16 independent action
+inputs in total. The Arsenal renders that exact 4×4 layout, can equip an authored route
+from the Codex in one action, and persists the player's builds locally.
 
 The combo graph is authored rather than fully connected. Status primers are starters,
 their same-family follow-ups are links, and links reach only matching cashouts. Starters
@@ -76,9 +78,16 @@ The Armory separates Loadout and Gear so neither screen has competing nested pan
 Loadout arms one of the 16 action slots, equips directly from a controller-navigable
 filtered catalog, shows duplicate-aware equipped locations, and derives route completeness
 from authored cancel targets. Gear contains equipped slots, character stats, inventory and
-item detail. The Moves Codex provides a two-fighter Demo/Hit/Block presentation with exact
-60 Hz frame scrubbing and the authoritative move timeline; the Status Codex explains
-primer/payoff routes, while training internals and hitbox overlays remain separate.
+item detail. The Moves Codex runs a canonical two-fighter mini-match through the real
+`Simulation` for Demo/Hit/Block, with exact 60 Hz frame scrubbing and the authoritative
+move timeline; the Status Codex explains primer/payoff routes, while training internals
+and hitbox overlays remain separate.
+
+The optional first-launch tutorial is a real game mode rather than a documentation page.
+Its movement, defense, direction, modifier, route, status, Arsenal, and Codex lessons
+advance from inputs, fighter states, move starts, contacts, and status events. It installs
+a temporary deterministic build, saves completion per lesson, and restores the player's
+presets unchanged when the tutorial exits.
 
 Every attack has a deterministic presentation profile. The 28 profiles combine authored
 fighter clips with distinct elemental colors, particle shapes, orbit counts, sizes,

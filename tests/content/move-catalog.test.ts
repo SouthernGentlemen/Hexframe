@@ -46,6 +46,14 @@ describe("move catalog and loadout", () => {
     }
   });
 
+  it("ships direction-first starter, link, and cashout columns", () => {
+    expect(DEFAULT_MOVE_LOADOUT.slice(0, 12)).toEqual([
+      MoveId.EmberPalm, MoveId.VenomFang, MoveId.FrostHeel, MoveId.StormKnuckle,
+      MoveId.AshenSweep, MoveId.ToxicBloom, MoveId.GlacierSpike, MoveId.StaticRush,
+      MoveId.PhoenixDrive, MoveId.PlagueTouch, MoveId.Permafrost, MoveId.ThunderClap,
+    ]);
+  });
+
   it("enforces starter to link to cashout route grammar", () => {
     const validIds = new Set(TEST_FIGHTER.moves.map((move) => move.id));
     for (const move of TEST_FIGHTER.moves) {

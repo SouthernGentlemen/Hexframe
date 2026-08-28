@@ -22,17 +22,20 @@ export interface BuildState {
   inventory: ArmorInventory;
 }
 
-const STORAGE_KEY = "hexframe.builds.v3";
-const PREVIOUS_STORAGE_KEY = "hexframe.builds.v2";
+const STORAGE_KEY = "hexframe.builds.v4";
+const PREVIOUS_STORAGE_KEYS = ["hexframe.builds.v3", "hexframe.builds.v2"] as const;
 const LEGACY_LOADOUT_KEY = "hexframe.move-loadout.v1";
+const OLD_DEFAULT_LOADOUT = Array.from({ length: ACTION_SLOT_COUNT }, (_, slot) => slot + 1);
+const OLD_VENOM_LOADOUT = [4, 14, 20, 10, 11, 13, 16, 8, 25, 26, 27, 28, 17, 18, 23, 24];
+const OLD_PRISM_LOADOUT = [3, 6, 5, 4, 11, 13, 12, 14, 8, 25, 26, 28, 18, 21, 23, 24];
 
 export function createDefaultBuildState(): BuildState {
   return {
     activePreset: 0,
     presets: [
       { name: "The Unbound", loadout: DEFAULT_MOVE_LOADOUT.slice(), equipment: { ...DEFAULT_EQUIPMENT } },
-      { name: "Venom Engine", loadout: [4, 14, 20, 10, 11, 13, 16, 8, 25, 26, 27, 28, 17, 18, 23, 24], equipment: equipmentForSet("briarbone") },
-      { name: "Prism Lock", loadout: [3, 6, 5, 4, 11, 13, 12, 14, 8, 25, 26, 28, 18, 21, 23, 24], equipment: equipmentForSet("stormglass") },
+      { name: "Venom Engine", loadout: [...DEFAULT_MOVE_LOADOUT.slice(0, 12), 26, 15, 16, 22], equipment: equipmentForSet("briarbone") },
+      { name: "Prism Lock", loadout: [...DEFAULT_MOVE_LOADOUT.slice(0, 12), 24, 8, 23, 9], equipment: equipmentForSet("stormglass") },
     ],
     inventory: {
       armor: DEFAULT_ARMOR_INVENTORY.armor.slice(),
@@ -44,7 +47,11 @@ export function createDefaultBuildState(): BuildState {
 export function loadBuildState(validMoveIds: ReadonlySet<number>): BuildState {
   const defaults = createDefaultBuildState();
   let parsed = readStoredBuild(STORAGE_KEY);
-  if (!parsed) parsed = readStoredBuild(PREVIOUS_STORAGE_KEY);
+  for (const key of PREVIOUS_STORAGE_KEYS) {
+    if (parsed) break;
+    parsed = readStoredBuild(key);
+  }
+  parsed = migrateShippedLoadouts(parsed, defaults);
 
   const inventory = sanitizeInventory(parsed?.inventory, defaults.inventory);
   const presets = defaults.presets.map((fallback, index) =>
@@ -58,6 +65,25 @@ export function loadBuildState(validMoveIds: ReadonlySet<number>): BuildState {
     ? Number(parsed?.activePreset)
     : 0;
   return { activePreset, presets, inventory };
+}
+
+/** Move only untouched shipped presets to the direction-first layout; custom builds stay exact. */
+function migrateShippedLoadouts(parsed: Partial<BuildState> | null, defaults: BuildState): Partial<BuildState> | null {
+  if (!parsed?.presets) return parsed;
+  const presets = parsed.presets.map((preset, index) => {
+    if (!preset || !Array.isArray(preset.loadout)) return preset;
+    const shipped = index === 0
+      ? preset.name === "The Unbound" && sameLoadout(preset.loadout, OLD_DEFAULT_LOADOUT)
+      : index === 1
+        ? preset.name === "Venom Engine" && sameLoadout(preset.loadout, OLD_VENOM_LOADOUT)
+        : preset.name === "Prism Lock" && sameLoadout(preset.loadout, OLD_PRISM_LOADOUT);
+    return shipped ? { ...preset, loadout: defaults.presets[index].loadout.slice() } : preset;
+  }) as BuildState["presets"];
+  return { ...parsed, presets };
+}
+
+function sameLoadout(a: readonly number[], b: readonly number[]): boolean {
+  return a.length === b.length && a.every((moveId, slot) => moveId === b[slot]);
 }
 
 export function persistBuildState(state: BuildState): void {
@@ -86,7 +112,7 @@ function sanitizePreset(
   const rawLoadout = Array.isArray(candidate.loadout) ? candidate.loadout : [];
   const loadout = Array.from({ length: ACTION_SLOT_COUNT }, (_, slot) => {
     const moveId = rawLoadout[slot];
-    return typeof moveId === "number" && validMoveIds.has(moveId) ? moveId : fallback.loadout[slot];
+    return typeof moveId === "number" && (moveId === 0 || validMoveIds.has(moveId)) ? moveId : fallback.loadout[slot];
   });
   const equipment = { ...fallback.equipment };
   const candidateEquipment = typeof candidate.equipment === "object" && candidate.equipment !== null ? candidate.equipment : {};

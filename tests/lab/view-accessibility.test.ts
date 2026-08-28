@@ -33,7 +33,7 @@ describe("lab accessibility contract", () => {
     const html = view();
     expect(html).toContain('role="dialog" aria-modal="true"');
     expect(html.match(/role="tablist"/g)).toHaveLength(3);
-    expect(html.match(/role="tabpanel"/g)).toHaveLength(14);
+    expect(html.match(/role="tabpanel"/g)).toHaveLength(15);
     expect(html).toContain('id="page-loadout"');
     expect(html).toContain('id="page-armor"');
     expect(html).toContain('id="page-craft"');
@@ -52,7 +52,7 @@ describe("lab accessibility contract", () => {
     expect(html).toContain('id="move-timeline-console"');
     expect(html).toContain('id="interaction-history"');
     expect(html).toContain('data-action="scenario-capture"');
-    expect(html).toContain("Pause on contact");
+    expect(html).toContain("Auto-freeze on contact");
     expect(html).toContain("Audio captions");
     expect(html).toContain("Combat flashes");
     expect(html).toContain("Status patterns");
@@ -78,7 +78,7 @@ describe("lab accessibility contract", () => {
     expect(html).not.toContain('data-menu-tab="debug"');
     expect(html).not.toContain('action="/logout"');
     expect(html).not.toContain('id="debug-panel"');
-    expect(html.match(/role="tabpanel"/g)).toHaveLength(13);
+    expect(html.match(/role="tabpanel"/g)).toHaveLength(14);
   });
 });
 

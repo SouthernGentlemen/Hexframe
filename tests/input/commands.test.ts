@@ -4,8 +4,10 @@ import { MoveId } from "../../src/content/test-fighter";
 import { createSim, runFrames } from "../helpers/harness";
 
 describe("command parsing", () => {
+  const basics = [MoveId.StandingLight, MoveId.CrouchingLight, ...Array.from({ length: 14 }, () => MoveId.StandingLight)];
+
   it("starts the standing normal from a light press", () => {
-    const sim = createSim();
+    const sim = createSim(undefined, basics);
     const reports = runFrames(sim, 1, (_frame, player) =>
       player === 0 ? InputBit.Light : 0,
     );
@@ -13,7 +15,7 @@ describe("command parsing", () => {
   });
 
   it("selects the higher-priority crouching normal while down is held", () => {
-    const sim = createSim();
+    const sim = createSim(undefined, basics);
     const reports = runFrames(sim, 1, (_frame, player) =>
       player === 0 ? InputBit.Down | InputBit.Action2 : 0,
     );
@@ -21,7 +23,7 @@ describe("command parsing", () => {
   });
 
   it("does not turn one held button into repeated moves", () => {
-    const sim = createSim();
+    const sim = createSim(undefined, basics);
     const reports = runFrames(sim, 40, (_frame, player) =>
       player === 0 ? InputBit.Light : 0,
     );

@@ -59,6 +59,8 @@ import {
 } from "./view";
 import { MoveDemonstration } from "./move-demonstration";
 import type { MoveDemonstrationMode, MoveDemonstrationState } from "./move-demonstration";
+import { markTutorialSeen, tutorialSeen, TutorialController, TUTORIAL_LESSONS } from "./tutorial";
+import type { TutorialSnapshot } from "./tutorial";
 import {
   ACTION_BANKS,
   actionSlotInput,
@@ -82,7 +84,7 @@ const DUMMY_OPTIONS: readonly [DummyModeValue, string][] = [
   [DummyMode.Reversal, "Reversal"],
 ];
 
-type MenuTab = "loadout" | "armor" | "craft" | "moves" | "status" | "settings" | "training" | "debug";
+type MenuTab = "loadout" | "armor" | "craft" | "moves" | "status" | "tutorial" | "settings" | "training" | "debug";
 type SettingsTab = "audio" | "video" | "accessibility" | "controls";
 type InventoryTab = "armor" | "materials";
 
@@ -94,7 +96,7 @@ function edge(now: GamepadUiState, before: GamepadUiState, key: keyof GamepadUiS
 export function startLab(mount: HTMLElement): () => void {
   const publicPlay = window.location.pathname === "/play" || window.location.pathname.startsWith("/play/");
   const catalogCharacter = testFighterWithLoadout(DEFAULT_MOVE_LOADOUT);
-  const validMoveIds = new Set(catalogCharacter.moves.map((move) => move.id));
+  const validMoveIds = new Set([0, ...catalogCharacter.moves.map((move) => move.id)]);
   const buildState = loadBuildState(validMoveIds);
   let activeBuild = buildState.presets[buildState.activePreset];
   const playerCharacter = testFighterWithBuild(activeBuild.loadout, activeBuild.equipment);
@@ -109,7 +111,10 @@ export function startLab(mount: HTMLElement): () => void {
   const config: SimConfig = { characters: [playerCharacter, dummyCharacter], startX: [px(-18), px(18)], seed: 0x5eed };
   const sim = new Simulation(config);
   const timeline = new Timeline(sim, 900);
+  timeline.paused = false;
+  timeline.pauseOnContact = false;
   const dummy = new DummyController();
+  const tutorial = new TutorialController(syncTutorialUi);
   const keyboard = new KeyboardController(window, DEFAULT_KEYMAP_P1, DEFAULT_ACTION_KEYMAP);
   const secondKeyboard = new KeyboardController(window, DEFAULT_KEYMAP_P2, NO_ACTION_KEYMAP);
   const gamepad = new GamepadController();
@@ -125,6 +130,7 @@ export function startLab(mount: HTMLElement): () => void {
     model: TEST_FIGHTER_MODEL,
     rig: TEST_FIGHTER_RIG,
     animations: TEST_FIGHTER_ANIMATIONS,
+    playback: TEST_FIGHTER_PLAYBACK,
   };
   const moveShowcase = new MoveDemonstration(required("move-showcase-stage"), playerCharacter, demonstrationAssets);
   const codexDemonstration = new MoveDemonstration(required("codex-move-stage"), playerCharacter, demonstrationAssets, syncCodexDemonstrationUi);
@@ -133,9 +139,12 @@ export function startLab(mount: HTMLElement): () => void {
 
   timeline.inputProvider = () => {
     if (menuOpen()) return [0, 0];
+    const playerInput = keyboard.sample() | gamepad.sample();
+    lastPlayerInput = playerInput;
+    if (tutorial.active) return [playerInput, tutorial.dummyInput(sim.getState())];
     const secondPlayer = secondKeyboard.sample();
     dummy.capture(secondPlayer);
-    return [keyboard.sample() | gamepad.sample(), dummy.inputFor(sim.getState(), 1, timeline.lastReport)];
+    return [playerInput, dummy.inputFor(sim.getState(), 1, timeline.lastReport)];
   };
 
   let disposed = false;
@@ -148,6 +157,7 @@ export function startLab(mount: HTMLElement): () => void {
   let resumeAfterMenu = false;
   let previousUi = gamepad.sampleUi();
   let focusBeforeMenu: HTMLElement | null = null;
+  let lastMenuFocus: HTMLElement | null = null;
   let captionTimer = 0;
   let selectedArmorSlot: ArmorSlot = "head";
   let selectedCraftArmorId = ARMOR_CATALOG.find((item) => !buildState.inventory.armor.includes(item.id))?.id ?? ARMOR_CATALOG[0].id;
@@ -165,6 +175,9 @@ export function startLab(mount: HTMLElement): () => void {
   let moveSearch = "";
   let codexSearch = "";
   let pendingMatchReset = false;
+  let lastPlayerInput = 0;
+  let tutorialBuildInstalled = false;
+  let latestTutorialSnapshot: TutorialSnapshot | null = null;
   const buildChangeCounts = [0, 0, 0];
 
   gamepad.setDeadzone(preferences.controls.stickDeadzone);
@@ -182,6 +195,8 @@ export function startLab(mount: HTMLElement): () => void {
     panel?.update(state, sim.characters(), lastReport ?? timeline.lastReport, stateHash);
     required("frame-readout").textContent = String(state.frame).padStart(6, "0");
     required("play-state").textContent = timeline.paused ? "PAUSED" : "LIVE";
+    const pausedOverlay = required("paused-overlay");
+    pausedOverlay.hidden = !timeline.paused || menuOpen();
     const range = timeline.bufferedRange();
     required("timeline-status").textContent = timeline.lastMessage ?? `Frame ${state.frame} · ${timeline.paused ? "paused" : "live"} · buffer ${range.oldest}–${range.newest}`;
     required("controller-state").textContent = gamepad.connected ? `Gamepad · ${gamepad.name}` : "Keyboard ready · connect gamepad anytime";
@@ -205,8 +220,8 @@ export function startLab(mount: HTMLElement): () => void {
     if (frameInspector) frameInspector.innerHTML = frameInspectorMarkup(state, sim.characters(), lastReport ?? timeline.lastReport, stateHash);
     renderFrameTimeline(state.fighters[0].moveId, state.fighters[0].moveFrame);
     renderInteractionHistory();
-    moveShowcase.render(now);
-    codexDemonstration.render(now);
+    if (menuOpen() && activeTab === "loadout") moveShowcase.render(now);
+    if (menuOpen() && activeTab === "moves") codexDemonstration.render(now);
   };
 
   const loop = (now: number): void => {
@@ -221,6 +236,8 @@ export function startLab(mount: HTMLElement): () => void {
       if (reports.length > 0) {
         lastReport = reports[reports.length - 1];
         processReports(reports);
+        tutorial.observe(lastPlayerInput, sim.getState(), reports);
+        if (tutorial.consumeResetRequest()) resetMatch();
       }
     }
     render(now);
@@ -249,16 +266,24 @@ export function startLab(mount: HTMLElement): () => void {
     if (action === "back") stepFrames(-1);
     if (action === "forward") stepFrames(1);
     if (action === "forward-10") stepFrames(10);
-    if (action === "reset") resetMatch();
+    if (action === "reset" && confirmDestructive("Reset the current match?")) resetMatch();
     if (action === "scenario-capture") captureCurrentScenario();
     if (action === "scenario-replay") replayCapturedScenario();
     if (action === "scenario-export") exportCapturedScenario();
     if (action === "default-loadout") resetActiveLoadout();
     if (action === "demo-prev") codexDemonstration.step(-1);
-    if (action === "demo-toggle") codexDemonstration.toggle();
+    if (action === "demo-toggle") {
+      codexDemonstration.toggle();
+      tutorial.recordUi("demo-played");
+    }
     if (action === "demo-next") codexDemonstration.step(1);
     if (action === "craft-selected") craftSelectedArmor();
-    if (action === "reset-preferences") replacePreferences(resetPreferences());
+    if (action === "reset-preferences" && confirmDestructive("Reset every setting to its default?")) replacePreferences(resetPreferences());
+    if (action === "start-tutorial") startTutorial();
+    if (action === "skip-tutorial") skipFirstLaunch();
+    if (action === "skip-tutorial-lesson") tutorial.skipLesson();
+    if (action === "next-tutorial-lesson") advanceTutorial();
+    if (action === "exit-tutorial") finishTutorial();
     if (button.dataset.menuTab) showTab(button.dataset.menuTab as MenuTab);
     if (button.dataset.settingsTab) showSettingsTab(button.dataset.settingsTab as SettingsTab);
     if (button.dataset.inventoryTab) showInventoryTab(button.dataset.inventoryTab as InventoryTab);
@@ -268,6 +293,11 @@ export function startLab(mount: HTMLElement): () => void {
     if (button.dataset.codexMove !== undefined) showMovePreview(Number(button.dataset.codexMove), true);
     if (button.dataset.moveFilter && button.dataset.filterValue) setMoveFilter(button.dataset.moveFilter, button.dataset.filterValue);
     if (button.dataset.presetAction) handlePresetAction(button.dataset.presetAction);
+    if (button.dataset.duplicateTarget !== undefined) duplicateInto(Number(button.dataset.duplicateTarget));
+    if (button.dataset.equipRoute !== undefined) showRouteChooser(button);
+    if (button.dataset.equipRouteColumn !== undefined && button.dataset.routeMoves) {
+      equipRoute(Number(button.dataset.equipRouteColumn), button.dataset.routeMoves);
+    }
     if (button.dataset.demoMode) setDemonstrationMode(button.dataset.demoMode as MoveDemonstrationMode);
     if (button.dataset.demoSpeed) setDemonstrationSpeed(Number(button.dataset.demoSpeed));
     if (button.dataset.armorSlot) selectArmorSlot(button.dataset.armorSlot as ArmorSlot);
@@ -319,7 +349,10 @@ export function startLab(mount: HTMLElement): () => void {
       codexSearch = target.value.trim().toLowerCase();
       applyCodexSearch();
     }
-    if (target.id === "codex-frame-scrubber") codexDemonstration.seek(Number(target.value) - 1);
+    if (target.id === "codex-frame-scrubber") {
+      codexDemonstration.seek(Number(target.value) - 1);
+      tutorial.recordUi("demo-scrubbed");
+    }
   };
 
   const previewContent = (event: Event): void => {
@@ -342,14 +375,28 @@ export function startLab(mount: HTMLElement): () => void {
 
   const keydown = (event: KeyboardEvent): void => {
     if (!event.ctrlKey && !event.metaKey && !event.altKey) gameAudio.ensure();
-    if (menuOpen() && event.code === "Tab") {
-      trapFocus(event);
+    if (firstLaunchOpen()) {
+      if (event.code === "Tab") trapFocus(event, required("first-launch"));
       return;
     }
-    if (menuOpen() && handleTabKey(event)) return;
+    if (menuOpen()) {
+      if (event.code === "Tab") {
+        trapFocus(event);
+        return;
+      }
+      if (handleTabKey(event)) return;
+      if (event.code === "Escape") {
+        event.preventDefault();
+        closeMenu();
+      } else if (activeTab === "moves" && event.code === "Space" && !event.repeat) {
+        event.preventDefault();
+        codexDemonstration.toggle();
+      }
+      return;
+    }
     if (event.code === "Escape") {
       event.preventDefault();
-      menuOpen() ? closeMenu() : openMenu();
+      openMenu();
     } else if ((event.code === "Space" || event.code === "KeyP") && !isFormControl(event.target)) {
       if (event.repeat) return;
       event.preventDefault();
@@ -386,6 +433,14 @@ export function startLab(mount: HTMLElement): () => void {
       })
       .catch(() => undefined);
   }
+  syncTutorialUi(tutorial.snapshot());
+  const firstLaunch = mount.querySelector<HTMLElement>("#first-launch");
+  if (publicPlay && firstLaunch && !tutorialSeen()) {
+    timeline.paused = true;
+    firstLaunch.hidden = false;
+    setFirstLaunchInert(true);
+    firstLaunch.querySelector<HTMLButtonElement>("[data-action='start-tutorial']")?.focus();
+  }
   render();
   animationId = requestAnimationFrame(loop);
 
@@ -421,6 +476,22 @@ export function startLab(mount: HTMLElement): () => void {
     return !required("menu-scrim").hidden;
   }
 
+  function firstLaunchOpen(): boolean {
+    const firstLaunch = mount.querySelector<HTMLElement>("#first-launch");
+    return firstLaunch !== null && !firstLaunch.hidden;
+  }
+
+  function setFirstLaunchInert(inert: boolean): void {
+    const firstLaunch = mount.querySelector<HTMLElement>("#first-launch");
+    if (!firstLaunch) return;
+    for (const child of required("game-content").children) {
+      if (child === firstLaunch || !(child instanceof HTMLElement)) continue;
+      child.inert = inert;
+      if (inert) child.setAttribute("aria-hidden", "true");
+      else child.removeAttribute("aria-hidden");
+    }
+  }
+
   function openMenu(): void {
     if (menuOpen()) return;
     focusBeforeMenu = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -428,20 +499,32 @@ export function startLab(mount: HTMLElement): () => void {
     timeline.paused = true;
     required("menu-scrim").hidden = false;
     setGameContentInert(true);
-    visibleGamepadTargets()[0]?.focus();
+    syncDemonstrationActivity();
+    const remembered = lastMenuFocus && lastMenuFocus.isConnected && !lastMenuFocus.closest("[hidden]")
+      ? lastMenuFocus
+      : mount.querySelector<HTMLButtonElement>(`[data-menu-tab='${activeTab}']`);
+    remembered?.focus();
+    if (activeTab === "loadout") tutorial.recordUi("arsenal-opened");
   }
 
   function closeMenu(): void {
     if (!menuOpen()) return;
+    if (document.activeElement instanceof HTMLElement && required("lab-menu").contains(document.activeElement)) {
+      lastMenuFocus = document.activeElement;
+    }
     required("menu-scrim").hidden = true;
+    syncDemonstrationActivity();
     setGameContentInert(false);
     if (pendingMatchReset) {
       resetMatch();
       pendingMatchReset = false;
     }
+    buildChangeCounts.fill(0);
+    syncBuildUi();
     if (resumeAfterMenu) timeline.paused = false;
     resumeAfterMenu = false;
     (focusBeforeMenu ?? mount.querySelector<HTMLButtonElement>("[data-action='menu']"))?.focus();
+    tutorial.recordUi("returned-to-combat");
   }
 
   function setGameContentInert(inert: boolean): void {
@@ -468,6 +551,16 @@ export function startLab(mount: HTMLElement): () => void {
       page.hidden = !active;
       page.classList.toggle("active", active);
     }
+    syncDemonstrationActivity();
+    if (tab === "loadout") tutorial.recordUi("arsenal-opened");
+    if (tab === "moves") tutorial.recordUi("codex-opened");
+  }
+
+  function syncDemonstrationActivity(): void {
+    const open = menuOpen();
+    const autoplay = document.documentElement.dataset.motion !== "reduced";
+    moveShowcase.setActive(open && activeTab === "loadout", autoplay);
+    codexDemonstration.setActive(open && activeTab === "moves", autoplay);
   }
 
   function showSettingsTab(tab: SettingsTab): void {
@@ -482,6 +575,7 @@ export function startLab(mount: HTMLElement): () => void {
   }
 
   function switchPreset(index: number): void {
+    if (tutorialBuildInstalled) return;
     if (!Number.isInteger(index) || index < 0 || index >= buildState.presets.length) return;
     buildState.activePreset = index;
     activeBuild = buildState.presets[index];
@@ -497,17 +591,23 @@ export function startLab(mount: HTMLElement): () => void {
     if (slot < 0 || slot >= activeBuild.loadout.length || !validMoveIds.has(moveId)) return;
     armedSlot = slot;
     if (activeBuild.loadout[slot] === moveId) {
-      required("equip-feedback").textContent = `${moveName(playerCharacter.moves.find((candidate) => candidate.id === moveId)!)} is already equipped in ${actionSlotLabel(slot)}.`;
+      const existing = playerCharacter.moves.find((candidate) => candidate.id === moveId);
+      required("equip-feedback").textContent = `${existing ? moveName(existing) : "That slot"} is already ${existing ? "equipped" : "unassigned"} in ${actionSlotLabel(slot)}.`;
       return;
     }
     activeBuild.loadout[slot] = moveId;
     markBuildChanged();
     rebuildActiveBuild();
-    showMovePreview(moveId, true);
-    required("equip-feedback").textContent = `EQUIPPED · ${moveName(playerCharacter.moves.find((candidate) => candidate.id === moveId)!)} → ${actionSlotLabel(slot)}`;
+    tutorial.recordUi("move-replaced");
+    if (moveId > 0) showMovePreview(moveId, true);
+    const assigned = playerCharacter.moves.find((candidate) => candidate.id === moveId);
+    required("equip-feedback").textContent = assigned
+      ? `EQUIPPED · ${moveName(assigned)} → ${actionSlotLabel(slot)}`
+      : `CLEARED · ${actionSlotLabel(slot)} is unassigned`;
   }
 
   function resetActiveLoadout(): void {
+    if (!confirmDestructive("Restore the starter directional loadout?")) return;
     activeBuild.loadout = DEFAULT_MOVE_LOADOUT.slice();
     markBuildChanged();
     rebuildActiveBuild();
@@ -518,7 +618,9 @@ export function startLab(mount: HTMLElement): () => void {
     armedSlot = slot;
     for (const button of mount.querySelectorAll<HTMLElement>("[data-select-action]")) button.classList.toggle("selected", Number(button.dataset.selectAction) === slot);
     for (const row of mount.querySelectorAll<HTMLElement>("[data-arm-slot]")) row.classList.toggle("armed", Number(row.dataset.armSlot) === slot);
-    showMovePreview(activeBuild.loadout[slot]);
+    const column = slot % 4;
+    for (const route of mount.querySelectorAll<HTMLElement>("[data-route-column]")) route.classList.toggle("route-selected", Number(route.dataset.routeColumn) === column);
+    if (activeBuild.loadout[slot] > 0) showMovePreview(activeBuild.loadout[slot]);
     syncArmedSlotUi();
     applyMoveFilters();
     if (focusCatalog) {
@@ -567,6 +669,7 @@ export function startLab(mount: HTMLElement): () => void {
   function craftSelectedArmor(): void {
     const item = armorById(selectedCraftArmorId);
     if (!item || !canCraftArmor(item, buildState.inventory)) return;
+    if (preferences.controls.holdToConfirm && !confirmDestructive(`Craft ${item.name} and spend its listed materials?`)) return;
     for (const cost of item.recipe) buildState.inventory.materials[cost.materialId] -= cost.quantity;
     buildState.inventory.armor.push(item.id);
     persistBuildState(buildState);
@@ -608,7 +711,7 @@ export function startLab(mount: HTMLElement): () => void {
     if (buildName && document.activeElement !== buildName) buildName.value = activeBuild.name;
     const changes = buildChangeCounts[buildState.activePreset];
     for (const dirty of mount.querySelectorAll<HTMLElement>("[data-build-dirty]")) dirty.textContent = changes > 0 ? " *" : "";
-    for (const output of mount.querySelectorAll<HTMLOutputElement>("[data-build-changes]")) output.textContent = changes > 0 ? `${changes} change${changes === 1 ? "" : "s"} · auto-saved · applies on close` : "Auto-saved · applies when the menu closes";
+    for (const output of mount.querySelectorAll<HTMLOutputElement>("[data-build-changes]")) output.textContent = changes > 0 ? `${changes} change${changes === 1 ? "" : "s"} · saved · applies on close` : "All changes applied";
     for (const element of mount.querySelectorAll<HTMLElement>("[data-equipped-move]")) {
       const moveId = Number(element.dataset.equippedMove);
       const summary = equippedSummary(activeBuild.loadout, moveId);
@@ -645,10 +748,12 @@ export function startLab(mount: HTMLElement): () => void {
   function syncArmedSlotUi(): void {
     const move = playerCharacter.moves.find((candidate) => candidate.id === activeBuild.loadout[armedSlot]);
     const bank = ACTION_BANKS[Math.trunc(armedSlot / 4)];
-    required("armed-slot-panel").innerHTML = `<span>SELECTED SLOT</span><strong>${actionSlotInput(armedSlot)}</strong><em>${bank.name.toUpperCase()} / SLOT ${String(armedSlot + 1).padStart(2, "0")}</em><small>CURRENTLY: ${move ? moveName(move).toUpperCase() : "UNASSIGNED"}</small>`;
+    const family = ["FIRE", "POISON", "FREEZE", "SHOCK"][armedSlot % 4];
+    required("armed-slot-panel").innerHTML = `<span>${family} ROUTE</span><strong>${actionSlotInput(armedSlot)}</strong><em>${bank.input.toUpperCase()} / ${["STARTER", "LINK", "CASHOUT", "UTILITY"][Math.trunc(armedSlot / 4)]}</em><small>CURRENTLY: ${move ? moveName(move).toUpperCase() : "UNASSIGNED"}</small>`;
   }
 
   function markBuildChanged(amount = 1): void {
+    if (tutorialBuildInstalled) return;
     buildChangeCounts[buildState.activePreset] += amount;
   }
 
@@ -666,6 +771,10 @@ export function startLab(mount: HTMLElement): () => void {
   }
 
   function handlePresetAction(action: string): void {
+    if (tutorialBuildInstalled) {
+      required("equip-feedback").textContent = "Tutorial build active · your presets are protected.";
+      return;
+    }
     if (action === "rename") {
       const input = mount.querySelector<HTMLInputElement>("[data-build-name]");
       input?.focus();
@@ -673,25 +782,24 @@ export function startLab(mount: HTMLElement): () => void {
       return;
     }
     if (action === "duplicate") {
-      const target = (buildState.activePreset + 1) % buildState.presets.length;
-      buildState.presets[target] = {
-        name: `${activeBuild.name.replace(/\s+Copy(?: \d+)?$/, "")} Copy`.slice(0, 32),
-        loadout: activeBuild.loadout.slice(),
-        equipment: { ...activeBuild.equipment },
-      };
-      buildChangeCounts[target] += 1;
-      switchPreset(target);
+      const chooser = mount.querySelector<HTMLElement>("[data-duplicate-chooser]");
+      if (chooser) {
+        chooser.hidden = !chooser.hidden;
+        if (!chooser.hidden) chooser.querySelector<HTMLButtonElement>("button:not([disabled])")?.focus();
+      }
       return;
     }
     if (action === "clear") {
-      activeBuild.loadout = Array.from({ length: activeBuild.loadout.length }, () => 1);
+      if (!confirmDestructive("Clear all sixteen move assignments and restore default equipment?")) return;
+      activeBuild.loadout = Array.from({ length: activeBuild.loadout.length }, () => 0);
       activeBuild.equipment = { ...createDefaultBuildState().presets[0].equipment };
       markBuildChanged();
       rebuildActiveBuild();
-      showMovePreview(1, true);
+      showMovePreview(playerCharacter.moves[0].id, true);
       return;
     }
     if (action === "reset") {
+      if (!confirmDestructive(`Reset ${activeBuild.name} to its shipped preset?`)) return;
       const fallback = createDefaultBuildState().presets[buildState.activePreset];
       activeBuild.name = fallback.name;
       activeBuild.loadout = fallback.loadout.slice();
@@ -700,6 +808,45 @@ export function startLab(mount: HTMLElement): () => void {
       rebuildActiveBuild();
       showMovePreview(activeBuild.loadout[0], true);
     }
+  }
+
+  function duplicateInto(target: number): void {
+    if (!Number.isInteger(target) || target < 0 || target >= buildState.presets.length || target === buildState.activePreset) return;
+    const replaced = buildState.presets[target];
+    if (!confirmDestructive(`Overwrite build ${target + 1}, ${replaced.name}, with a copy of ${activeBuild.name}?`)) return;
+    buildState.presets[target] = {
+      name: `${activeBuild.name.replace(/\s+Copy(?: \d+)?$/, "")} Copy`.slice(0, 32),
+      loadout: activeBuild.loadout.slice(),
+      equipment: { ...activeBuild.equipment },
+    };
+    buildChangeCounts[target] += 1;
+    const chooser = mount.querySelector<HTMLElement>("[data-duplicate-chooser]");
+    if (chooser) chooser.hidden = true;
+    switchPreset(target);
+  }
+
+  function showRouteChooser(button: HTMLButtonElement): void {
+    const chooser = button.parentElement?.querySelector<HTMLElement>("[data-equip-route-chooser]");
+    if (!chooser) return;
+    chooser.hidden = !chooser.hidden;
+    tutorial.recordUi("route-inspected");
+    if (!chooser.hidden) chooser.querySelector<HTMLButtonElement>("button")?.focus();
+  }
+
+  function equipRoute(column: number, routeText: string): void {
+    if (!Number.isInteger(column) || column < 0 || column > 3) return;
+    const route = routeText.split(",").map(Number).filter((moveId) => validMoveIds.has(moveId)).slice(0, 3);
+    if (route.length < 2) return;
+    route.forEach((moveId, bank) => { activeBuild.loadout[bank * 4 + column] = moveId; });
+    markBuildChanged(route.length);
+    rebuildActiveBuild();
+    selectAction(column, false);
+    showMovePreview(route[0], true);
+    required("equip-feedback").textContent = `ROUTE EQUIPPED · ${["↑ / Y", "← / X", "→ / B", "↓ / A"][column]} · ${route.map((moveId) => moveName(playerCharacter.moves.find((move) => move.id === moveId)!)).join(" → ")}`;
+  }
+
+  function confirmDestructive(message: string): boolean {
+    return window.confirm(message);
   }
 
   function setMoveFilter(kind: string, value: string): void {
@@ -782,17 +929,19 @@ export function startLab(mount: HTMLElement): () => void {
   }
 
   function showMovePreview(moveId: number, force = false): void {
-    const move = playerCharacter.moves.find((candidate) => candidate.id === moveId);
+    const move = playerCharacter.moves.find((candidate) => candidate.id === moveId)
+      ?? (force ? playerCharacter.moves[0] : undefined);
     if (!move || (!force && showcasedMoveId === move.id)) return;
     showcasedMoveId = move.id;
     timelinePinnedMoveId = move.id;
     renderedTimelineMoveId = -1;
-    moveShowcase.select(move.id);
+    const autoplay = document.documentElement.dataset.motion !== "reduced";
+    moveShowcase.select(move.id, autoplay);
     required("codex-move-timeline").innerHTML = moveTimelineMarkup(move);
     required("codex-move-detail").innerHTML = codexMoveDetailMarkup(move, playerCharacter, activeBuild.loadout);
     required("move-route-topology").innerHTML = routeTopologyMarkup(move, playerCharacter, activeBuild.loadout);
     decorateCodexTimeline(move);
-    codexDemonstration.select(move.id);
+    codexDemonstration.select(move.id, autoplay);
     const hitbox = move.hitboxes[0];
     const level = hitbox?.level === HitLevel.Low ? "LOW" : hitbox?.level === HitLevel.Overhead ? "OVERHEAD" : "MID";
     required("move-showcase-code").textContent = `MOVE ${String(move.id).padStart(2, "0")} · ${level}`;
@@ -832,7 +981,7 @@ export function startLab(mount: HTMLElement): () => void {
       scrubber.setAttribute("aria-valuetext", `Frame ${state.frame + 1} of ${state.move.duration}`);
     }
     const detail = mount.querySelector<HTMLOutputElement>("#codex-frame-detail");
-    if (detail) detail.textContent = describeMoveFrame(state.move, state.frame, playerCharacter);
+    if (detail) detail.textContent = `${state.phase.toUpperCase()}\n${describeMoveFrame(state.move, state.frame, playerCharacter)}`;
     const toggle = mount.querySelector<HTMLButtonElement>("[data-action='demo-toggle']");
     if (toggle) toggle.textContent = state.playing ? "Pause" : "Play";
     for (const cell of mount.querySelectorAll<HTMLElement>("#codex-move-timeline [data-frame]")) cell.classList.toggle("playhead", Number(cell.dataset.frame) === state.frame);
@@ -849,7 +998,8 @@ export function startLab(mount: HTMLElement): () => void {
   }
 
   function setDemonstrationMode(mode: MoveDemonstrationMode): void {
-    codexDemonstration.setMode(mode);
+    codexDemonstration.setMode(mode, document.documentElement.dataset.motion !== "reduced");
+    if (mode === "hit" || mode === "block") tutorial.recordUi("demo-mode-changed");
   }
 
   function setDemonstrationSpeed(speed: number): void {
@@ -1011,6 +1161,92 @@ export function startLab(mount: HTMLElement): () => void {
     }
   }
 
+  function startTutorial(): void {
+    markTutorialSeen();
+    const firstLaunch = mount.querySelector<HTMLElement>("#first-launch");
+    if (firstLaunch) firstLaunch.hidden = true;
+    setFirstLaunchInert(false);
+    if (menuOpen()) closeMenu();
+    const defaults = createDefaultBuildState().presets[0];
+    activeBuild = {
+      name: "Tutorial Fire Route",
+      loadout: DEFAULT_MOVE_LOADOUT.slice(),
+      equipment: { ...defaults.equipment },
+    };
+    tutorialBuildInstalled = true;
+    Object.assign(playerCharacter, testFighterWithBuild(activeBuild.loadout, activeBuild.equipment));
+    syncBuildUi();
+    pendingMatchReset = false;
+    resetMatch();
+    timeline.paused = false;
+    tutorial.start();
+  }
+
+  function finishTutorial(): void {
+    if (menuOpen()) closeMenu();
+    tutorial.stop();
+    tutorialBuildInstalled = false;
+    activeBuild = buildState.presets[buildState.activePreset];
+    Object.assign(playerCharacter, testFighterWithBuild(activeBuild.loadout, activeBuild.equipment));
+    syncBuildUi();
+    pendingMatchReset = false;
+    resetMatch();
+    timeline.paused = false;
+    mount.querySelector<HTMLButtonElement>("[data-action='menu']")?.focus();
+  }
+
+  function advanceTutorial(): void {
+    if (!latestTutorialSnapshot) return;
+    if (latestTutorialSnapshot.lessonComplete && latestTutorialSnapshot.lessonIndex === latestTutorialSnapshot.lessonCount - 1) {
+      finishTutorial();
+      return;
+    }
+    tutorial.nextLesson();
+    if (tutorial.consumeResetRequest()) resetMatch();
+    timeline.paused = false;
+  }
+
+  function skipFirstLaunch(): void {
+    markTutorialSeen();
+    const firstLaunch = mount.querySelector<HTMLElement>("#first-launch");
+    if (firstLaunch) firstLaunch.hidden = true;
+    setFirstLaunchInert(false);
+    timeline.paused = false;
+    openMenu();
+    showTab("training");
+    mount.querySelector<HTMLButtonElement>("[data-menu-tab='training']")?.focus();
+  }
+
+  function syncTutorialUi(snapshot: TutorialSnapshot): void {
+    latestTutorialSnapshot = snapshot;
+    const hud = mount.querySelector<HTMLElement>("#tutorial-hud");
+    if (hud) {
+      hud.hidden = !snapshot.active;
+      textIn(hud, "#tutorial-lesson-count", `LESSON ${snapshot.lessonIndex + 1} / ${snapshot.lessonCount} · STEP ${snapshot.stepIndex + 1} / ${snapshot.stepCount}`);
+      textIn(hud, "#tutorial-title", snapshot.title);
+      textIn(hud, "#tutorial-objective", snapshot.lessonComplete ? snapshot.success : snapshot.objective);
+      textIn(hud, "#tutorial-success", snapshot.confirmation ? `✓ ${snapshot.confirmation.toUpperCase()}` : "");
+      textIn(hud, "#tutorial-hint", snapshot.hint);
+      const telegraph = hud.querySelector<HTMLElement>("#tutorial-telegraph");
+      if (telegraph) {
+        telegraph.hidden = snapshot.telegraph === null;
+        telegraph.textContent = snapshot.telegraph ?? "";
+      }
+      const next = hud.querySelector<HTMLButtonElement>("[data-action='next-tutorial-lesson']");
+      if (next) {
+        next.hidden = !snapshot.lessonComplete;
+        next.textContent = snapshot.lessonIndex === snapshot.lessonCount - 1 ? "Finish tutorial" : "Next lesson";
+      }
+    }
+    const summary = mount.querySelector<HTMLElement>("#tutorial-progress-summary");
+    if (summary) summary.innerHTML = TUTORIAL_LESSONS.map((lesson, index) => `<article class="${snapshot.completedLessons.includes(lesson.id) ? "complete" : ""}"><span>${String(index + 1).padStart(2, "0")}</span><strong>${lesson.title}</strong><em>${snapshot.completedLessons.includes(lesson.id) ? "COMPLETE" : "READY"}</em></article>`).join("");
+  }
+
+  function textIn(root: HTMLElement, selector: string, value: string): void {
+    const target = root.querySelector<HTMLElement>(selector);
+    if (target) target.textContent = value;
+  }
+
   function resetMatch(): void {
     timeline.reset();
     dummy.reset();
@@ -1079,10 +1315,10 @@ export function startLab(mount: HTMLElement): () => void {
     if (edge(now, previousUi, "back") || edge(now, previousUi, "menu")) closeMenu();
     if (edge(now, previousUi, "leftBumper")) cycleTab(-1);
     if (edge(now, previousUi, "rightBumper")) cycleTab(1);
-    if (edge(now, previousUi, "up")) focusGamepadTarget(-1);
-    if (edge(now, previousUi, "down")) focusGamepadTarget(1);
-    if (edge(now, previousUi, "left")) adjustFocused(-1);
-    if (edge(now, previousUi, "right")) adjustFocused(1);
+    if (edge(now, previousUi, "up")) focusGamepadTarget("up");
+    if (edge(now, previousUi, "down")) focusGamepadTarget("down");
+    if (edge(now, previousUi, "left") && !adjustFocused(-1)) focusGamepadTarget("left");
+    if (edge(now, previousUi, "right") && !adjustFocused(1)) focusGamepadTarget("right");
     if (edge(now, previousUi, "confirm")) activateFocused();
     previousUi = now;
   }
@@ -1091,36 +1327,63 @@ export function startLab(mount: HTMLElement): () => void {
     return [...mount.querySelectorAll<HTMLElement>("[data-gamepad-nav]")].filter((element) => !element.closest("[hidden]") && !(element instanceof HTMLButtonElement && element.disabled));
   }
 
-  function focusGamepadTarget(delta: number): void {
+  function focusGamepadTarget(direction: "up" | "down" | "left" | "right"): void {
     const targets = visibleGamepadTargets();
     if (targets.length === 0) return;
-    const current = document.activeElement instanceof HTMLElement ? targets.findIndex((target) => target === document.activeElement || target.contains(document.activeElement)) : -1;
-    const raw = current + delta;
-    const next = preferences.controls.menuWrap ? (raw + targets.length) % targets.length : Math.max(0, Math.min(targets.length - 1, raw));
-    targets[next]?.focus();
+    const current = document.activeElement instanceof HTMLElement
+      ? targets.find((target) => target === document.activeElement || target.contains(document.activeElement))
+      : undefined;
+    if (!current) {
+      mount.querySelector<HTMLButtonElement>(`[data-menu-tab='${activeTab}']`)?.focus();
+      return;
+    }
+    const from = centerOf(current.getBoundingClientRect());
+    const candidates = targets.filter((target) => target !== current).map((target) => {
+      const to = centerOf(target.getBoundingClientRect());
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      const primary = direction === "left" ? -dx : direction === "right" ? dx : direction === "up" ? -dy : dy;
+      const secondary = direction === "left" || direction === "right" ? Math.abs(dy) : Math.abs(dx);
+      return { target, primary, secondary, to };
+    }).filter((candidate) => candidate.primary > 3)
+      .sort((a, b) => (a.primary + a.secondary * 2.2) - (b.primary + b.secondary * 2.2));
+    let next = candidates[0]?.target;
+    if (!next && preferences.controls.menuWrap) {
+      const wrapped = targets.filter((target) => target !== current).sort((a, b) => {
+        const ca = centerOf(a.getBoundingClientRect());
+        const cb = centerOf(b.getBoundingClientRect());
+        const edgeA = direction === "left" ? -ca.x : direction === "right" ? ca.x : direction === "up" ? -ca.y : ca.y;
+        const edgeB = direction === "left" ? -cb.x : direction === "right" ? cb.x : direction === "up" ? -cb.y : cb.y;
+        return edgeB - edgeA;
+      });
+      next = wrapped[0];
+    }
+    next?.focus();
     gameAudio.play("navigate");
   }
 
-  function adjustFocused(delta: number): void {
+  function adjustFocused(delta: number): boolean {
     const active = document.activeElement;
     const select = active instanceof HTMLSelectElement ? active : active instanceof HTMLElement ? active.querySelector("select") : null;
     if (select) {
       select.selectedIndex = Math.max(0, Math.min(select.options.length - 1, select.selectedIndex + delta));
       select.dispatchEvent(new Event("change", { bubbles: true }));
-      return;
+      return true;
     }
     const range = active instanceof HTMLInputElement && active.type === "range" ? active : active instanceof HTMLElement ? active.querySelector<HTMLInputElement>("input[type='range']") : null;
     if (range) {
       const step = Number(range.step) || 1;
       range.value = String(Math.max(Number(range.min), Math.min(Number(range.max), Number(range.value) + step * delta)));
       range.dispatchEvent(new Event("input", { bubbles: true }));
-      return;
+      return true;
     }
     const checkbox = active instanceof HTMLInputElement && active.type === "checkbox" ? active : active instanceof HTMLElement ? active.querySelector<HTMLInputElement>("input[type='checkbox']") : null;
     if (checkbox) {
       checkbox.checked = delta > 0;
       checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
     }
+    return false;
   }
 
   function activateFocused(): void {
@@ -1160,8 +1423,7 @@ export function startLab(mount: HTMLElement): () => void {
     return true;
   }
 
-  function trapFocus(event: KeyboardEvent): void {
-    const dialog = required("lab-menu");
+  function trapFocus(event: KeyboardEvent, dialog = required("lab-menu")): void {
     const items = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((element) => !element.closest("[hidden]") && !element.inert);
     if (items.length === 0) {
       event.preventDefault();
@@ -1183,6 +1445,10 @@ export function startLab(mount: HTMLElement): () => void {
 
 function isFormControl(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement;
+}
+
+function centerOf(rect: DOMRect): { x: number; y: number } {
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 }
 
 function cueForDebuff(debuff: number): "burn" | "poison" | "freeze" | "shock" | "bleed" {
