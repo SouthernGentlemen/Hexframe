@@ -39,6 +39,7 @@ describe("combat lab timeline", () => {
 
   it("stops a multi-frame advance on the resolved contact frame", () => {
     const { sim, timeline } = contactTimeline();
+    timeline.pauseOnContact = true;
     const reports = timeline.stepFrames(20);
     const contact = reports.find((report) => report.contacts.length > 0);
 

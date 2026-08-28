@@ -126,6 +126,7 @@ export function routeForMove(move: MoveDef, character: CharacterDef): MoveDef[] 
 
 export function routeTopologyMarkup(move: MoveDef, character: CharacterDef, loadout: readonly number[]): string {
   const route = routeForMove(move, character);
+  const routeIds = route.slice(0, 3).map((candidate) => candidate.id).join(",");
   return `<section class="route-topology" aria-label="Authored route containing ${escapeHtml(moveName(move))}">
     <header><span>AUTHORED ROUTE</span><em>${route.every((candidate) => equippedSlots(loadout, candidate.id).length > 0) ? "COMPLETE" : "INCOMPLETE"}</em></header>
     <div>${route.map((candidate, index) => {
@@ -133,6 +134,7 @@ export function routeTopologyMarkup(move: MoveDef, character: CharacterDef, load
       const active = candidate.id === move.id;
       return `${index === 0 ? "" : '<i aria-hidden="true">↓</i>'}<article class="${active ? "selected" : ""}"><b>${escapeHtml(moveName(candidate))}</b><span>${slots.length > 0 ? `✓ ${slots.map(actionSlotLabel).join(" · ")}` : "✕ NOT EQUIPPED"}</span></article>`;
     }).join("")}</div>
+    ${route.length >= 2 ? `<footer class="equip-route"><button type="button" data-gamepad-nav data-equip-route="${routeIds}">Equip route</button><div data-equip-route-chooser hidden><span>CHOOSE DIRECTION</span>${["↑ / Y", "← / X", "→ / B", "↓ / A"].map((label, column) => `<button type="button" data-gamepad-nav data-equip-route-column="${column}" data-route-moves="${routeIds}">${label}</button>`).join("")}</div></footer>` : ""}
   </section>`;
 }
 

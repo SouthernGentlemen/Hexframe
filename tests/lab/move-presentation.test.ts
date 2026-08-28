@@ -16,7 +16,7 @@ describe("player-facing move presentation", () => {
     expect(equippedSummary(loadout, MoveId.PrismBurst)).toContain("EQUIPPED × 2");
     expect(equippedSummary(loadout, MoveId.PrismBurst)).toContain(actionSlotLabel(8));
     expect(equippedSummary(loadout, MoveId.PrismBurst)).toContain(actionSlotLabel(9));
-    expect(equippedSummary(loadout, MoveId.ThunderClap)).toBe("NOT EQUIPPED");
+    expect(equippedSummary(loadout, MoveId.ReaperKick)).toBe("NOT EQUIPPED");
   });
 
   it("builds the visible route from authored cancel targets", () => {

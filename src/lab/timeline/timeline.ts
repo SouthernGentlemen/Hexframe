@@ -29,8 +29,8 @@ const NEUTRAL_INPUTS: readonly InputFrame[] = new Array<number>(PLAYER_COUNT).fi
  * button wearing a `-1` label.
  */
 export class Timeline {
-  paused = true;
-  pauseOnContact = true;
+  paused = false;
+  pauseOnContact = false;
   speed: LabSpeed = 100;
 
   /** The report that produced the state currently being displayed, when one exists. */
