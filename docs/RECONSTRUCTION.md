@@ -114,3 +114,77 @@ with the identity transform applied — verified by tree comparison, not by insp
 
 Every reconstructed commit was checked out in isolation and independently type-checked,
 tested and built. No commit in this history is known to be broken.
+
+### Repairs folded forward
+
+The source history was **not green at every commit**. Measured by checking out each source
+commit and running its own toolchain:
+
+| Source commit | Type errors | Failing tests |
+| --- | --- | --- |
+| `77552ba` | 0 | 2 |
+| `21ee03e` | 4 | 2 |
+| `351f48f` | 13 | 2 |
+| `dd71145` | 0 | 0 |
+
+The final source commit, *"Fix validation regressions in cleanup pass"*, repaired defects
+introduced across the preceding six commits.
+
+Reproducing that faithfully would mean publishing six commits that are known not to build
+or pass, which the change standard forbids. The reconstruction therefore **introduces the
+repaired form of each affected file in the change that introduces the file**, rather than
+adding a later corrective change:
+
+| File | Repaired in | Folded into |
+| --- | --- | --- |
+| `tests/simulation/advanced-combat.test.ts` | `dd71145` | HF-059 |
+| `tests/simulation/team-combat.test.ts` | `dd71145` | HF-059 |
+| `src/client/campaign-menu-cleanup.ts` | `dd71145` | HF-060 |
+| `tests/renderer/character-presentation.test.ts` | `dd71145` | HF-062 |
+
+`dd71145` is recorded in `CHANGE-MAP.csv` against each of those changes with
+`mapping_type=consolidated`. No defect reaches a public commit, and nothing is concealed:
+the source's own repair commit is named here and in the provenance map.
+
+This applies only to defects that were **never released**. A defect that reaches a
+published release is corrected forward under its own change ID, as
+`docs/CHANGE-MANAGEMENT.md` and `SECURITY.md` require.
+
+## Verification of this reconstruction
+
+Every claim below is reproducible from this repository.
+
+**Every commit is independently sound.** Each of the 62 reconstructed source commits was
+checked out in isolation and independently type-checked, tested and built.
+
+**The end state matches the source exactly.** The tree at `HF-062` is byte-identical to
+source commit `dd71145` with the identity transform applied, except for this file and
+`docs/history/`. Both trees pass the same 140 tests across 33 files.
+
+**Release boundaries match real product states.** Each release tag corresponds to a source
+commit whose tree the reconstruction reproduces:
+
+| Release | Reconstructed state equals source commit |
+| --- | --- |
+| `v0.1.0` | `842eac0` |
+| `v0.2.0` | `c892ea2` |
+| `v0.3.0` | `fb5f6a5` |
+| `v0.4.0` | `1ef855f` |
+| `v0.5.0` | `c6d74e8` |
+| `v0.6.0` | `dd71145` |
+
+`v0.7.0` has no source equivalent: it is the engineering record, CI, deployment identity
+and licence added by this program.
+
+## What the reconstruction changed on purpose
+
+| Change | Reason |
+| --- | --- |
+| Product renamed to Hexframe throughout | The public product identity. See "Product identity" above. |
+| Storage keys and the identity cookie renamed | They are part of the product identity, and the new origin has no prior state to migrate. |
+| Legacy-key migration not carried forward | Unreachable on a new origin; keeping it would be dead code implying a history Hexframe does not have. |
+| `vite.config.ts` staged at `HF-001` | The foundation commit must name only pages that exist. |
+| `README.md` purpose-written at `HF-001` | The source README described a finished prototype at a commit that was not one. |
+| Repairs folded forward | See "Repairs folded forward" above. |
+
+Nothing else in the reconstructed source tree differs from the original implementation.
