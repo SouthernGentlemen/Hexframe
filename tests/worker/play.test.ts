@@ -53,11 +53,12 @@ describe("public playtest route", () => {
     expect(await response.text()).toContain('src="/training/assets/game.js"');
   });
 
-  it("strips unauthenticated developer tools from Training", async () => {
+  it("strips unauthenticated developer tools without rendering redirect text", async () => {
     const url = new URL("https://hexframe.test/training/?mode=training&debug=1");
     const response = await handleTraining(new Request(url), environment([]), url);
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("/training/?mode=training");
+    expect(await response.text()).toBe("");
   });
 
   it("remains read-only at the HTTP boundary", async () => {
@@ -67,8 +68,18 @@ describe("public playtest route", () => {
     expect(response.headers.get("allow")).toBe("GET, HEAD");
   });
 
-  it.each(["/", "/campaign/", "/fight/", "/loadouts/loadout-01/", "/forge/", "/codex/moves/3/", "/settings/"])(
-    "serves the routed SPA document at %s",
+  it.each(["/", "/codex/", "/codex/moves/3/"])(
+    "routes the lab-focused surface at %s through operator sign in",
+    async (pathname) => {
+      const response = await worker.fetch(new Request(`https://hexframe.test${pathname}`), environment([]));
+      expect(response.status).toBe(302);
+      expect(response.headers.get("location")).toContain("/login?next=");
+      expect(await response.text()).toBe("");
+    },
+  );
+
+  it.each(["/campaign/", "/fight/", "/loadouts/loadout-01/", "/forge/", "/settings/"])(
+    "keeps the legacy player-facing SPA route available at %s",
     async (pathname) => {
       const paths: string[] = [];
       const response = await worker.fetch(new Request(`https://hexframe.test${pathname}`), environment(paths));
