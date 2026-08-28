@@ -1,5 +1,5 @@
 import { px } from "../combat/constants";
-import type { FighterState, FrameReport, SimConfig } from "../combat/types";
+import type { FighterState, FrameReport, MoveDef, SimConfig } from "../combat/types";
 import { ContactKind, DebuffEventKind, DebuffKind, HitLevel } from "../combat/types";
 import { Simulation } from "../combat/simulation/simulation";
 import { DEFAULT_MOVE_LOADOUT, testFighterWithBuild, testFighterWithLoadout } from "../content/test-fighter";
@@ -27,7 +27,7 @@ import { DEFAULT_ACTION_KEYMAP, DEFAULT_KEYMAP_P1, DEFAULT_KEYMAP_P2, NO_ACTION_
 import { hashState } from "../rollback/hashing/fnv";
 import type { DebugToggles } from "../renderer/svg/debug-overlay";
 import { Renderer } from "../renderer/svg/renderer";
-import { loadBuildState, persistBuildState } from "./build-state";
+import { createDefaultBuildState, loadBuildState, persistBuildState } from "./build-state";
 import { DebugPanel } from "./debugger/panel";
 import { DummyController, DummyMode } from "./dummy/dummy";
 import type { DummyModeValue } from "./dummy/dummy";
@@ -57,7 +57,19 @@ import {
   materialDetailMarkup,
   skillBoardMarkup,
 } from "./view";
-import { MoveShowcase } from "./move-showcase";
+import { MoveDemonstration } from "./move-demonstration";
+import type { MoveDemonstrationMode, MoveDemonstrationState } from "./move-demonstration";
+import {
+  ACTION_BANKS,
+  actionSlotInput,
+  actionSlotLabel,
+  codexMoveDetailMarkup,
+  describeMoveFrame,
+  equippedSlots,
+  equippedSummary,
+  moveName,
+  routeTopologyMarkup,
+} from "./move-presentation";
 
 const FRAME_MS = 1000 / 60;
 const FOCUSABLE = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex='-1'])";
@@ -70,7 +82,7 @@ const DUMMY_OPTIONS: readonly [DummyModeValue, string][] = [
   [DummyMode.Reversal, "Reversal"],
 ];
 
-type MenuTab = "loadout" | "armor" | "craft" | "status" | "settings" | "training" | "debug";
+type MenuTab = "loadout" | "armor" | "craft" | "moves" | "status" | "settings" | "training" | "debug";
 type SettingsTab = "audio" | "video" | "accessibility" | "controls";
 type InventoryTab = "armor" | "materials";
 
@@ -109,11 +121,13 @@ export function startLab(mount: HTMLElement): () => void {
       playback: TEST_FIGHTER_PLAYBACK,
     })),
   });
-  const moveShowcase = new MoveShowcase(required("move-showcase-stage"), playerCharacter, {
+  const demonstrationAssets = {
     model: TEST_FIGHTER_MODEL,
     rig: TEST_FIGHTER_RIG,
     animations: TEST_FIGHTER_ANIMATIONS,
-  });
+  };
+  const moveShowcase = new MoveDemonstration(required("move-showcase-stage"), playerCharacter, demonstrationAssets);
+  const codexDemonstration = new MoveDemonstration(required("codex-move-stage"), playerCharacter, demonstrationAssets, syncCodexDemonstrationUi);
   const panel = publicPlay ? null : new DebugPanel(required("debug-panel"));
   const toggles: DebugToggles = { hitboxes: false, hurtboxes: false, pushboxes: false, origins: false, skeleton: false, boneNames: false, velocity: false };
 
@@ -144,11 +158,22 @@ export function startLab(mount: HTMLElement): () => void {
   let renderedTimelinePlayhead = -2;
   let timelinePinnedMoveId = -1;
   let interactionRenderKey = "";
+  let armedSlot = 0;
+  let moveRoleFilter = "all";
+  let moveFamilyFilter = "all";
+  let moveTerrainFilter = "all";
+  let moveSearch = "";
+  let codexSearch = "";
+  let pendingMatchReset = false;
+  const buildChangeCounts = [0, 0, 0];
 
   gamepad.setDeadzone(preferences.controls.stickDeadzone);
   gameAudio.setCaptionHandler(showCaption);
   gameAudio.update(preferences.audio);
   showMovePreview(activeBuild.loadout[0], true);
+  selectAction(0, false);
+  applyMoveFilters();
+  applyCodexSearch();
 
   const render = (now = performance.now()): void => {
     const state = sim.getState();
@@ -181,6 +206,7 @@ export function startLab(mount: HTMLElement): () => void {
     renderFrameTimeline(state.fighters[0].moveId, state.fighters[0].moveFrame);
     renderInteractionHistory();
     moveShowcase.render(now);
+    codexDemonstration.render(now);
   };
 
   const loop = (now: number): void => {
@@ -202,7 +228,16 @@ export function startLab(mount: HTMLElement): () => void {
   };
 
   const click = (event: Event): void => {
-    const button = (event.target as Element).closest<HTMLButtonElement>("button");
+    const element = event.target instanceof Element ? event.target : null;
+    if (!element) return;
+    const codexFrame = element.closest<HTMLElement>("[data-codex-timeline] [data-frame]");
+    if (codexFrame?.dataset.frame !== undefined) {
+      codexDemonstration.seek(Number(codexFrame.dataset.frame));
+      return;
+    }
+    const armTarget = element.closest<HTMLElement>("[data-arm-slot]");
+    if (armTarget?.dataset.armSlot !== undefined) selectAction(Number(armTarget.dataset.armSlot), false);
+    const button = element.closest<HTMLButtonElement>("button");
     if (!button) return;
     gameAudio.ensure();
     gameAudio.play("confirm");
@@ -219,6 +254,9 @@ export function startLab(mount: HTMLElement): () => void {
     if (action === "scenario-replay") replayCapturedScenario();
     if (action === "scenario-export") exportCapturedScenario();
     if (action === "default-loadout") resetActiveLoadout();
+    if (action === "demo-prev") codexDemonstration.step(-1);
+    if (action === "demo-toggle") codexDemonstration.toggle();
+    if (action === "demo-next") codexDemonstration.step(1);
     if (action === "craft-selected") craftSelectedArmor();
     if (action === "reset-preferences") replacePreferences(resetPreferences());
     if (button.dataset.menuTab) showTab(button.dataset.menuTab as MenuTab);
@@ -226,6 +264,12 @@ export function startLab(mount: HTMLElement): () => void {
     if (button.dataset.inventoryTab) showInventoryTab(button.dataset.inventoryTab as InventoryTab);
     if (button.dataset.preset !== undefined) switchPreset(Number(button.dataset.preset));
     if (button.dataset.selectAction !== undefined) selectAction(Number(button.dataset.selectAction));
+    if (button.dataset.equipMove !== undefined) assignMove(armedSlot, Number(button.dataset.equipMove));
+    if (button.dataset.codexMove !== undefined) showMovePreview(Number(button.dataset.codexMove), true);
+    if (button.dataset.moveFilter && button.dataset.filterValue) setMoveFilter(button.dataset.moveFilter, button.dataset.filterValue);
+    if (button.dataset.presetAction) handlePresetAction(button.dataset.presetAction);
+    if (button.dataset.demoMode) setDemonstrationMode(button.dataset.demoMode as MoveDemonstrationMode);
+    if (button.dataset.demoSpeed) setDemonstrationSpeed(Number(button.dataset.demoSpeed));
     if (button.dataset.armorSlot) selectArmorSlot(button.dataset.armorSlot as ArmorSlot);
     if (button.dataset.armorItem) equipArmor(button.dataset.armorItem);
     if (button.dataset.materialItem) renderMaterialDetail(button.dataset.materialItem);
@@ -259,6 +303,7 @@ export function startLab(mount: HTMLElement): () => void {
     }
     const slotText = target.dataset.loadoutSlot;
     if (slotText !== undefined) assignMove(Number(slotText), Number(target.value));
+    if (target.dataset.buildName !== undefined) renameActiveBuild(target.value);
     if (target.dataset.prefSection && target.dataset.prefKey) updatePreference(target);
     render();
   };
@@ -266,6 +311,15 @@ export function startLab(mount: HTMLElement): () => void {
   const input = (event: Event): void => {
     const target = event.target as HTMLInputElement;
     if (target.type === "range" && target.dataset.prefSection && target.dataset.prefKey) updatePreference(target);
+    if (target.dataset.moveSearch !== undefined) {
+      moveSearch = target.value.trim().toLowerCase();
+      applyMoveFilters();
+    }
+    if (target.dataset.codexSearch !== undefined) {
+      codexSearch = target.value.trim().toLowerCase();
+      applyCodexSearch();
+    }
+    if (target.id === "codex-frame-scrubber") codexDemonstration.seek(Number(target.value) - 1);
   };
 
   const previewContent = (event: Event): void => {
@@ -273,6 +327,7 @@ export function startLab(mount: HTMLElement): () => void {
       "select[data-loadout-slot], [data-move-preview], [data-armor-item], [data-material-item], [data-craft-item]",
     ) : null;
     if (!target) return;
+    if (event.type === "pointerover" && target.dataset.codexMove !== undefined) return;
     if (target instanceof HTMLSelectElement || target.dataset.movePreview) {
       const moveId = target instanceof HTMLSelectElement ? Number(target.value) : Number(target.dataset.movePreview);
       showMovePreview(moveId);
@@ -350,6 +405,7 @@ export function startLab(mount: HTMLElement): () => void {
     secondKeyboard.dispose();
     renderer.dispose();
     moveShowcase.dispose();
+    codexDemonstration.dispose();
     gameAudio.setCaptionHandler(null);
     gameAudio.dispose();
     mount.replaceChildren();
@@ -379,6 +435,10 @@ export function startLab(mount: HTMLElement): () => void {
     if (!menuOpen()) return;
     required("menu-scrim").hidden = true;
     setGameContentInert(false);
+    if (pendingMatchReset) {
+      resetMatch();
+      pendingMatchReset = false;
+    }
     if (resumeAfterMenu) timeline.paused = false;
     resumeAfterMenu = false;
     (focusBeforeMenu ?? mount.querySelector<HTMLButtonElement>("[data-action='menu']"))?.focus();
@@ -427,6 +487,7 @@ export function startLab(mount: HTMLElement): () => void {
     activeBuild = buildState.presets[index];
     selectedArmorSlot = "head";
     rebuildActiveBuild();
+    selectAction(armedSlot, false);
     showMovePreview(activeBuild.loadout[0], true);
     const item = armorById(activeBuild.equipment[selectedArmorSlot]);
     if (item) renderArmorDetail(item.id);
@@ -434,23 +495,37 @@ export function startLab(mount: HTMLElement): () => void {
 
   function assignMove(slot: number, moveId: number): void {
     if (slot < 0 || slot >= activeBuild.loadout.length || !validMoveIds.has(moveId)) return;
+    armedSlot = slot;
+    if (activeBuild.loadout[slot] === moveId) {
+      required("equip-feedback").textContent = `${moveName(playerCharacter.moves.find((candidate) => candidate.id === moveId)!)} is already equipped in ${actionSlotLabel(slot)}.`;
+      return;
+    }
     activeBuild.loadout[slot] = moveId;
+    markBuildChanged();
     rebuildActiveBuild();
     showMovePreview(moveId, true);
+    required("equip-feedback").textContent = `EQUIPPED · ${moveName(playerCharacter.moves.find((candidate) => candidate.id === moveId)!)} → ${actionSlotLabel(slot)}`;
   }
 
   function resetActiveLoadout(): void {
     activeBuild.loadout = DEFAULT_MOVE_LOADOUT.slice();
+    markBuildChanged();
     rebuildActiveBuild();
   }
 
-  function selectAction(slot: number): void {
+  function selectAction(slot: number, focusCatalog = true): void {
     if (!Number.isInteger(slot) || slot < 0 || slot >= activeBuild.loadout.length) return;
+    armedSlot = slot;
     for (const button of mount.querySelectorAll<HTMLElement>("[data-select-action]")) button.classList.toggle("selected", Number(button.dataset.selectAction) === slot);
-    const select = mount.querySelector(`[data-loadout-slot='${slot}']`) as unknown as HTMLSelectElement | null;
+    for (const row of mount.querySelectorAll<HTMLElement>("[data-arm-slot]")) row.classList.toggle("armed", Number(row.dataset.armSlot) === slot);
     showMovePreview(activeBuild.loadout[slot]);
-    select?.focus();
-    select?.scrollIntoView({ block: "nearest", behavior: preferences.accessibility.motion === "reduced" ? "auto" : "smooth" });
+    syncArmedSlotUi();
+    applyMoveFilters();
+    if (focusCatalog) {
+      const firstMove = required("move-library").querySelector<HTMLButtonElement>(".move-card:not([hidden])");
+      firstMove?.focus();
+      required("armed-slot-panel").scrollIntoView({ block: "nearest", behavior: preferences.accessibility.motion === "reduced" ? "auto" : "smooth" });
+    }
   }
 
   function showInventoryTab(tab: InventoryTab): void {
@@ -476,6 +551,7 @@ export function startLab(mount: HTMLElement): () => void {
     if (!item || !buildState.inventory.armor.includes(item.id)) return;
     selectedArmorSlot = item.slot;
     activeBuild.equipment[item.slot] = item.id;
+    markBuildChanged();
     rebuildActiveBuild();
     renderArmorDetail(item.id);
   }
@@ -505,7 +581,7 @@ export function startLab(mount: HTMLElement): () => void {
     persistBuildState(buildState);
     syncBuildUi();
     if (showcasedMoveId > 0) showMovePreview(showcasedMoveId, true);
-    resetMatch();
+    pendingMatchReset = true;
   }
 
   function syncBuildUi(): void {
@@ -525,8 +601,23 @@ export function startLab(mount: HTMLElement): () => void {
       const active = Number(button.dataset.preset) === buildState.activePreset;
       button.classList.toggle("active", active);
       button.setAttribute("aria-pressed", String(active));
+      button.setAttribute("aria-label", `Loadout ${Number(button.dataset.preset) + 1}: ${buildState.presets[Number(button.dataset.preset)]?.name ?? "Build"}`);
     }
     for (const label of mount.querySelectorAll<HTMLElement>("[data-build-number]")) label.textContent = `BUILD ${String(buildState.activePreset + 1).padStart(2, "0")}`;
+    const buildName = mount.querySelector<HTMLInputElement>("[data-build-name]");
+    if (buildName && document.activeElement !== buildName) buildName.value = activeBuild.name;
+    const changes = buildChangeCounts[buildState.activePreset];
+    for (const dirty of mount.querySelectorAll<HTMLElement>("[data-build-dirty]")) dirty.textContent = changes > 0 ? " *" : "";
+    for (const output of mount.querySelectorAll<HTMLOutputElement>("[data-build-changes]")) output.textContent = changes > 0 ? `${changes} change${changes === 1 ? "" : "s"} · auto-saved · applies on close` : "Auto-saved · applies when the menu closes";
+    for (const element of mount.querySelectorAll<HTMLElement>("[data-equipped-move]")) {
+      const moveId = Number(element.dataset.equippedMove);
+      const summary = equippedSummary(activeBuild.loadout, moveId);
+      element.textContent = summary;
+      element.classList.toggle("not-equipped", equippedSlots(activeBuild.loadout, moveId).length === 0);
+    }
+    syncArmedSlotUi();
+    applyMoveFilters();
+    applyCodexSearch();
     required("character-sheet-title").textContent = activeBuild.name;
     required("stat-vitality").textContent = String(playerCharacter.health);
     required("stat-stamina").textContent = String(playerCharacter.stamina);
@@ -549,6 +640,116 @@ export function startLab(mount: HTMLElement): () => void {
       if (name) name.textContent = item.name;
       if (armor) armor.textContent = `${item.armor} armor`;
     }
+  }
+
+  function syncArmedSlotUi(): void {
+    const move = playerCharacter.moves.find((candidate) => candidate.id === activeBuild.loadout[armedSlot]);
+    const bank = ACTION_BANKS[Math.trunc(armedSlot / 4)];
+    required("armed-slot-panel").innerHTML = `<span>SELECTED SLOT</span><strong>${actionSlotInput(armedSlot)}</strong><em>${bank.name.toUpperCase()} / SLOT ${String(armedSlot + 1).padStart(2, "0")}</em><small>CURRENTLY: ${move ? moveName(move).toUpperCase() : "UNASSIGNED"}</small>`;
+  }
+
+  function markBuildChanged(amount = 1): void {
+    buildChangeCounts[buildState.activePreset] += amount;
+  }
+
+  function renameActiveBuild(value: string): void {
+    const name = value.trim().slice(0, 32);
+    if (!name || name === activeBuild.name) {
+      const input = mount.querySelector<HTMLInputElement>("[data-build-name]");
+      if (input) input.value = activeBuild.name;
+      return;
+    }
+    activeBuild.name = name;
+    markBuildChanged();
+    persistBuildState(buildState);
+    syncBuildUi();
+  }
+
+  function handlePresetAction(action: string): void {
+    if (action === "rename") {
+      const input = mount.querySelector<HTMLInputElement>("[data-build-name]");
+      input?.focus();
+      input?.select();
+      return;
+    }
+    if (action === "duplicate") {
+      const target = (buildState.activePreset + 1) % buildState.presets.length;
+      buildState.presets[target] = {
+        name: `${activeBuild.name.replace(/\s+Copy(?: \d+)?$/, "")} Copy`.slice(0, 32),
+        loadout: activeBuild.loadout.slice(),
+        equipment: { ...activeBuild.equipment },
+      };
+      buildChangeCounts[target] += 1;
+      switchPreset(target);
+      return;
+    }
+    if (action === "clear") {
+      activeBuild.loadout = Array.from({ length: activeBuild.loadout.length }, () => 1);
+      activeBuild.equipment = { ...createDefaultBuildState().presets[0].equipment };
+      markBuildChanged();
+      rebuildActiveBuild();
+      showMovePreview(1, true);
+      return;
+    }
+    if (action === "reset") {
+      const fallback = createDefaultBuildState().presets[buildState.activePreset];
+      activeBuild.name = fallback.name;
+      activeBuild.loadout = fallback.loadout.slice();
+      activeBuild.equipment = { ...fallback.equipment };
+      markBuildChanged();
+      rebuildActiveBuild();
+      showMovePreview(activeBuild.loadout[0], true);
+    }
+  }
+
+  function setMoveFilter(kind: string, value: string): void {
+    if (kind === "role") moveRoleFilter = value;
+    if (kind === "family") moveFamilyFilter = value;
+    if (kind === "terrain") moveTerrainFilter = value;
+    for (const button of mount.querySelectorAll<HTMLButtonElement>(`[data-move-filter='${kind}']`)) {
+      const active = button.dataset.filterValue === value;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    }
+    applyMoveFilters();
+  }
+
+  function applyMoveFilters(): void {
+    const library = required("move-library");
+    const cards = [...library.querySelectorAll<HTMLButtonElement>(".move-card[data-equip-move]")];
+    const bank = Math.trunc(armedSlot / 4);
+    const priority: Record<number, readonly string[]> = {
+      0: ["starter", "reversal", "link", "cashout"],
+      1: ["link", "starter", "reversal", "cashout"],
+      2: ["link", "cashout", "starter", "reversal"],
+      3: ["cashout", "reversal", "link", "starter"],
+    };
+    cards.sort((a, b) => {
+      const roles = priority[bank] ?? priority[0];
+      return roles.indexOf(a.dataset.moveRole ?? "starter") - roles.indexOf(b.dataset.moveRole ?? "starter")
+        || Number(a.dataset.equipMove) - Number(b.dataset.equipMove);
+    });
+    let visible = 0;
+    for (const card of cards) {
+      const matchesRole = moveRoleFilter === "all" || card.dataset.moveRole === moveRoleFilter;
+      const matchesFamily = moveFamilyFilter === "all" || (card.dataset.moveFamily ?? "").split(" ").includes(moveFamilyFilter);
+      const matchesTerrain = moveTerrainFilter === "all" || card.dataset.moveTerrain === moveTerrainFilter;
+      const matchesSearch = !moveSearch || (card.dataset.moveSearchText ?? "").includes(moveSearch);
+      card.hidden = !(matchesRole && matchesFamily && matchesTerrain && matchesSearch);
+      if (!card.hidden) visible++;
+      library.appendChild(card);
+    }
+    required("move-result-count").textContent = String(visible);
+    required("move-library-empty").hidden = visible > 0;
+  }
+
+  function applyCodexSearch(): void {
+    let firstVisible: HTMLButtonElement | null = null;
+    for (const button of mount.querySelectorAll<HTMLButtonElement>("[data-codex-move]")) {
+      button.hidden = Boolean(codexSearch) && !(button.dataset.codexSearchText ?? "").includes(codexSearch);
+      if (!button.hidden && !firstVisible) firstVisible = button;
+    }
+    if (codexSearch && firstVisible && !mount.querySelector("[data-codex-move].previewing:not([hidden])")) showMovePreview(Number(firstVisible.dataset.codexMove), true);
   }
 
   function syncInventoryUi(): void {
@@ -587,6 +788,11 @@ export function startLab(mount: HTMLElement): () => void {
     timelinePinnedMoveId = move.id;
     renderedTimelineMoveId = -1;
     moveShowcase.select(move.id);
+    required("codex-move-timeline").innerHTML = moveTimelineMarkup(move);
+    required("codex-move-detail").innerHTML = codexMoveDetailMarkup(move, playerCharacter, activeBuild.loadout);
+    required("move-route-topology").innerHTML = routeTopologyMarkup(move, playerCharacter, activeBuild.loadout);
+    decorateCodexTimeline(move);
+    codexDemonstration.select(move.id);
     const hitbox = move.hitboxes[0];
     const level = hitbox?.level === HitLevel.Low ? "LOW" : hitbox?.level === HitLevel.Overhead ? "OVERHEAD" : "MID";
     required("move-showcase-code").textContent = `MOVE ${String(move.id).padStart(2, "0")} · ${level}`;
@@ -600,7 +806,54 @@ export function startLab(mount: HTMLElement): () => void {
     required("move-stat-hitstun").textContent = `${hitbox?.hitstun ?? 0}f`;
     required("move-stat-blockstun").textContent = `${hitbox?.blockstun ?? 0}f`;
     required("move-showcase-tags").innerHTML = move.tags.map((tag) => `<li>${tag}</li>`).join("");
-    for (const card of mount.querySelectorAll<HTMLElement>(".move-card[data-move-preview]")) card.classList.toggle("previewing", Number(card.dataset.movePreview) === move.id);
+    const showcaseEquipped = mount.querySelector<HTMLElement>(".showcase-equipped");
+    if (showcaseEquipped) {
+      showcaseEquipped.dataset.equippedMove = String(move.id);
+      showcaseEquipped.textContent = equippedSummary(activeBuild.loadout, move.id);
+      showcaseEquipped.classList.toggle("not-equipped", equippedSlots(activeBuild.loadout, move.id).length === 0);
+    }
+    for (const card of mount.querySelectorAll<HTMLElement>("[data-move-preview]")) card.classList.toggle("previewing", Number(card.dataset.movePreview) === move.id);
+  }
+
+  function decorateCodexTimeline(move: MoveDef): void {
+    for (const cell of required("codex-move-timeline").querySelectorAll<HTMLElement>("[data-frame]")) {
+      const frame = Number(cell.dataset.frame);
+      cell.title = describeMoveFrame(move, frame, playerCharacter);
+    }
+  }
+
+  function syncCodexDemonstrationUi(state: MoveDemonstrationState): void {
+    const readout = mount.querySelector<HTMLElement>("#codex-frame-readout");
+    if (readout) readout.textContent = `${String(state.frame + 1).padStart(2, "0")} / ${String(state.move.duration).padStart(2, "0")}`;
+    const scrubber = mount.querySelector<HTMLInputElement>("#codex-frame-scrubber");
+    if (scrubber) {
+      scrubber.max = String(state.move.duration);
+      scrubber.value = String(state.frame + 1);
+      scrubber.setAttribute("aria-valuetext", `Frame ${state.frame + 1} of ${state.move.duration}`);
+    }
+    const detail = mount.querySelector<HTMLOutputElement>("#codex-frame-detail");
+    if (detail) detail.textContent = describeMoveFrame(state.move, state.frame, playerCharacter);
+    const toggle = mount.querySelector<HTMLButtonElement>("[data-action='demo-toggle']");
+    if (toggle) toggle.textContent = state.playing ? "Pause" : "Play";
+    for (const cell of mount.querySelectorAll<HTMLElement>("#codex-move-timeline [data-frame]")) cell.classList.toggle("playhead", Number(cell.dataset.frame) === state.frame);
+    for (const button of mount.querySelectorAll<HTMLButtonElement>("[data-demo-mode]")) {
+      const active = button.dataset.demoMode === state.mode;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    }
+    for (const button of mount.querySelectorAll<HTMLButtonElement>("[data-demo-speed]")) {
+      const active = Number(button.dataset.demoSpeed) === state.speed;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    }
+  }
+
+  function setDemonstrationMode(mode: MoveDemonstrationMode): void {
+    codexDemonstration.setMode(mode);
+  }
+
+  function setDemonstrationSpeed(speed: number): void {
+    codexDemonstration.setSpeed(speed);
   }
 
   function renderFrameTimeline(activeMoveId: number, activeMoveFrame: number): void {

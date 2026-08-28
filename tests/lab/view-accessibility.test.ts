@@ -33,12 +33,19 @@ describe("lab accessibility contract", () => {
     const html = view();
     expect(html).toContain('role="dialog" aria-modal="true"');
     expect(html.match(/role="tablist"/g)).toHaveLength(3);
-    expect(html.match(/role="tabpanel"/g)).toHaveLength(13);
+    expect(html.match(/role="tabpanel"/g)).toHaveLength(14);
     expect(html).toContain('id="page-loadout"');
     expect(html).toContain('id="page-armor"');
     expect(html).toContain('id="page-craft"');
+    expect(html).toContain('id="page-moves"');
     expect(html.match(/class="move-card"/g)).toHaveLength(28);
+    expect(html.match(/data-equip-move=/g)).toHaveLength(28);
+    expect(html).toContain('data-move-filter="role"');
+    expect(html).toContain('data-preset-action="duplicate"');
     expect(html).toContain('id="move-showcase-stage"');
+    expect(html).toContain('id="codex-move-stage"');
+    expect(html).toContain('id="codex-frame-scrubber"');
+    expect(html).toContain('data-demo-mode="block"');
     expect(html).toContain("Fast universal starter with short reach.");
     expect(html).toContain('id="combat-announcer" role="status" aria-live="polite"');
     expect(html).toContain('aria-label="Frame transport controls"');
@@ -71,7 +78,7 @@ describe("lab accessibility contract", () => {
     expect(html).not.toContain('data-menu-tab="debug"');
     expect(html).not.toContain('action="/logout"');
     expect(html).not.toContain('id="debug-panel"');
-    expect(html.match(/role="tabpanel"/g)).toHaveLength(12);
+    expect(html.match(/role="tabpanel"/g)).toHaveLength(13);
   });
 });
 

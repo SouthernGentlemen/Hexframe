@@ -1,4 +1,3 @@
-import { HitLevel } from "../combat/types";
 import type { CharacterDef, MoveDef } from "../combat/types";
 import { ACTION_SLOT_LABELS } from "../input/action-layout";
 import type { ArmorDef, ArmorInventory, ArmorSkillId, ArmorSlot, MaterialDef } from "../content/armor";
@@ -18,6 +17,23 @@ import { STATUS_RULES } from "../content/status-rules";
 import type { BuildState } from "./build-state";
 import { moveTimelineMarkup } from "./inspector";
 import type { LabPreferences } from "./preferences";
+import {
+  ACTION_BANKS,
+  MOVE_FAMILIES,
+  MOVE_ROLES,
+  actionSlotInput,
+  actionSlotLabel,
+  codexMoveDetailMarkup,
+  equippedSummary,
+  moveFamilies,
+  moveLevel,
+  moveName,
+  moveRole,
+  moveTerrain,
+  primaryDamage,
+  primaryHitbox,
+  routeTopologyMarkup,
+} from "./move-presentation";
 
 interface LabViewOptions {
   character: CharacterDef;
@@ -27,23 +43,16 @@ interface LabViewOptions {
   publicPlay?: boolean;
 }
 
-const ACTION_BANKS = [
-  { name: "Neutral", role: "Normals / neutral", input: "Base" },
-  { name: "Setup", role: "Mobility / setup", input: "LT" },
-  { name: "Power", role: "Power / specials", input: "RT" },
-  { name: "Finale", role: "Finishers / utility", input: "LT+RT" },
-] as const;
-
 export function buildLabView({ character, buildState, preferences, dummyOptions, publicPlay = false }: LabViewOptions): string {
   const preset = buildState.presets[buildState.activePreset];
   const initialMove = character.moves.find((move) => move.id === preset.loadout[0]) ?? character.moves[0];
-  const moveOptions = character.moves.map((move) => option(move.id, `${String(move.id).padStart(2, "0")} · ${nameOf(move.key)} · ${primaryDamage(move)} dmg · ${move.startup}f`)).join("");
+  const moveOptions = character.moves.map((move) => option(move.id, `${String(move.id).padStart(2, "0")} · ${moveName(move)} · ${primaryDamage(move)} dmg · ${move.startup}f`)).join("");
   const assignmentRows = ACTION_SLOT_LABELS.map((label) => {
     const moveId = preset.loadout[label.slot];
     const move = character.moves.find((candidate) => candidate.id === moveId);
     const bank = ACTION_BANKS[Math.trunc(label.slot / 4)];
     const heading = label.slot % 4 === 0 ? `<div class="action-bank-heading"><span>${bank.input}</span><strong>${bank.name}</strong><em>${bank.role}</em></div>` : "";
-    return `${heading}<label class="loadout-row" data-gamepad-nav tabindex="0" data-action-bank="${Math.trunc(label.slot / 4)}" data-move-preview="${moveId}">
+    return `${heading}<label class="loadout-row${label.slot === 0 ? " armed" : ""}" data-gamepad-nav tabindex="0" data-arm-slot="${label.slot}" data-action-bank="${Math.trunc(label.slot / 4)}" data-move-preview="${moveId}">
       <span class="slot-number">${String(label.slot + 1).padStart(2, "0")}</span>
       <span class="assignment-glyph"><kbd class="keyboard-key">${label.keyboard}</kbd><kbd class="pad-key">${label.gamepad}</kbd></span>
       <select data-loadout-slot="${label.slot}" aria-label="Move for action ${label.slot + 1}">${selectedOptions(moveOptions, moveId)}</select>
@@ -59,12 +68,13 @@ export function buildLabView({ character, buildState, preferences, dummyOptions,
   const ownedArmor = buildState.inventory.armor.map(armorById).filter((item): item is ArmorDef => item !== null);
   const inventory = ownedArmor.map(armorInventoryButton).join("");
   const materials = MATERIAL_CATALOG.map((material) => materialInventoryButton(material, buildState.inventory)).join("");
-  const inputButtons = ACTION_SLOT_LABELS.map((label) => `<button type="button" class="mapped-input" data-gamepad-nav data-select-action="${label.slot}" data-move-preview="${preset.loadout[label.slot]}" aria-label="Action ${label.slot + 1}: ${label.keyboard}, ${label.gamepad}">
+  const inputButtons = ACTION_SLOT_LABELS.map((label) => `<button type="button" class="mapped-input${label.slot === 0 ? " selected" : ""}" data-gamepad-nav data-select-action="${label.slot}" data-move-preview="${preset.loadout[label.slot]}" aria-label="Action ${label.slot + 1}: ${label.keyboard}, ${label.gamepad}">
     <span>${String(label.slot + 1).padStart(2, "0")}</span><kbd class="keyboard-key">${label.keyboard}</kbd><kbd class="pad-key">${label.gamepad}</kbd>
   </button>`).join("");
-  const moveLibrary = character.moves.map(moveCard).join("");
+  const moveLibrary = character.moves.map((move) => moveCard(move, preset.loadout)).join("");
+  const codexMoveLibrary = character.moves.map((move) => codexMoveButton(move, preset.loadout)).join("");
   const statusCards = STATUS_RULES.map((rule) => {
-    const moves = character.moves.filter((move) => move.tags.includes(rule.tag)).map((move) => nameOf(move.key));
+    const moves = character.moves.filter((move) => move.tags.includes(rule.tag)).map(moveName);
     return `<article class="status-rule status-${rule.tag}"><div class="status-rule-icon" aria-hidden="true">${rule.glyph}</div><div><p>${rule.tag.toUpperCase()} · MAX ${rule.maxStacks} STACKS</p><h3>${rule.name}</h3><dl><div><dt>Primer</dt><dd>${rule.primer}</dd></div><div><dt>Payoff</dt><dd>${rule.payoff}</dd></div></dl><ul aria-label="Moves with ${rule.name}">${moves.map((move) => `<li>${move}</li>`).join("")}</ul></div></article>`;
   }).join("");
   const initialArmor = armorById(preset.equipment.head) ?? ownedArmor[0] ?? ARMOR_CATALOG[0];
@@ -110,12 +120,17 @@ export function buildLabView({ character, buildState, preferences, dummyOptions,
 
     <div class="menu-scrim" id="menu-scrim" hidden><aside class="lab-menu" id="lab-menu" role="dialog" aria-modal="true" aria-labelledby="menu-title" tabindex="-1">
       <header class="menu-header"><div><p class="eyebrow">HEXFRAME / BUILDCRAFT</p><h2 id="menu-title">Arsenal, codex & system</h2></div><button type="button" data-action="close-menu" data-gamepad-nav aria-label="Close systems and return to game">Close</button></header>
-      <nav class="menu-tabs" role="tablist" aria-label="Game systems"><span class="menu-tab-group" role="presentation"><small>ARMORY</small>${menuTab("loadout", "Arsenal", true)}${menuTab("armor", "Equipment")}${menuTab("craft", "Forge")}</span><span class="menu-tab-group" role="presentation"><small>CODEX</small>${menuTab("status", "Status")}</span><span class="menu-tab-group" role="presentation"><small>SYSTEM</small>${menuTab("training", "Training")}${menuTab("settings", "Settings")}${publicPlay ? "" : menuTab("debug", "Debug")}</span></nav>
+      <nav class="menu-tabs" role="tablist" aria-label="Game systems"><span class="menu-tab-group" role="presentation"><small>ARMORY</small>${menuTab("loadout", "Arsenal", true)}${menuTab("armor", "Equipment")}${menuTab("craft", "Forge")}</span><span class="menu-tab-group" role="presentation"><small>CODEX</small>${menuTab("moves", "Moves")}${menuTab("status", "Status")}</span><span class="menu-tab-group" role="presentation"><small>SYSTEM</small>${menuTab("training", "Training")}${menuTab("settings", "Settings")}${publicPlay ? "" : menuTab("debug", "Debug")}</span></nav>
 
       <section class="menu-page active armory-page" id="page-loadout" role="tabpanel" aria-labelledby="tab-loadout" data-menu-page="loadout">
-        <div class="armory-titlebar"><div><p class="eyebrow">TECHNIQUE DECK / <span data-build-number>BUILD ${String(buildState.activePreset + 1).padStart(2, "0")}</span></p><h2>Arsenal</h2></div>${presets}</div>
+        <div class="armory-titlebar"><div><p class="eyebrow">TECHNIQUE DECK / <span data-build-number>BUILD ${String(buildState.activePreset + 1).padStart(2, "0")}</span><b data-build-dirty></b></p><h2>Arsenal</h2></div>${presetManager(buildState)}</div>
         <div class="loadout-workspace"><section class="input-sheet" aria-labelledby="input-sheet-title"><div class="panel-heading"><div><small>FOUR BANKS · FOUR ROLES</small><h3 id="input-sheet-title">Keyboard + gamepad</h3></div><span>16 TECHNIQUES</span></div>${deviceOutlines()}<div class="mapped-inputs">${inputButtons}</div></section><aside class="assignment-sheet" aria-labelledby="assignment-title"><div class="panel-heading"><div><small>TECHNIQUE DECK</small><h3 id="assignment-title">Equipped arsenal</h3></div><button type="button" data-action="default-loadout" data-gamepad-nav>Reset</button></div><div class="loadout-grid">${assignmentRows}</div></aside></div>
-        <div class="move-workbench">${moveShowcase(initialMove)}<section class="move-library-panel" aria-labelledby="move-library-title"><div class="panel-heading"><div><small>HOVER OR FOCUS TO PREVIEW</small><h3 id="move-library-title">Move catalog</h3></div><span>${character.moves.length} MOVES</span></div><div class="move-library">${moveLibrary}</div></section></div>
+        <div class="move-workbench">${moveShowcase(initialMove, character, preset.loadout)}<section class="move-library-panel" aria-labelledby="move-library-title">
+          <div class="armed-slot-panel" id="armed-slot-panel" aria-live="polite"><span>SELECTED SLOT</span><strong>${actionSlotInput(0)}</strong><em>${actionSlotLabel(0).toUpperCase()} / SLOT 01</em><small>CURRENTLY: ${moveName(initialMove).toUpperCase()}</small></div>
+          <div class="panel-heading"><div><small>PRESS A / ENTER TO EQUIP</small><h3 id="move-library-title">Move catalog</h3></div><span><b id="move-result-count">${character.moves.length}</b> / ${character.moves.length} MOVES</span></div>
+          ${moveFilters()}
+          <div class="move-library" id="move-library">${moveLibrary}</div><p class="move-library-empty" id="move-library-empty" hidden>No techniques match these filters.</p><output class="equip-feedback" id="equip-feedback" aria-live="polite">Choose a technique for ${actionSlotLabel(0)}.</output>
+        </section></div>
       </section>
 
       <section class="menu-page armor-page" id="page-armor" role="tabpanel" aria-labelledby="tab-armor" data-menu-page="armor" hidden>
@@ -147,6 +162,21 @@ export function buildLabView({ character, buildState, preferences, dummyOptions,
         <div class="craft-workspace"><section class="recipe-sheet" aria-labelledby="recipe-title"><div class="panel-heading"><div><small>FIVE GRADES · FIVE SLOTS</small><h3 id="recipe-title">Armor recipes</h3></div><span>SELECT A PIECE</span></div><div class="recipe-grid">${ARMOR_CATALOG.map((item) => craftRecipeButton(item, buildState.inventory)).join("")}</div></section><aside class="craft-detail" id="craft-detail" aria-live="polite">${craftDetailMarkup(initialCraft, buildState.inventory)}</aside></div>
       </section>
 
+      <section class="menu-page codex-page codex-moves-page" id="page-moves" role="tabpanel" aria-labelledby="tab-moves" data-menu-page="moves" hidden>
+        <div class="page-intro"><div><p class="eyebrow">MOVE CODEX / AUTHORITATIVE COMBAT DATA</p><h2>Exactly what does this do?</h2><p>Demo shows the move's authored feature. Hit and Block isolate contact behavior. Every frame below comes from the same move definition used by combat.</p></div></div>
+        <div class="codex-moves-shell">
+          <aside class="codex-move-index" aria-label="Move index"><label><span>SEARCH MOVES</span><input type="search" data-codex-search placeholder="Name, role, family…" aria-label="Search move codex"></label><div id="codex-move-index">${codexMoveLibrary}</div></aside>
+          <section class="codex-demonstration" aria-label="Move demonstration">
+            <header class="demonstration-toolbar"><div class="demo-modes" role="group" aria-label="Demonstration mode"><button class="active" type="button" data-gamepad-nav data-demo-mode="demo" aria-pressed="true">Demo</button><button type="button" data-gamepad-nav data-demo-mode="hit" aria-pressed="false">Hit</button><button type="button" data-gamepad-nav data-demo-mode="block" aria-pressed="false">Block</button></div><div class="demo-speed" role="group" aria-label="Playback speed"><span>PLAYBACK</span><button class="active" type="button" data-gamepad-nav data-demo-speed="0.5" aria-pressed="true">0.5×</button><button type="button" data-gamepad-nav data-demo-speed="1" aria-pressed="false">1×</button><button type="button" data-gamepad-nav data-demo-speed="2" aria-pressed="false">2×</button></div></header>
+            <div class="codex-move-stage" id="codex-move-stage"></div>
+            <div class="demo-transport"><button type="button" data-gamepad-nav data-action="demo-prev" aria-label="Previous move frame">◀</button><button class="primary" type="button" data-gamepad-nav data-action="demo-toggle">Pause</button><button type="button" data-gamepad-nav data-action="demo-next" aria-label="Next move frame">▶</button><label><span>FRAME <strong id="codex-frame-readout">01 / ${String(initialMove.duration).padStart(2, "0")}</strong></span><input id="codex-frame-scrubber" type="range" min="1" max="${initialMove.duration}" value="1" step="1" aria-label="Move frame"></label></div>
+            <output class="codex-frame-detail" id="codex-frame-detail">FRAME 01 · STARTUP</output>
+            <section class="move-timeline-console codex-timeline" id="codex-move-timeline" data-codex-timeline aria-label="Interactive move frame timeline">${moveTimelineMarkup(initialMove)}</section>
+            <article class="codex-move-detail" id="codex-move-detail">${codexMoveDetailMarkup(initialMove, character, preset.loadout)}</article>
+          </section>
+        </div>
+      </section>
+
       <section class="menu-page codex-page" id="page-status" role="tabpanel" aria-labelledby="tab-status" data-menu-page="status" hidden><div class="page-intro"><div><p class="eyebrow">STATUS CODEX / COMBO LOGIC</p><h2>Prime. Link. Cash out.</h2><p>Starters route into starters or links. Rift Uppercut launches into dedicated air routes. Cashouts end the sequence—build your sixteen-technique deck around a route with intent.</p></div></div><div class="system-rules"><article><b>STAMINA</b><span>Moves, jumps, and double-tap dashes spend stamina. It regenerates after 36 quiet frames.</span></article><article><b>AERIAL ROUTES</b><span>Rift Uppercut → Astral Jab → Witch Knee → Meteor Heel or Void Dive.</span></article><article><b>HYPER ARMOR</b><span>Bastion Break absorbs one strike without losing its attack, while still taking damage and status.</span></article><article><b>SET PERKS</b><span>Equip three pieces from one armor set to activate its behavioral perk.</span></article></div><div class="status-rules">${statusCards}</div><div class="route-examples"><h3>Starter routes</h3><div><article><b>IGNITE LOOP</b><span>Ember Palm → Ashen Sweep → Phoenix Drive</span></article><article><b>VENOM ENGINE</b><span>Venom Fang → Toxic Bloom → Plague Touch</span></article><article><b>DEEP FREEZE</b><span>Frost Heel → Glacier Spike → Permafrost</span></article><article><b>VOLTAGE CASHOUT</b><span>Storm Knuckle → Static Rush → Bastion Break</span></article><article><b>SKY ROUTE</b><span>Rift Uppercut → Astral Jab → Witch Knee → Void Dive</span></article></div></div></section>
       <section class="menu-page settings-page" id="page-settings" role="tabpanel" aria-labelledby="tab-settings" data-menu-page="settings" hidden><div class="settings-shell"><nav class="settings-nav" role="tablist" aria-label="Settings categories">${settingsTab("audio", "Audio", true)}${settingsTab("video", "Visual")}${settingsTab("accessibility", "Accessibility")}${settingsTab("controls", "Controls")}</nav><div class="settings-content">${settingsPanels(preferences)}</div></div></section>
       <section class="menu-page" id="page-training" role="tabpanel" aria-labelledby="tab-training" data-menu-page="training" hidden><div class="page-intro"><div><p class="eyebrow">FRAME LAB</p><h2>Training instrument</h2><p>${publicPlay ? "Frame controls live here when you want to study a route. Close the menu to return to the clean fight view." : "Configure the deterministic dummy, playback speed, save states, and the permanent lab instruments."}</p></div></div>${publicPlay ? `<section class="training-frame-console" aria-label="Frame transport controls"><div class="training-frame-status"><span>FRAME <strong id="frame-readout">000000</strong></span><em id="play-state">LIVE</em><output id="timeline-status">Frame 0 · live</output></div><div class="timeline-tools"><button type="button" data-action="back-10" data-gamepad-nav>Step −10</button><button type="button" data-action="back" data-gamepad-nav>Step −1</button><button class="primary" type="button" data-action="pause" data-gamepad-nav>Pause</button><button type="button" data-action="forward" data-gamepad-nav>Step +1</button><button type="button" data-action="forward-10" data-gamepad-nav>Step +10</button><button type="button" data-action="reset" data-gamepad-nav>Reset</button><label data-gamepad-nav tabindex="0"><input type="checkbox" data-control="pause-on-contact" checked> Pause on contact</label></div></section>` : ""}<div class="settings-grid"><label data-gamepad-nav tabindex="0"><span>Simulation speed</span><select data-control="speed"><option value="25">25%</option><option value="50">50%</option><option value="100" selected>100%</option><option value="200">200%</option></select></label><label data-gamepad-nav tabindex="0"><span>Training dummy</span><select data-control="dummy">${dummyOptions.map(([value, label]) => option(value, label)).join("")}</select></label></div>${publicPlay ? "" : `<div class="timeline-tools"><button type="button" data-action="back-10" data-gamepad-nav>Step −10</button><button type="button" data-action="back" data-gamepad-nav>Step −1</button><button type="button" data-action="forward" data-gamepad-nav>Step +1</button><button type="button" data-action="forward-10" data-gamepad-nav>Step +10</button><button type="button" data-action="reset" data-gamepad-nav>Reset match</button></div>`}<div class="save-states"><h3>Save states</h3>${[1, 2, 3].map((slot) => `<div><span>Slot ${slot}</span><button type="button" data-save="${slot}" data-gamepad-nav>Save</button><button type="button" data-load="${slot}" data-gamepad-nav disabled>Load</button></div>`).join("")}</div>${publicPlay ? `<section class="move-timeline-console training-timeline" id="move-timeline-console" aria-label="Move frame timeline">${moveTimelineMarkup(initialMove)}</section>` : ""}</section>
@@ -159,7 +189,16 @@ export function buildLabView({ character, buildState, preferences, dummyOptions,
 function menuTab(id: string, label: string, active = false): string { return `<button class="${active ? "active" : ""}" type="button" role="tab" id="tab-${id}" aria-selected="${active}" aria-controls="page-${id}" tabindex="${active ? 0 : -1}" data-menu-tab="${id}" data-gamepad-nav>${label}</button>`; }
 function settingsTab(id: string, label: string, active = false): string { return `<button class="${active ? "active" : ""}" type="button" role="tab" id="settings-tab-${id}" aria-selected="${active}" aria-controls="settings-panel-${id}" tabindex="${active ? 0 : -1}" data-settings-tab="${id}" data-gamepad-nav>${label}</button>`; }
 function presetSwitcher(buildState: BuildState): string { return `<div class="preset-switcher" aria-label="Loadout presets">${buildState.presets.map((build, index) => `<button class="${index === buildState.activePreset ? "active" : ""}" type="button" data-gamepad-nav data-preset="${index}" aria-label="Loadout ${index + 1}: ${build.name}" aria-pressed="${index === buildState.activePreset}">${String(index + 1).padStart(2, "0")}</button>`).join("")}</div>`; }
+function presetManager(buildState: BuildState): string {
+  const active = buildState.presets[buildState.activePreset];
+  return `<div class="preset-manager">${presetSwitcher(buildState)}<label><span>BUILD NAME</span><input type="text" maxlength="32" value="${active.name}" data-build-name aria-label="Build name"></label><div class="preset-actions"><button type="button" data-gamepad-nav data-preset-action="rename">Rename</button><button type="button" data-gamepad-nav data-preset-action="duplicate">Duplicate</button><button type="button" data-gamepad-nav data-preset-action="clear">Clear</button><button type="button" data-gamepad-nav data-preset-action="reset">Reset</button></div><output data-build-changes>Auto-saved · applies when the menu closes</output></div>`;
+}
 function deviceOutlines(): string { return `<div class="device-outlines" aria-hidden="true"><div class="keyboard-outline"><div class="wasd-keys"><i>W</i><i>A</i><i>S</i><i>D</i></div><div class="arrow-keys"><i>↑</i><i>←</i><i>↓</i><i>→</i></div><b>SHIFT</b><b>SPACE</b></div><div class="gamepad-outline"><i class="trigger lt">LT</i><i class="trigger rt">RT</i><span class="pad-dpad">＋</span><span class="pad-stick left-stick"></span><span class="pad-stick right-stick"></span><div class="face-cluster"><i>Y</i><i>X</i><i>B</i><i>A</i></div></div></div>`; }
+
+function moveFilters(): string {
+  const buttons = (kind: string, values: readonly string[]) => values.map((value, index) => `<button class="${index === 0 ? "active" : ""}" type="button" data-gamepad-nav data-move-filter="${kind}" data-filter-value="${value}" aria-pressed="${index === 0}">${value.toUpperCase()}</button>`).join("");
+  return `<section class="move-filters" aria-label="Move catalog filters"><div role="group" aria-label="Route role">${buttons("role", ["all", ...MOVE_ROLES])}</div><div role="group" aria-label="Status family">${buttons("family", ["all", ...MOVE_FAMILIES])}</div><div role="group" aria-label="Terrain">${buttons("terrain", ["all", "ground", "air"])}</div><label><span>SEARCH</span><input type="search" data-move-search placeholder="Name, tag, property…" aria-label="Search move catalog"></label></section>`;
+}
 
 export function armorInventoryButton(item: ArmorDef): string {
   const skills = item.skills.map((grant) => `${armorSkillById(grant.id).name} +${grant.points}`).join(", ");
@@ -223,12 +262,18 @@ export function craftDetailMarkup(item: ArmorDef, inventory: Readonly<ArmorInven
   }).join("")}</div><button class="primary craft-button" type="button" data-action="craft-selected" data-gamepad-nav ${owned || !craftable ? "disabled" : ""}>${owned ? "Already owned" : craftable ? "Craft armor" : "Missing materials"}</button>`;
 }
 
-function moveCard(move: MoveDef): string {
-  return `<button type="button" class="move-card" data-gamepad-nav data-move-preview="${move.id}" aria-label="Preview ${nameOf(move.key)}"><span class="move-card-index">${String(move.id).padStart(2, "0")}</span><div><header><h3>${nameOf(move.key)}</h3><em>${levelOf(move)}</em></header><p>${move.description}</p><dl><div><dt>DMG</dt><dd>${primaryDamage(move)}</dd></div><div><dt>START</dt><dd>${move.startup}f</dd></div><div><dt>ACTIVE</dt><dd>${move.active}f</dd></div></dl><ul>${move.tags.map((tag) => `<li>${tag}</li>`).join("")}</ul></div></button>`;
+function moveCard(move: MoveDef, loadout: readonly number[]): string {
+  const families = moveFamilies(move);
+  const search = `${moveName(move)} ${move.description} ${move.tags.join(" ")}`.toLowerCase();
+  return `<button type="button" class="move-card" data-gamepad-nav data-move-preview="${move.id}" data-equip-move="${move.id}" data-move-role="${moveRole(move)}" data-move-family="${families.join(" ")}" data-move-terrain="${moveTerrain(move)}" data-move-search-text="${search}" aria-label="Equip ${moveName(move)} into selected slot"><span class="move-card-index">${String(move.id).padStart(2, "0")}</span><div><header><h3>${moveName(move)}</h3><em>${moveLevel(move)}</em></header><p class="move-card-role">${moveRole(move).toUpperCase()} · ${(families.length > 0 ? families : ["physical"]).join(" · ").toUpperCase()} · ${moveTerrain(move).toUpperCase()}</p><p>${move.description}</p><dl><div><dt>DMG</dt><dd>${primaryDamage(move)}</dd></div><div><dt>START</dt><dd>${move.startup}f</dd></div><div><dt>STA</dt><dd>${move.staminaCost}</dd></div></dl><strong class="equipped-state" data-equipped-move="${move.id}">${equippedSummary(loadout, move.id)}</strong><ul>${move.tags.map((tag) => `<li>${tag}</li>`).join("")}</ul></div></button>`;
 }
 
-function moveShowcase(move: MoveDef): string {
-  return `<section class="move-showcase" aria-labelledby="move-showcase-name"><div class="move-showcase-stage" id="move-showcase-stage"></div><div class="move-showcase-copy"><p id="move-showcase-code">MOVE ${String(move.id).padStart(2, "0")} · ${levelOf(move).toUpperCase()}</p><h3 id="move-showcase-name">${nameOf(move.key)}</h3><p id="move-showcase-description">${move.description}</p><dl class="move-showcase-stats"><div><dt>Damage</dt><dd id="move-stat-damage">${primaryDamage(move)}</dd></div><div><dt>Stamina</dt><dd id="move-stat-stamina">${move.staminaCost}</dd></div><div><dt>Startup</dt><dd id="move-stat-startup">${move.startup}f</dd></div><div><dt>Active</dt><dd id="move-stat-active">${move.active}f</dd></div><div><dt>Recovery</dt><dd id="move-stat-recovery">${move.recovery}f</dd></div><div><dt>Hitstun</dt><dd id="move-stat-hitstun">${primaryHitbox(move)?.hitstun ?? 0}f</dd></div><div><dt>Blockstun</dt><dd id="move-stat-blockstun">${primaryHitbox(move)?.blockstun ?? 0}f</dd></div></dl><ul id="move-showcase-tags">${move.tags.map((tag) => `<li>${tag}</li>`).join("")}</ul></div></section>`;
+function moveShowcase(move: MoveDef, character: CharacterDef, loadout: readonly number[]): string {
+  return `<section class="move-showcase" aria-labelledby="move-showcase-name"><div class="move-showcase-stage" id="move-showcase-stage"></div><div class="move-showcase-copy"><p id="move-showcase-code">MOVE ${String(move.id).padStart(2, "0")} · ${moveLevel(move).toUpperCase()}</p><h3 id="move-showcase-name">${moveName(move)}</h3><p id="move-showcase-description">${move.description}</p><strong class="showcase-equipped" data-equipped-move="${move.id}">${equippedSummary(loadout, move.id)}</strong><dl class="move-showcase-stats"><div><dt>Damage</dt><dd id="move-stat-damage">${primaryDamage(move)}</dd></div><div><dt>Stamina</dt><dd id="move-stat-stamina">${move.staminaCost}</dd></div><div><dt>Startup</dt><dd id="move-stat-startup">${move.startup}f</dd></div><div><dt>Active</dt><dd id="move-stat-active">${move.active}f</dd></div><div><dt>Recovery</dt><dd id="move-stat-recovery">${move.recovery}f</dd></div><div><dt>Hitstun</dt><dd id="move-stat-hitstun">${primaryHitbox(move)?.hitstun ?? 0}f</dd></div><div><dt>Blockstun</dt><dd id="move-stat-blockstun">${primaryHitbox(move)?.blockstun ?? 0}f</dd></div></dl><ul id="move-showcase-tags">${move.tags.map((tag) => `<li>${tag}</li>`).join("")}</ul><div id="move-route-topology">${routeTopologyMarkup(move, character, loadout)}</div></div></section>`;
+}
+
+function codexMoveButton(move: MoveDef, loadout: readonly number[]): string {
+  return `<button type="button" class="codex-move-button" data-gamepad-nav data-codex-move="${move.id}" data-move-preview="${move.id}" data-codex-search-text="${moveName(move).toLowerCase()} ${move.tags.join(" ")}" aria-label="Inspect ${moveName(move)}"><span>${String(move.id).padStart(2, "0")}</span><strong>${moveName(move)}</strong><em>${moveRole(move).toUpperCase()} · ${moveTerrain(move).toUpperCase()}</em><small data-equipped-move="${move.id}">${equippedSummary(loadout, move.id)}</small></button>`;
 }
 
 function settingsPanels(preferences: LabPreferences): string {
@@ -243,10 +288,6 @@ function panel(id: string, active: boolean, body: string): string { return `<sec
 function rangeMarkup(label: string, section: string, key: string, value: number, min: number, max: number, step: number): string { const percent = Math.round(value * 100); return `<label class="setting-row setting-range" data-gamepad-nav tabindex="0"><strong>${label}</strong><span class="range-control"><input type="range" min="${min}" max="${max}" step="${step}" value="${value}" ${pref(section, key)} data-pref-number aria-label="${label}" aria-valuetext="${percent}%"><output data-pref-output="${section}.${key}">${percent}%</output></span></label>`; }
 function toggleMarkup(label: string, checked: boolean, attributes: string): string { if (attributes.includes("data-debug")) return `<label class="toggle" data-gamepad-nav tabindex="0"><input type="checkbox" ${checked ? "checked" : ""} ${attributes}><span>${label}</span></label>`; return `<label class="setting-row setting-toggle" data-gamepad-nav tabindex="0"><strong>${label}</strong><input type="checkbox" ${checked ? "checked" : ""} ${attributes}><i aria-hidden="true"></i></label>`; }
 function selectMarkup(label: string, section: string, key: string, value: string, options: readonly (readonly [string, string])[]): string { return `<label class="setting-row" data-gamepad-nav tabindex="0"><strong>${label}</strong><select ${pref(section, key)} aria-label="${label}">${options.map(([optionValue, optionLabel]) => `<option value="${optionValue}" ${optionValue === value ? "selected" : ""}>${optionLabel}</option>`).join("")}</select></label>`; }
-function primaryHitbox(move: MoveDef) { return move.hitboxes[0]; }
-function primaryDamage(move: MoveDef): number { return primaryHitbox(move)?.damage ?? 0; }
-function levelOf(move: MoveDef): string { const level = primaryHitbox(move)?.level; if (level === HitLevel.Low) return "Low"; if (level === HitLevel.Overhead) return "Overhead"; return "Mid"; }
 function pref(section: string, key: string): string { return `data-pref-section="${section}" data-pref-key="${key}"`; }
 function option(value: string | number, label: string): string { return `<option value="${value}">${label}</option>`; }
 function selectedOptions(options: string, selected: number): string { return options.replace(`value="${selected}"`, `value="${selected}" selected`); }
-function nameOf(key: string): string { return key.replaceAll("_", " "); }

@@ -3,7 +3,7 @@
 A deterministic 2D fighting-game simulator, and the laboratory used to build it.
 
 The order of work is deliberate: this is a **combat simulator first and a game second**.
-The current build carries one stage, one fighter, one dummy, 24 tagged moves, five
+The current build carries one stage, one fighter, one dummy, 28 tagged moves, five
 deterministic status systems, three persistent loadouts and 25 equippable items. Around
 them is the machinery that everything later depends on — a fixed 60 Hz integer
 simulation, snapshots, state hashes, rollback, and a lab that can pause, step, rewind and
@@ -73,12 +73,14 @@ may pivot into another starter to reprime a route; cashouts and reversals end it
 catalog and Status Codex expose those role tags, and tests pin the five showcased routes.
 
 The Armory separates Loadout and Gear so neither screen has competing nested panels.
-Loadout contains the keyboard/gamepad diagram, 16-action assignment deck, full frame-data
-catalog, and an animated hover/focus showcase. Gear contains equipped slots, character
-stats, inventory and item detail. The status codex explains primer/payoff routes;
-training internals and hitbox overlays remain on separate tabs.
+Loadout arms one of the 16 action slots, equips directly from a controller-navigable
+filtered catalog, shows duplicate-aware equipped locations, and derives route completeness
+from authored cancel targets. Gear contains equipped slots, character stats, inventory and
+item detail. The Moves Codex provides a two-fighter Demo/Hit/Block presentation with exact
+60 Hz frame scrubbing and the authoritative move timeline; the Status Codex explains
+primer/payoff routes, while training internals and hitbox overlays remain separate.
 
-Every attack has a deterministic presentation profile. The 24 profiles combine authored
+Every attack has a deterministic presentation profile. The 28 profiles combine authored
 fighter clips with distinct elemental colors, particle shapes, orbit counts, sizes,
 rotations and motion, while remaining downstream of combat state.
 
