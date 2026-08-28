@@ -52,10 +52,45 @@ describe("multi-fighter team combat", () => {
     const sim = teamSim(true);
     const state = sim.getState();
     Object.assign(state.fighters[0], { state: StateId.Attack, moveId: MoveId.StandingLight, moveFrame: 4, facing: 1 });
-    resolveContacts(state, sim.characters(), [0, 0, 0], report(), [0, 0, 1], true);
+    const events = report();
+    resolveContacts(state, sim.characters(), [0, 0, 0], events, [0, 0, 1], true);
 
     expect(state.fighters[1].health).toBe(TEST_FIGHTER.health - 30);
-    expect(state.fighters[2].health).toBe(TEST_FIGHTER.health);
+    expect(state.fighters[2].health).toBe(TEST_FIGHTER.health - 30);
+    expect(events.contacts.map((contact) => contact.defender)).toEqual([1, 2]);
+  });
+
+  it("lets one boss hitbox connect once with every overlapping hostile", () => {
+    const sim = new Simulation({
+      characters: [TEST_FIGHTER, TEST_FIGHTER, BELL_WARDEN],
+      startX: [px(-20), px(-20), px(20)],
+      teams: [0, 0, 1],
+      seed: 7,
+    });
+    const state = sim.getState();
+    const hook = BELL_WARDEN.moves.find((move) => move.id === BellWardenMoveId.ChainHook)!;
+    Object.assign(state.fighters[2], {
+      state: StateId.Attack,
+      moveId: hook.id,
+      moveFrame: hook.hitboxes[0].startFrame,
+      facing: -1,
+    });
+
+    const first = report();
+    resolveContacts(state, sim.characters(), [0, 0, 0], first, [0, 0, 1], false);
+
+    expect(first.contacts.map((contact) => contact.defender).sort()).toEqual([0, 1]);
+    expect(state.fighters[0].health).toBeLessThan(TEST_FIGHTER.health);
+    expect(state.fighters[1].health).toBeLessThan(TEST_FIGHTER.health);
+    expect(state.fighters[2].hitFlagsByTarget[0]).not.toBe(0);
+    expect(state.fighters[2].hitFlagsByTarget[1]).not.toBe(0);
+
+    const health = [state.fighters[0].health, state.fighters[1].health];
+    const second = report();
+    resolveContacts(state, sim.characters(), [0, 0, 0], second, [0, 0, 1], false);
+
+    expect(second.contacts).toHaveLength(0);
+    expect([state.fighters[0].health, state.fighters[1].health]).toEqual(health);
   });
 
   it("preserves held-away blocking when a boss attacks a three-fighter party", () => {

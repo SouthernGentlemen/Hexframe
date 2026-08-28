@@ -128,7 +128,7 @@ export type HitLevelValue = (typeof HitLevel)[keyof typeof HitLevel];
  * compared against `FighterState.moveFrame`.
  */
 export interface HitboxSpec {
-  /** Unique within its move. Indexes the once-per-move gate in `FighterState.hitFlags`. */
+  /** Unique within its move. Indexes the aggregate and per-target hit gates. */
   id: number;
   box: Box;
   startFrame: number;
@@ -367,7 +367,7 @@ export interface FighterState {
   staminaRegenDelay: number;
   /** 1 when off the ground. Redundant with `y` by design: it survives moves that lift. */
   airborne: number;
-  /** Bitmask of `HitboxSpec.id`s that have already connected during the current move. */
+  /** Aggregate bitmask of hitboxes that connected with any target during this move. */
   hitFlags: number;
   /** Hits taken since the defender was last actionable. Drives combo display and scaling. */
   comboCount: number;
@@ -392,6 +392,12 @@ export interface FighterState {
   shockFrames: number;
   bleedStacks: number;
   bleedFrames: number;
+  /**
+   * One hitbox bitmask per possible defender index. The simulation supports at most six
+   * fighters, so this fixed tuple lets an area attack connect once with every target
+   * without turning snapshot layout into a variable nested structure.
+   */
+  hitFlagsByTarget: [number, number, number, number, number, number];
 }
 
 /** A deterministic spawned entity — projectiles from 0.2. Present so rollback covers it. */

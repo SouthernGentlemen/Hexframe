@@ -26,8 +26,8 @@ import type { EntityState, Facing, FighterState, SimState, StateIdValue } from "
 /** version, frame, rng, fighter count. */
 const HEADER_INTS = 4;
 
-/** `FighterState` has thirty integer fields; see the writer loop for the order. */
-const FIGHTER_INTS = 30;
+/** `FighterState` has thirty-six integer fields; the final six are per-target hit masks. */
+const FIGHTER_INTS = 36;
 
 /** `EntityState` has twelve. */
 const ENTITY_INTS = 12;
@@ -158,6 +158,7 @@ export function serializeState(state: SimState): Uint8Array {
     w.i32(f.shockFrames);
     w.i32(f.bleedStacks);
     w.i32(f.bleedFrames);
+    for (const flags of f.hitFlagsByTarget) w.i32(flags);
   }
 
   w.i32(state.entities.length);
@@ -249,6 +250,7 @@ export function deserializeState(bytes: Uint8Array): SimState {
       shockFrames: r.i32(),
       bleedStacks: r.i32(),
       bleedFrames: r.i32(),
+      hitFlagsByTarget: [r.i32(), r.i32(), r.i32(), r.i32(), r.i32(), r.i32()],
     };
   }
 
@@ -343,6 +345,14 @@ export function cloneState(state: SimState): SimState {
       shockFrames: f.shockFrames,
       bleedStacks: f.bleedStacks,
       bleedFrames: f.bleedFrames,
+      hitFlagsByTarget: [
+        f.hitFlagsByTarget[0],
+        f.hitFlagsByTarget[1],
+        f.hitFlagsByTarget[2],
+        f.hitFlagsByTarget[3],
+        f.hitFlagsByTarget[4],
+        f.hitFlagsByTarget[5],
+      ],
     };
   }
 

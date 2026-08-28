@@ -100,10 +100,10 @@ export function isBlocking(
 /**
  * Test every live attack box against every opponent hurtbox, and apply what connects.
  *
- * A hitbox connects at most once per move. `hitFlags` records which of the move's boxes
- * have already landed, which is why an attack whose active frames overlap a hurtbox for
- * six frames deals its damage once rather than six times — and why hitstop can freeze the
- * attacker on the frame of contact without the box connecting again on the way out.
+ * A hitbox connects at most once with each defender during a move attempt. The aggregate
+ * `hitFlags` mask remains the on-hit-cancel signal, while `hitFlagsByTarget[defender]`
+ * prevents repeat damage to that defender without stopping the same area hitbox from
+ * touching other hostile fighters.
  */
 export function resolveContacts(
   state: SimState,
@@ -131,7 +131,7 @@ export function resolveContacts(
         // bit 0 would make two hitboxes share a "already hit" flag.
         if (spec.id < 0 || spec.id > 30) continue;
         const bit = 1 << spec.id;
-        if ((attacker.hitFlags & bit) !== 0) continue;
+        if ((attacker.hitFlagsByTarget[d] & bit) !== 0) continue;
         if (isInvulnerable(defender, defenderChar, InvulKind.Strike)) continue;
 
         let touched = null;
@@ -148,6 +148,7 @@ export function resolveContacts(
         if (touched === null) continue;
 
         attacker.hitFlags |= bit;
+        attacker.hitFlagsByTarget[d] |= bit;
         const blocked = isBlocking(defender, defenderChar, attacker, inputs[d] ?? 0, spec.level);
         const overlap = intersection(aabb, touched) ?? aabb;
         const where = centerOf(overlap);
@@ -209,6 +210,7 @@ export function resolveContacts(
             defender.moveId = NO_MOVE;
             defender.moveFrame = 0;
             defender.hitFlags = 0;
+            defender.hitFlagsByTarget.fill(0);
             defender.armorHits = 0;
             enterState(defender, stunState);
             defender.vx = spec.pushbackHitDefender * dir;

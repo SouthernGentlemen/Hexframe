@@ -125,7 +125,8 @@ describe("true hyper armor", () => {
     expect(d.state).toBe(StateId.Attack);
     expect(armorRemaining(d, defender)).toBe(0);
 
-    a.hitFlags = 0;
+    startMove(a, attacker, attack);
+    a.moveFrame = attack.hitboxes[0].startFrame;
     const second = report();
     resolveContacts(state, [attacker, defender], [0, 0], second);
     expect(second.contacts[0].armored).toBe(false);

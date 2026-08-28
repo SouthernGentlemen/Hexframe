@@ -27,6 +27,7 @@ import { InputBit, StateId } from "../types";
 import {
   COMMAND_HISTORY_FRAMES,
   GROUND_Y,
+  MAX_FIGHTERS,
   NO_MOVE,
   STAGE_HALF_WIDTH,
   STAMINA_REGEN_DELAY,
@@ -65,8 +66,8 @@ export class Simulation {
    */
   static initialState(config: SimConfig): SimState {
     const fighters: FighterState[] = [];
-    if (config.characters.length < 2 || config.characters.length > 6) {
-      throw new RangeError(`Simulation requires 2..6 fighters, got ${config.characters.length}`);
+    if (config.characters.length < 2 || config.characters.length > MAX_FIGHTERS) {
+      throw new RangeError(`Simulation requires 2..${MAX_FIGHTERS} fighters, got ${config.characters.length}`);
     }
     if (config.startX.length !== config.characters.length) {
       throw new RangeError("Simulation requires one spawn position per fighter");
@@ -115,6 +116,7 @@ export class Simulation {
         shockFrames: 0,
         bleedStacks: 0,
         bleedFrames: 0,
+        hitFlagsByTarget: [0, 0, 0, 0, 0, 0],
       });
     }
 

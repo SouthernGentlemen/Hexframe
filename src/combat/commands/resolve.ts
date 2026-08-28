@@ -51,10 +51,10 @@ export function canStartMove(f: FighterState, c: CharacterDef, m: MoveDef): bool
 /**
  * Put the fighter into a move on its own frame 0.
  *
- * `hitFlags` clears here and only here. It is the record of which of this move's hitboxes
- * have already connected, so it belongs to the attempt rather than to the fighter — and
- * clearing it on start is what lets a move that whiffed and a move that connected behave
- * identically the next time it comes out.
+ * `hitFlags` is the aggregate "this move connected" record used by on-hit cancels.
+ * `hitFlagsByTarget` stores the same hitbox ids separately for every possible defender so
+ * one area attack may connect once with several fighters without multi-hitting any one of
+ * them across active frames. Both belong to the move attempt and clear together.
  */
 export function startMove(f: FighterState, c: CharacterDef, m: MoveDef): void {
   const cost = staminaCostOf(c, m);
@@ -64,7 +64,7 @@ export function startMove(f: FighterState, c: CharacterDef, m: MoveDef): void {
   }
   f.moveId = m.id;
   f.moveFrame = 0;
-  f.hitFlags = 0;
+  clearHitFlags(f);
   f.armorHits = 0;
   enterState(f, StateId.Attack);
   applyMovementKeys(f, m, 0);
@@ -102,7 +102,7 @@ export function advanceMove(f: FighterState, c: CharacterDef): void {
 export function endMove(f: FighterState, m: MoveDef): void {
   f.moveId = NO_MOVE;
   f.moveFrame = 0;
-  f.hitFlags = 0;
+  clearHitFlags(f);
   f.armorHits = 0;
   enterState(
     f,
@@ -147,4 +147,9 @@ function applyMovementKeys(f: FighterState, m: MoveDef, frame: number): void {
     f.vy = k.vy;
     if (k.vy > 0) f.airborne = 1;
   }
+}
+
+function clearHitFlags(f: FighterState): void {
+  f.hitFlags = 0;
+  f.hitFlagsByTarget.fill(0);
 }
