@@ -27,7 +27,6 @@ import { DEFAULT_ACTION_KEYMAP, DEFAULT_KEYMAP_P1, DEFAULT_KEYMAP_P2, NO_ACTION_
 import { hashState } from "../rollback/hashing/fnv";
 import type { DebugToggles } from "../renderer/svg/debug-overlay";
 import { Renderer } from "../renderer/svg/renderer";
-import { createDefaultBuildState, loadBuildState, persistBuildState } from "./build-state";
 import { DebugPanel } from "./debugger/panel";
 import { DummyController, DummyMode } from "./dummy/dummy";
 import type { DummyModeValue } from "./dummy/dummy";
@@ -59,9 +58,9 @@ import {
 } from "./view";
 import { MoveDemonstration } from "./move-demonstration";
 import type { MoveDemonstrationMode, MoveDemonstrationState } from "./move-demonstration";
-import { markTutorialSeen, tutorialSeen, TutorialController, TUTORIAL_LESSONS } from "./tutorial";
+import { markTutorialSeen, TutorialController, TUTORIAL_LESSONS } from "./tutorial";
 import type { TutorialSnapshot } from "./tutorial";
-import { BLACK_BELFRY, CampaignMaterial } from "../content/black-belfry";
+import { BLACK_BELFRY } from "../content/black-belfry";
 import { BELL_WARDEN } from "../content/bell-warden";
 import {
   BELL_WARDEN_ANIMATIONS,
@@ -70,8 +69,10 @@ import {
   BELL_WARDEN_RIG,
 } from "../content/bell-warden-assets";
 import { BellWardenController } from "../campaign/boss-controller";
-import { loadCampaignState, persistCampaignState } from "../campaign/state";
-import type { CampaignState } from "../campaign/state";
+import { buildStateFromPlayerSave, createDefaultPlayerSave, syncBuildStateToPlayerSave } from "../player/save";
+import { applyStageEvent, cachePlayerSave, claimBossReward, craftPlayerArmor, loadPlayerSave, persistPlayerSave, resetPlayerCampaign } from "../player/client";
+import { defaultSession, readGameSession, sessionUrl, STAGE_CATALOG } from "../game/session";
+import type { GameMode } from "../game/session";
 import {
   ACTION_BANKS,
   actionSlotInput,
@@ -95,7 +96,7 @@ const DUMMY_OPTIONS: readonly [DummyModeValue, string][] = [
   [DummyMode.Reversal, "Reversal"],
 ];
 
-type MenuTab = "loadout" | "armor" | "craft" | "moves" | "status" | "tutorial" | "settings" | "training" | "debug";
+type MenuTab = "loadout" | "armor" | "craft" | "moves" | "status" | "codex-equipment" | "stages" | "enemies" | "tutorial" | "settings" | "profile" | "credits" | "training" | "debug";
 type SettingsTab = "audio" | "video" | "accessibility" | "controls";
 type InventoryTab = "armor" | "materials";
 
@@ -103,16 +104,28 @@ function edge(now: GamepadUiState, before: GamepadUiState, key: keyof GamepadUiS
   return now[key] && !before[key];
 }
 
-/** Mounts the controller-first combat laboratory and returns its teardown. */
-export function startLab(mount: HTMLElement): () => void {
-  const publicPlay = window.location.pathname === "/play" || window.location.pathname.startsWith("/play/");
+/** Mounts the controller-first game and its integrated Training tools. */
+export async function startLab(mount: HTMLElement): Promise<() => void> {
+  const url = new URL(window.location.href);
+  const session = readGameSession(url);
+  const gameMode: GameMode | undefined = session?.mode;
+  const developerTools = session?.options.developerTools === true;
+  const publicPlay = !developerTools;
+  const campaignMode = gameMode === "campaign";
+  const bossMode = session?.opponentId === "bell-warden";
+  const trainingMode = gameMode === "training";
   const catalogCharacter = testFighterWithLoadout(DEFAULT_MOVE_LOADOUT);
   const validMoveIds = new Set([0, ...catalogCharacter.moves.map((move) => move.id)]);
-  const campaign: CampaignState | null = publicPlay ? loadCampaignState() : null;
-  const buildState = campaign?.builds ?? loadBuildState(validMoveIds);
+  const playerSave = await loadPlayerSave();
+  const campaign = campaignMode ? playerSave.campaign.stages["black-belfry"] ?? null : null;
+  const buildState = buildStateFromPlayerSave(playerSave);
+  if (session) {
+    const requested = playerSave.loadouts.order.indexOf(session.playerLoadoutId);
+    if (requested >= 0) buildState.activePreset = requested;
+  }
   let activeBuild = buildState.presets[buildState.activePreset];
   const playerCharacter = testFighterWithBuild(activeBuild.loadout, activeBuild.equipment);
-  const dummyCharacter = publicPlay ? BELL_WARDEN : testFighterWithLoadout(DEFAULT_MOVE_LOADOUT);
+  const dummyCharacter = bossMode ? BELL_WARDEN : testFighterWithLoadout(DEFAULT_MOVE_LOADOUT);
   const preferences = loadPreferences();
   applyPreferences(preferences);
 
@@ -122,16 +135,34 @@ export function startLab(mount: HTMLElement): () => void {
     preferences,
     dummyOptions: DUMMY_OPTIONS,
     publicPlay,
-    unlockedMoveIds: campaign?.unlockedMoveIds,
-    unlockedRecipeIds: campaign?.unlockedRecipeIds,
+    gameMode,
+    session,
+    save: playerSave,
+    developerTools,
+    unlockedMoveIds: playerSave.unlocks.moves,
+    unlockedRecipeIds: playerSave.unlocks.recipes,
   });
 
-  // The lab reset is a canonical contact setup: standing light reaches the dummy without
+  // The Training reset is a canonical contact setup: standing light reaches the dummy without
   // hidden walking or timing, so the same move can be run, inspected, edited, and rerun.
-  const config: SimConfig = publicPlay
-    ? { characters: [playerCharacter, dummyCharacter], startX: [BLACK_BELFRY.spawnX, px(1130)], seed: 0x5eed, stage: BLACK_BELFRY }
-    : { characters: [playerCharacter, dummyCharacter], startX: [px(-18), px(18)], seed: 0x5eed };
+  const selectedStage = session ? STAGE_CATALOG[session.stageId].stage : BLACK_BELFRY;
+  const checkpoint = campaign?.checkpointId
+    ? BLACK_BELFRY.interactables.find((entity) => entity.id === campaign.checkpointId)
+    : undefined;
+  const startX: [number, number] = campaignMode
+    ? [checkpoint?.x ?? BLACK_BELFRY.spawnX, px(1130)]
+    : gameMode === "fight" ? [px(-170), px(170)] : [px(-18), px(18)];
+  const config: SimConfig = {
+    characters: [playerCharacter, dummyCharacter],
+    startX,
+    seed: 0x5eed,
+    ...(selectedStage ? { stage: selectedStage } : {}),
+  };
   const sim = new Simulation(config);
+  if (gameMode === "fight") {
+    sim.getState().stage.bossActive = 1;
+    sim.getState().stage.arenaLocked = 1;
+  }
   const timeline = new Timeline(sim, 900);
   timeline.paused = false;
   timeline.pauseOnContact = false;
@@ -139,7 +170,7 @@ export function startLab(mount: HTMLElement): () => void {
   const boss = new BellWardenController();
   const tutorial = new TutorialController(
     syncTutorialUi,
-    publicPlay ? [actionBit(3), actionBit(2), actionBit(1)] : undefined,
+    campaignMode ? [actionBit(3), actionBit(2), actionBit(1)] : undefined,
   );
   const keyboard = new KeyboardController(window, DEFAULT_KEYMAP_P1, DEFAULT_ACTION_KEYMAP, {
     ownsModifiedActions: () => document.hasFocus() && !menuOpen() && !firstLaunchOpen(),
@@ -154,7 +185,7 @@ export function startLab(mount: HTMLElement): () => void {
         animations: TEST_FIGHTER_ANIMATIONS,
         playback: TEST_FIGHTER_PLAYBACK,
       },
-      publicPlay
+      bossMode
         ? {
             model: BELL_WARDEN_MODEL,
             rig: BELL_WARDEN_RIG,
@@ -169,7 +200,7 @@ export function startLab(mount: HTMLElement): () => void {
             playback: TEST_FIGHTER_PLAYBACK,
           },
     ],
-    stage: publicPlay ? BLACK_BELFRY : undefined,
+    stage: selectedStage,
   });
   const demonstrationAssets = {
     model: TEST_FIGHTER_MODEL,
@@ -179,15 +210,15 @@ export function startLab(mount: HTMLElement): () => void {
   };
   const moveShowcase = new MoveDemonstration(required("move-showcase-stage"), playerCharacter, demonstrationAssets);
   const codexDemonstration = new MoveDemonstration(required("codex-move-stage"), playerCharacter, demonstrationAssets, syncCodexDemonstrationUi);
-  const panel = publicPlay ? null : new DebugPanel(required("debug-panel"));
+  const panel = developerTools ? new DebugPanel(required("debug-panel")) : null;
   const toggles: DebugToggles = { hitboxes: false, hurtboxes: false, pushboxes: false, origins: false, skeleton: false, boneNames: false, velocity: false };
 
   timeline.inputProvider = () => {
-    if (menuOpen()) return [0, 0];
+    if (menuOpen() || frontShellOpen()) return [0, 0];
     const playerInput = keyboard.sample() | gamepad.sample();
     lastPlayerInput = playerInput;
     if (tutorial.active) return [playerInput, tutorial.dummyInput(sim.getState())];
-    if (publicPlay) return [playerInput, boss.inputFor(sim.getState())];
+    if (bossMode) return [playerInput, boss.inputFor(sim.getState())];
     const secondPlayer = secondKeyboard.sample();
     dummy.capture(secondPlayer);
     return [playerInput, dummy.inputFor(sim.getState(), 1, timeline.lastReport)];
@@ -198,7 +229,7 @@ export function startLab(mount: HTMLElement): () => void {
   let lastTime = performance.now();
   let elapsed = 0;
   let lastReport: FrameReport | null = null;
-  let activeTab: MenuTab = "loadout";
+  let activeTab: MenuTab = developerTools || trainingMode ? "training" : gameMode === "fight" ? "moves" : "loadout";
   let activeSettingsTab: SettingsTab = "audio";
   let resumeAfterMenu = false;
   let previousUi = gamepad.sampleUi();
@@ -256,7 +287,7 @@ export function startLab(mount: HTMLElement): () => void {
       const maxStamina = sim.characters()[player].stamina;
       const staminaPercent = Math.max(0, Math.min(100, (fighter.stamina / maxStamina) * 100));
       required(`stamina-p${player + 1}`).style.width = `${staminaPercent}%`;
-      required(`stamina-text-p${player + 1}`).textContent = publicPlay && player === 1
+      required(`stamina-text-p${player + 1}`).textContent = bossMode && player === 1
         ? (fighter.health * 100 <= dummyCharacter.health * 58 ? "PHASE II · CHAIN UNBOUND" : "PHASE I · READ THE BELL")
         : `${fighter.stamina} STA`;
       renderDebuffs(player, fighter);
@@ -309,12 +340,27 @@ export function startLab(mount: HTMLElement): () => void {
     if (armTarget?.dataset.armSlot !== undefined) selectAction(Number(armTarget.dataset.armSlot), false);
     const button = element.closest<HTMLButtonElement>("button");
     if (!button) return;
+    if (button.dataset.frontAction === "enter-menu") showFrontView("main");
+    if (button.dataset.frontAction === "back") showFrontView("main");
+    if (button.dataset.frontAction === "edit-loadout") openFrontSystem("loadout");
+    if (button.dataset.frontAction === "new-campaign") void newCampaign();
+    if (button.dataset.frontDestination) {
+      const destination = button.dataset.frontDestination;
+      if (destination === "armory") openFrontSystem("loadout");
+      else if (destination === "codex") openFrontSystem("moves");
+      else if (destination === "system") openFrontSystem("tutorial");
+      else showFrontView(destination);
+    }
+    if (button.dataset.frontLoadout) selectFrontLoadout(button.dataset.frontLoadout);
+    if (button.dataset.launchMode) launchGame(button.dataset.launchMode as GameMode);
     gameAudio.ensure();
     gameAudio.play("confirm");
     const action = button.dataset.action;
     if (action === "pause") timeline.paused = !timeline.paused;
     if (action === "menu") openMenu();
     if (action === "close-menu") closeMenu();
+    if (action === "return-main") window.location.href = "/play/";
+    if (action === "return-mode-select") window.location.href = `/play/?screen=${gameMode ?? "main"}`;
     if (action === "back-10") stepFrames(-10);
     if (action === "back") stepFrames(-1);
     if (action === "forward") stepFrames(1);
@@ -343,7 +389,7 @@ export function startLab(mount: HTMLElement): () => void {
     if (action === "skip-tutorial") skipFirstLaunch();
     if (action === "skip-tutorial-lesson") tutorial.skipLesson();
     if (action === "next-tutorial-lesson") advanceTutorial();
-    if (action === "exit-tutorial") finishTutorial();
+    if (action === "exit-tutorial") exitTutorial();
     if (button.dataset.menuTab) showTab(button.dataset.menuTab as MenuTab);
     if (button.dataset.settingsTab) showSettingsTab(button.dataset.settingsTab as SettingsTab);
     if (button.dataset.inventoryTab) showInventoryTab(button.dataset.inventoryTab as InventoryTab);
@@ -436,6 +482,17 @@ export function startLab(mount: HTMLElement): () => void {
 
   const keydown = (event: KeyboardEvent): void => {
     if (!event.ctrlKey && !event.metaKey && !event.altKey) gameAudio.ensure();
+    if (frontShellOpen()) {
+      const title = mount.querySelector<HTMLElement>("[data-front-view='title']:not([hidden])");
+      if (title && !event.repeat && !["Shift", "Control", "Alt", "Meta", "Tab"].includes(event.key)) {
+        event.preventDefault();
+        showFrontView("main");
+      } else if (event.code === "Escape" && !mount.querySelector("[data-front-view='main']:not([hidden])")) {
+        event.preventDefault();
+        showFrontView("main");
+      }
+      return;
+    }
     if (firstLaunchOpen()) {
       if (event.code === "Tab") trapFocus(event, required("first-launch"));
       return;
@@ -486,7 +543,7 @@ export function startLab(mount: HTMLElement): () => void {
   window.addEventListener("keydown", keydown);
   document.addEventListener("visibilitychange", visibility);
   motionQuery.addEventListener("change", motionChange);
-  if (!publicPlay) {
+  if (developerTools) {
     void fetch("/api/lab/session")
       .then((response) => (response.ok ? response.json() : null))
       .then((session: unknown) => {
@@ -495,13 +552,9 @@ export function startLab(mount: HTMLElement): () => void {
       .catch(() => undefined);
   }
   syncTutorialUi(tutorial.snapshot());
-  const firstLaunch = mount.querySelector<HTMLElement>("#first-launch");
-  if (publicPlay && firstLaunch && !tutorialSeen()) {
-    timeline.paused = true;
-    firstLaunch.hidden = false;
-    setFirstLaunchInert(true);
-    firstLaunch.querySelector<HTMLButtonElement>("[data-action='start-tutorial']")?.focus();
-  }
+  if (!session) showFrontView(url.searchParams.get("screen") ?? "title");
+  showTab(activeTab);
+  if (session?.options.tutorial) startTutorial();
   render();
   animationId = requestAnimationFrame(loop);
 
@@ -537,6 +590,59 @@ export function startLab(mount: HTMLElement): () => void {
     return !required("menu-scrim").hidden;
   }
 
+  function frontShellOpen(): boolean {
+    const front = mount.querySelector<HTMLElement>("#front-shell");
+    return front !== null && !front.hidden;
+  }
+
+  function showFrontView(view: string): void {
+    const front = mount.querySelector<HTMLElement>("#front-shell");
+    if (!front) return;
+    front.hidden = false;
+    setFrontContentInert(true);
+    timeline.paused = true;
+    for (const page of front.querySelectorAll<HTMLElement>("[data-front-view]")) {
+      const active = page.dataset.frontView === view;
+      page.hidden = !active;
+      page.classList.toggle("active", active);
+    }
+    front.querySelector<HTMLButtonElement>(`[data-front-view='${view}'] button`)?.focus();
+  }
+
+  function selectFrontLoadout(loadoutId: string): void {
+    const front = mount.querySelector<HTMLElement>("#front-shell");
+    if (!front || !playerSave.loadouts.order.includes(loadoutId)) return;
+    front.dataset.selectedLoadout = loadoutId;
+    for (const button of front.querySelectorAll<HTMLButtonElement>("[data-front-loadout]")) {
+      const selected = button.dataset.frontLoadout === loadoutId;
+      button.classList.toggle("selected", selected);
+      button.setAttribute("aria-pressed", String(selected));
+    }
+  }
+
+  function launchGame(mode: GameMode): void {
+    const selected = mount.querySelector<HTMLElement>("#front-shell")?.dataset.selectedLoadout ?? playerSave.loadouts.activeId;
+    playerSave.loadouts.activeId = selected;
+    cachePlayerSave(playerSave);
+    const destination = sessionUrl(defaultSession(mode, selected, false));
+    void persistPlayerSave(playerSave).finally(() => { window.location.href = destination; });
+  }
+
+  function openFrontSystem(tab: MenuTab): void {
+    const front = mount.querySelector<HTMLElement>("#front-shell");
+    if (front) front.hidden = true;
+    setFrontContentInert(false);
+    openMenu();
+    showTab(tab);
+    mount.querySelector<HTMLButtonElement>(`[data-menu-tab='${tab}']`)?.focus();
+  }
+
+  async function newCampaign(): Promise<void> {
+    if (!confirmDestructive("Start a new campaign? Campaign progress, unlocks, inventory, and loadouts will be reset.")) return;
+    await resetPlayerCampaign(playerSave);
+    window.location.href = "/play/";
+  }
+
   function firstLaunchOpen(): boolean {
     const firstLaunch = mount.querySelector<HTMLElement>("#first-launch");
     return firstLaunch !== null && !firstLaunch.hidden;
@@ -547,6 +653,17 @@ export function startLab(mount: HTMLElement): () => void {
     if (!firstLaunch) return;
     for (const child of required("game-content").children) {
       if (child === firstLaunch || !(child instanceof HTMLElement)) continue;
+      child.inert = inert;
+      if (inert) child.setAttribute("aria-hidden", "true");
+      else child.removeAttribute("aria-hidden");
+    }
+  }
+
+  function setFrontContentInert(inert: boolean): void {
+    const front = mount.querySelector<HTMLElement>("#front-shell");
+    if (!front) return;
+    for (const child of required("game-content").children) {
+      if (child === front || !(child instanceof HTMLElement)) continue;
       child.inert = inert;
       if (inert) child.setAttribute("aria-hidden", "true");
       else child.removeAttribute("aria-hidden");
@@ -584,6 +701,7 @@ export function startLab(mount: HTMLElement): () => void {
     syncBuildUi();
     if (resumeAfterMenu) timeline.paused = false;
     resumeAfterMenu = false;
+    if (!session) showFrontView("main");
     (focusBeforeMenu ?? mount.querySelector<HTMLButtonElement>("[data-action='menu']"))?.focus();
     tutorial.recordUi("returned-to-combat");
   }
@@ -611,6 +729,16 @@ export function startLab(mount: HTMLElement): () => void {
       const active = page.dataset.menuPage === tab;
       page.hidden = !active;
       page.classList.toggle("active", active);
+    }
+    if (!session) {
+      const section = ["loadout", "armor", "craft"].includes(tab)
+        ? "Armory"
+        : ["moves", "status", "codex-equipment", "stages", "enemies"].includes(tab)
+          ? "Codex"
+          : "System";
+      required("menu-title").textContent = section;
+      const context = mount.querySelector<HTMLElement>("#menu-context");
+      if (context) context.textContent = `HEXFRAME / ${section.toUpperCase()}`;
     }
     syncDemonstrationActivity();
     if (tab === "loadout") tutorial.recordUi("arsenal-opened");
@@ -650,7 +778,7 @@ export function startLab(mount: HTMLElement): () => void {
 
   function assignMove(slot: number, moveId: number): void {
     if (slot < 0 || slot >= activeBuild.loadout.length || !validMoveIds.has(moveId)) return;
-    if (campaign && moveId !== 0 && !campaign.unlockedMoveIds.includes(moveId)) return;
+    if (moveId !== 0 && !playerSave.unlocks.moves.includes(moveId)) return;
     armedSlot = slot;
     if (activeBuild.loadout[slot] === moveId) {
       const existing = playerCharacter.moves.find((candidate) => candidate.id === moveId);
@@ -730,17 +858,18 @@ export function startLab(mount: HTMLElement): () => void {
       buildState.inventory,
       armorById(activeBuild.equipment[item.slot]),
       activeBuild.equipment,
-      campaign?.unlockedRecipeIds.includes(item.id) ?? true,
+      playerSave.unlocks.recipes.includes(item.id),
     );
   }
 
-  function craftSelectedArmor(equip = false): void {
+  async function craftSelectedArmor(equip = false): Promise<void> {
     const item = armorById(selectedCraftArmorId);
     if (!item || !canCraftArmor(item, buildState.inventory)) return;
-    if (campaign && !campaign.unlockedRecipeIds.includes(item.id)) return;
+    if (!playerSave.unlocks.recipes.includes(item.id)) return;
     if (preferences.controls.holdToConfirm && !confirmDestructive(`Craft ${item.name} and spend its listed materials?`)) return;
-    for (const cost of item.recipe) buildState.inventory.materials[cost.materialId] -= cost.quantity;
-    buildState.inventory.armor.push(item.id);
+    await craftPlayerArmor(playerSave, item.id);
+    buildState.inventory = playerSave.inventory;
+    if (!buildState.inventory.armor.includes(item.id)) return;
     if (equip) {
       activeBuild.equipment[item.slot] = item.id;
       markBuildChanged();
@@ -880,7 +1009,7 @@ export function startLab(mount: HTMLElement): () => void {
     if (action === "clear") {
       if (!confirmDestructive("Clear all sixteen move assignments and restore default equipment?")) return;
       activeBuild.loadout = Array.from({ length: activeBuild.loadout.length }, () => 0);
-      activeBuild.equipment = { ...createDefaultBuildState().presets[0].equipment };
+      activeBuild.equipment = { ...createDefaultPlayerSave().loadouts.byId["loadout-01"].equipment };
       markBuildChanged();
       rebuildActiveBuild();
       showMovePreview(playerCharacter.moves[0].id, true);
@@ -888,7 +1017,8 @@ export function startLab(mount: HTMLElement): () => void {
     }
     if (action === "reset") {
       if (!confirmDestructive(`Reset ${activeBuild.name} to its shipped preset?`)) return;
-      const fallback = createDefaultBuildState().presets[buildState.activePreset];
+      const defaults = createDefaultPlayerSave();
+      const fallback = defaults.loadouts.byId[defaults.loadouts.order[buildState.activePreset]];
       activeBuild.name = fallback.name;
       activeBuild.loadout = fallback.loadout.slice();
       activeBuild.equipment = { ...fallback.equipment };
@@ -938,32 +1068,16 @@ export function startLab(mount: HTMLElement): () => void {
   }
 
   function persistProgress(): void {
-    if (campaign) {
-      campaign.builds = buildState;
-      campaign.inventory = buildState.inventory;
-      persistCampaignState(campaign);
-    } else {
-      persistBuildState(buildState);
-    }
+    syncBuildStateToPlayerSave(playerSave, buildState);
+    cachePlayerSave(playerSave);
+    void persistPlayerSave(playerSave);
   }
 
-  function campaignMaterialId(code: number): string | null {
-    if (code === CampaignMaterial.IronScrap) return "iron-scrap";
-    if (code === CampaignMaterial.GraveThread) return "grave-thread";
-    if (code === CampaignMaterial.Stormglass) return "stormglass";
-    if (code === CampaignMaterial.WardenCore) return "warden-core";
-    return null;
-  }
-
-  function grantBellWardenReward(): void {
+  async function grantBellWardenReward(): Promise<void> {
     if (!campaign || campaign.completedBosses.includes("bell-warden")) return;
-    campaign.completedBosses.push("bell-warden");
-    if (!campaign.unlockedMoveIds.includes(MoveId.GraveToll)) campaign.unlockedMoveIds.push(MoveId.GraveToll);
-    if (!campaign.unlockedRecipeIds.includes("warden-arms")) campaign.unlockedRecipeIds.push("warden-arms");
-    buildState.inventory.materials["warden-core"] = (buildState.inventory.materials["warden-core"] ?? 0) + 1;
-    buildState.inventory.materials.stormglass = (buildState.inventory.materials.stormglass ?? 0) + 4;
-    buildState.inventory.materials["iron-scrap"] = (buildState.inventory.materials["iron-scrap"] ?? 0) + 6;
-    persistProgress();
+    await claimBossReward(playerSave, "black-belfry", "bell-warden");
+    buildState.inventory = playerSave.inventory;
+    if (!campaign.completedBosses.includes("bell-warden")) return;
     syncInventoryUi();
     const graveToll = mount.querySelector<HTMLButtonElement>(`[data-equip-move='${MoveId.GraveToll}']`);
     if (graveToll) {
@@ -977,6 +1091,12 @@ export function startLab(mount: HTMLElement): () => void {
     reward.hidden = false;
     timeline.paused = true;
     reward.querySelector<HTMLButtonElement>("[data-action='campaign-preview']")?.focus();
+  }
+
+  async function confirmStageEvent(entityId: number): Promise<void> {
+    await applyStageEvent(playerSave, "black-belfry", entityId);
+    buildState.inventory = playerSave.inventory;
+    syncInventoryUi();
   }
 
   function openCampaignDestination(tab: MenuTab): void {
@@ -1074,7 +1194,7 @@ export function startLab(mount: HTMLElement): () => void {
       if (item) button.outerHTML = craftRecipeButton(
         item,
         buildState.inventory,
-        campaign?.unlockedRecipeIds.includes(item.id) ?? true,
+        playerSave.unlocks.recipes.includes(item.id),
       );
     }
     setCraftFilter(craftFilter);
@@ -1330,12 +1450,19 @@ export function startLab(mount: HTMLElement): () => void {
   }
 
   function startTutorial(): void {
+    if (!session) {
+      const selected = playerSave.loadouts.activeId;
+      const tutorialSession = defaultSession("training", selected);
+      tutorialSession.options.tutorial = true;
+      window.location.href = sessionUrl(tutorialSession);
+      return;
+    }
     markTutorialSeen();
     const firstLaunch = mount.querySelector<HTMLElement>("#first-launch");
     if (firstLaunch) firstLaunch.hidden = true;
     setFirstLaunchInert(false);
     if (menuOpen()) closeMenu();
-    const defaults = createDefaultBuildState().presets[0];
+    const defaults = createDefaultPlayerSave().loadouts.byId["loadout-01"];
     activeBuild = {
       name: "Tutorial Fire Route",
       loadout: DEFAULT_MOVE_LOADOUT.slice(),
@@ -1352,11 +1479,19 @@ export function startLab(mount: HTMLElement): () => void {
   }
 
   function finishTutorial(): void {
+    stopTutorial(true);
+  }
+
+  function exitTutorial(): void {
+    stopTutorial(false);
+  }
+
+  function stopTutorial(completed: boolean): void {
     if (menuOpen()) closeMenu();
     tutorial.stop();
-    if (campaign) {
-      campaign.tutorialComplete = true;
-      persistCampaignState(campaign);
+    if (completed) {
+      playerSave.campaign.tutorialComplete = true;
+      persistProgress();
     }
     tutorialBuildInstalled = false;
     activeBuild = buildState.presets[buildState.activePreset];
@@ -1365,6 +1500,9 @@ export function startLab(mount: HTMLElement): () => void {
     pendingMatchReset = false;
     resetMatch();
     timeline.paused = false;
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.searchParams.delete("tutorial");
+    window.history.replaceState(null, "", cleanUrl);
     mount.querySelector<HTMLButtonElement>("[data-action='menu']")?.focus();
   }
 
@@ -1385,11 +1523,9 @@ export function startLab(mount: HTMLElement): () => void {
     if (firstLaunch) firstLaunch.hidden = true;
     setFirstLaunchInert(false);
     timeline.paused = false;
-    if (campaign) {
-      campaign.tutorialComplete = true;
-      persistCampaignState(campaign);
-      return;
-    }
+    playerSave.campaign.tutorialComplete = true;
+    persistProgress();
+    if (campaign) return;
     openMenu();
     showTab("training");
     mount.querySelector<HTMLButtonElement>("[data-menu-tab='training']")?.focus();
@@ -1429,27 +1565,22 @@ export function startLab(mount: HTMLElement): () => void {
     timeline.reset();
     dummy.reset();
     boss.reset();
-    if (publicPlay && campaign && !tutorial.active && campaign.checkpoint !== 0) {
+    if (gameMode === "fight") {
+      sim.getState().stage.bossActive = 1;
+      sim.getState().stage.arenaLocked = 1;
+    }
+    if (campaignMode && campaign && !tutorial.active && campaign.checkpointId !== 0) {
       const state = sim.getState();
-      const checkpoint = BLACK_BELFRY.interactables.find((entity) => entity.id === campaign.checkpoint);
+      const checkpoint = BLACK_BELFRY.interactables.find((entity) => entity.id === campaign.checkpointId);
       if (checkpoint) state.fighters[0].x = checkpoint.x;
     }
-    if (publicPlay && tutorial.active) {
+    if (tutorial.active) {
       const state = sim.getState();
-      const lesson = tutorial.snapshot().lessonId;
-      if (lesson === "interaction") {
-        state.fighters[0].x = BLACK_BELFRY.spawnX;
-        state.fighters[1].x = px(1130);
-        state.stage.arenaLocked = 0;
-        state.stage.bossActive = 0;
-        state.stage.bossActivatedFrame = 0;
-      } else {
-        state.fighters[0].x = px(820);
-        state.fighters[1].x = px(1080);
-        state.stage.arenaLocked = 1;
-        state.stage.bossActive = 0;
-        state.stage.bossActivatedFrame = 0;
-      }
+      state.fighters[0].x = px(-18);
+      state.fighters[1].x = px(18);
+      state.stage.arenaLocked = 0;
+      state.stage.bossActive = 0;
+      state.stage.bossActivatedFrame = 0;
     }
     lastPlayerInput = 0;
     lastReport = null;
@@ -1490,24 +1621,11 @@ export function startLab(mount: HTMLElement): () => void {
       }
       for (const event of report.entityEvents) {
         if (!campaign) continue;
-        if (event.kind === EntityEventKind.PickedUp && event.entityKind === EntityKind.MaterialPickup) {
-          const materialId = campaignMaterialId(event.owner);
-          if (materialId) buildState.inventory.materials[materialId] = (buildState.inventory.materials[materialId] ?? 0) + event.value;
-          persistProgress();
-          syncInventoryUi();
-        }
-        if (event.kind === EntityEventKind.Interacted && event.owner === InteractableKind.Checkpoint) {
-          campaign.checkpoint = event.entityId;
-          persistProgress();
-        }
-        if (event.kind === EntityEventKind.Interacted && event.owner === InteractableKind.Chest) {
-          buildState.inventory.materials.stormglass = (buildState.inventory.materials.stormglass ?? 0) + 2;
-          buildState.inventory.materials["iron-scrap"] = (buildState.inventory.materials["iron-scrap"] ?? 0) + 2;
-          persistProgress();
-          syncInventoryUi();
-        }
+        if (event.kind === EntityEventKind.PickedUp && event.entityKind === EntityKind.MaterialPickup) void confirmStageEvent(event.entityId);
+        if (event.kind === EntityEventKind.Interacted && event.owner === InteractableKind.Checkpoint) void confirmStageEvent(event.entityId);
+        if (event.kind === EntityEventKind.Interacted && event.owner === InteractableKind.Chest) void confirmStageEvent(event.entityId);
         if (event.kind === EntityEventKind.Interacted && event.owner === InteractableKind.BossReward) {
-          grantBellWardenReward();
+          void grantBellWardenReward();
         }
         if (!tutorial.active && event.kind === EntityEventKind.Interacted && event.owner === InteractableKind.ArsenalShrine) {
           openMenu();
@@ -1551,6 +1669,15 @@ export function startLab(mount: HTMLElement): () => void {
 
   function handleGamepadUi(): void {
     const now = gamepad.sampleUi();
+    if (frontShellOpen()) {
+      if (edge(now, previousUi, "confirm") || edge(now, previousUi, "start")) {
+        const title = mount.querySelector<HTMLElement>("[data-front-view='title']:not([hidden])");
+        if (title) showFrontView("main");
+        else activateFocused();
+      }
+      previousUi = now;
+      return;
+    }
     if (!menuOpen()) {
       if (edge(now, previousUi, "start")) timeline.paused = !timeline.paused;
       if (edge(now, previousUi, "menu")) openMenu();

@@ -137,7 +137,7 @@ export function interactionHistoryMarkup(
     : events.slice(-16).reverse().map(({ report, contact, index }) => {
         const move = characters[contact.attacker]?.moves.find((candidate) => candidate.id === contact.moveId);
         const active = selected?.report.frame === report.frame && selected.index === index;
-        return `<button type="button" class="interaction-event${active ? " selected" : ""}" data-contact-frame="${report.frame}" data-contact-index="${index}" aria-pressed="${active}"><span>FRAME ${String(report.frame).padStart(6, "0")}</span><strong>${contact.kind === ContactKind.Hit ? "HIT" : "BLOCK"}</strong><em>${escapeHtml(move?.key ?? `move_${contact.moveId}`)}</em></button>`;
+        return `<button type="button" class="interaction-event${active ? " selected" : ""}" data-gamepad-nav data-contact-frame="${report.frame}" data-contact-index="${index}" aria-pressed="${active}"><span>FRAME ${String(report.frame).padStart(6, "0")}</span><strong>${contact.kind === ContactKind.Hit ? "HIT" : "BLOCK"}</strong><em>${escapeHtml(move?.key ?? `move_${contact.moveId}`)}</em></button>`;
       }).join("");
 
   return `<div class="interaction-list" aria-label="Collision event history">${list}</div>

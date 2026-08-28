@@ -4,25 +4,23 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
-    <title>Hexframe Lab</title>
+    <title>Hexframe</title>
     <meta name="robots" content="noindex" />
     <link rel="stylesheet" href="/src/client/styles/lab.css" />
   </head>
   <body>
     <!--
-      This page is an ordinary static asset. The operator route is private because the
-      Worker requires a valid session cookie. A restricted public playtest mode reuses
-      the same client bundle; no credential, secret or privileged data is built into it.
+      One game client serves the main menu, Campaign, Fight, and Training. The legacy
+      /lab route redirects authenticated operators to Training with developer tools.
     -->
     <div id="lab">
       <main aria-labelledby="fallback-title">
-        <p>HEXFRAME // PUBLIC PLAYTEST</p>
-        <h1 id="fallback-title">Hexframe combat laboratory</h1>
+        <p>HEXFRAME</p>
+        <h1 id="fallback-title">Hexframe</h1>
         <p>
           A browser-playable fighting-game prototype built around deterministic 60 Hz
           simulation, authored hitboxes, rollback-ready state, and build crafting. The
-          interactive client requires JavaScript; no sign-in is required at
-          <a href="/play/">/play/</a>.
+          interactive game requires JavaScript; no sign-in is required.
         </p>
         <h2>Keyboard controls</h2>
         <ul>
@@ -37,7 +35,7 @@
           armor grades, flat armor and elemental resistances, threshold-based armor skills,
           a split equipment/material inventory, and armor crafting.
         </p>
-        <p><a href="/play/">Open the public playtest</a></p>
+        <p><a href="/play/">Open Hexframe</a></p>
       </main>
     </div>
     <script type="module" src="/src/client/lab-main.ts"></script>

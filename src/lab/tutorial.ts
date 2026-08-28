@@ -4,10 +4,8 @@ import {
   ContactKind,
   DebuffEventKind,
   DebuffKind,
-  EntityEventKind,
   HitLevel,
   InputBit,
-  InteractableKind,
   StateId,
 } from "../combat/types";
 import { MoveId } from "../content/test-fighter";
@@ -20,8 +18,7 @@ export type TutorialLessonId =
   | "first-route"
   | "status"
   | "arsenal"
-  | "codex"
-  | "interaction";
+  | "codex";
 
 export type TutorialUiEvent =
   | "arsenal-opened"
@@ -152,14 +149,6 @@ export const TUTORIAL_LESSONS: readonly TutorialLesson[] = [
       { objective: "Inspect or equip its route", success: "Codex complete" },
     ],
   },
-  {
-    id: "interaction",
-    title: "Enter the Belfry",
-    hint: "Walk to the Arsenal Shrine. E / RB is a deterministic world action.",
-    steps: [
-      { objective: "Walk to the Arsenal Shrine and press E / RB", success: "Loadout shrine activated" },
-    ],
-  },
 ];
 
 const DIRECTION_MOVES = [MoveId.EmberPalm, MoveId.VenomFang, MoveId.FrostHeel, MoveId.StormKnuckle];
@@ -266,12 +255,6 @@ export class TutorialController {
     if (lesson.id === "arsenal" && this.stepIndex === 3) {
       success = reports.some((report) => report.moveStarts.some((event) => event.player === 0));
     }
-    if (lesson.id === "interaction") {
-      success = reports.some((report) => report.entityEvents.some((event) =>
-        event.kind === EntityEventKind.Interacted && event.owner === InteractableKind.ArsenalShrine,
-      ));
-    }
-
     if (success) this.completeStep();
   }
 

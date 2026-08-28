@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "license": "UNLICENSED",
-  "description": "Hexframe — a deterministic 2D fighting-game simulator and combat laboratory on Cloudflare Workers.",
+  "description": "Hexframe — a deterministic 2D fighting game with integrated training tools on Cloudflare Workers.",
   "type": "module",
   "scripts": {
     "build": "vite build",

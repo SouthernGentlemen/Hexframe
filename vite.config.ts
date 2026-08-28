@@ -1,9 +1,10 @@
 import { defineConfig } from "vite";
 import { fileURLToPath } from "node:url";
 
-// Two built pages, both plain HTML + TypeScript: the public shell and the combat client.
-// The Worker serves the combat client as a restricted public playtest at `/play/` and as
-// an authenticated operator laboratory at `/lab/`. Nothing secret is built into it.
+// Two built pages, both plain HTML + TypeScript: the public landing page and the unified
+// game client. The lab-named build path is an internal asset location retained so old
+// deploys and hashed asset routing remain compatible; the product routes are /play and
+// /training.
 export default defineConfig({
   build: {
     outDir: "dist",
@@ -14,9 +15,8 @@ export default defineConfig({
         lab: fileURLToPath(new URL("./lab/index.html", import.meta.url)),
       },
       output: {
-        // Keep lab-owned entry assets under /lab so the Worker's session gate sees them.
-        // Shared runtime chunks contain no lab UI or authored model data and may remain
-        // public alongside the shell.
+        // Keep the historical build location stable while the Worker exposes the same
+        // hashed game assets under both /play/assets and /training/assets.
         entryFileNames: (chunk) =>
           chunk.name === "lab" ? "lab/assets/[name]-[hash].js" : "assets/[name]-[hash].js",
         assetFileNames: (asset) =>
