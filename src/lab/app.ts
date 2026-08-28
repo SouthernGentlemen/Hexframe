@@ -1176,6 +1176,7 @@ export function startLab(mount: HTMLElement): () => void {
     tutorialBuildInstalled = true;
     Object.assign(playerCharacter, testFighterWithBuild(activeBuild.loadout, activeBuild.equipment));
     syncBuildUi();
+    showMovePreview(activeBuild.loadout[0], true);
     pendingMatchReset = false;
     resetMatch();
     timeline.paused = false;
