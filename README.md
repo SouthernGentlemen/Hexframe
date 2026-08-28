@@ -1,7 +1,8 @@
 # Hexframe
 
-A deterministic 2D fighting-game architecture built around authored combat, rollback
-infrastructure, deterministic party AI, and first-class training tools.
+A deterministic 2D combat laboratory built around authored fighting-game systems,
+rollback infrastructure, exact frame inspection, reproducible captures, and an animated
+move Codex.
 
 **[Live](https://hexframe.wizardgang.ai)** · **[Architecture](docs/ARCHITECTURE.md)** ·
 **[Releases](../../releases)** · **[Engineering record](docs/RECONSTRUCTION.md)**
@@ -11,16 +12,25 @@ infrastructure, deterministic party AI, and first-class training tools.
 Hexframe runs a fixed 60 Hz, integer-only simulation in the browser. One frame of inputs
 goes in, one frame of authoritative state comes out — no clock is read, no ambient
 randomness is sampled, and nothing outside that state can change the outcome. Everything
-else is downstream: rendering, tooling, the AI that plays a party slot, and the server.
+else is downstream: rendering, tooling, deterministic AI, and the server boundary.
 
-- **Fight, Training and Campaign** as three configurations of one simulation, not three
-  code paths that happen to look alike.
-- **The Black Belfry**, a campaign slice with traversal, breakables, hazards, checkpoints
-  and the Bell Warden.
-- **An Armory and a Moves Codex**, where every technique demonstrates itself from an
-  authored scenario instead of asking you to read frame data.
-- **Party members played by deterministic AI** that reads the same authored loadouts a
-  human player uses.
+The default product surface is the authenticated developer laboratory. It exposes:
+
+- **Frame transport** — pause, step ±1/±10, resume, reset, and auto-freeze on contact.
+- **Authoritative state inspection** — exact frame state beside the rendered fight.
+- **Combat geometry** — hitboxes, hurtboxes, pushboxes, origins, skeletons, and velocity.
+- **Reproducible scenario capture** — exact per-frame inputs plus terminal state hashes for
+  deterministic replay and regression fixtures.
+- **Interaction history and frame timelines** — freeze a contact and inspect what the
+  simulation decided on that frame.
+- **Animated Move Codex** — `/codex/moves/:id/` runs the real deterministic move
+  demonstration with Demo/Hit/Block modes, playback speeds, pause/step/scrub, frame
+  timeline, search, and authored move detail.
+
+Hexframe also contains Fight and Campaign configurations, including the Black Belfry
+vertical slice and Bell Warden. Those systems remain implemented and testable, but they
+are secondary evidence of what the combat architecture can support rather than the
+project's default presentation.
 
 ## Interesting engineering
 
@@ -43,6 +53,10 @@ and `src/game` import nothing from `src/renderer`, `src/lab` or `src/client`.
 **The training tools are the debugger.** Scenarios capture exact per-frame inputs and a
 terminal state hash, so a bug report replays to the same bits.
 
+**The Codex is executable documentation.** Its move previews reuse the same authored
+fighter, deterministic simulation, renderer, and frame-report path as the laboratory
+rather than maintaining a separate animation approximation.
+
 ## Run locally
 
 ```bash
@@ -51,17 +65,22 @@ cp .env.example .env   # fill in the developer credentials you want locally
 npm run dev
 ```
 
+`/` and `/lab` enter the protected developer laboratory. `/codex/` and
+`/codex/moves/:id/` are protected developer Codex routes. Player/campaign routes remain in
+the application for direct testing but are not the default entry.
+
 ## Testing
 
 ```bash
-npm test          # 140 tests across 33 files
+npm test
 npm run typecheck
 npm run build
 ```
 
 The suite covers deterministic replay and state hashing, snapshot round-trips, collision
 and hit resolution, command parsing, content conformance against the published schemas,
-AI determinism, worker route separation, and accessibility contracts for the interface.
+AI determinism, worker route separation, authenticated developer surfaces, and
+accessibility contracts for the interface.
 
 ## Release model
 
