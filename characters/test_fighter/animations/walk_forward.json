@@ -1,0 +1,12 @@
+{
+  "name": "walk_forward",
+  "loop": true,
+  "duration": 24,
+  "keyframes": [
+    { "frame": 0,  "bones": { "torso": { "rotation": 4 }, "leg_upper_l": { "rotation": 24 }, "leg_lower_l": { "rotation": -20 }, "leg_upper_r": { "rotation": -22 }, "leg_lower_r": { "rotation": 10 }, "arm_upper_l": { "rotation": -30 }, "arm_upper_r": { "rotation": -6 } } },
+    { "frame": 6,  "bones": { "pelvis": { "y": 2 }, "leg_upper_l": { "rotation": 4 }, "leg_lower_l": { "rotation": -6 }, "leg_upper_r": { "rotation": -2 }, "leg_lower_r": { "rotation": 4 } } },
+    { "frame": 12, "bones": { "pelvis": { "y": 0 }, "leg_upper_l": { "rotation": -22 }, "leg_lower_l": { "rotation": 10 }, "leg_upper_r": { "rotation": 24 }, "leg_lower_r": { "rotation": -20 }, "arm_upper_l": { "rotation": -6 }, "arm_upper_r": { "rotation": -30 } } },
+    { "frame": 18, "bones": { "pelvis": { "y": 2 }, "leg_upper_l": { "rotation": -2 }, "leg_lower_l": { "rotation": 4 }, "leg_upper_r": { "rotation": 4 }, "leg_lower_r": { "rotation": -6 } } },
+    { "frame": 24, "bones": { "pelvis": { "y": 0 }, "leg_upper_l": { "rotation": 24 }, "leg_lower_l": { "rotation": -20 }, "leg_upper_r": { "rotation": -22 }, "leg_lower_r": { "rotation": 10 }, "arm_upper_l": { "rotation": -30 }, "arm_upper_r": { "rotation": -6 } } }
+  ]
+}

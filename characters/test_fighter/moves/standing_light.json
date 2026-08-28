@@ -1,0 +1,37 @@
+{
+  "id": 1,
+  "key": "standing_light",
+  "animation": "standing_light",
+
+  "duration": 18,
+  "startup": 4,
+  "active": 2,
+  "recovery": 12,
+
+  "requiresCrouch": false,
+  "airOk": false,
+
+  "hitboxes": [
+    {
+      "id": 1,
+      "box": { "x": 26, "y": 62, "w": 44, "h": 20 },
+      "startFrame": 4,
+      "endFrame": 5,
+      "level": "mid",
+      "damage": 30,
+      "hitstun": 14,
+      "blockstun": 9,
+      "hitstopAttacker": 7,
+      "hitstopDefender": 9,
+      "pushbackHitAttacker": -1.2,
+      "pushbackHitDefender": 3,
+      "pushbackBlockAttacker": -1.8,
+      "pushbackBlockDefender": 2.4
+    }
+  ],
+
+  "hurtboxWindows": [],
+  "invulWindows": [],
+  "movement": [],
+  "cancelWindows": []
+}

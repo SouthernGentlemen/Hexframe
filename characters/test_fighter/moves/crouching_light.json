@@ -1,0 +1,37 @@
+{
+  "id": 2,
+  "key": "crouching_light",
+  "animation": "crouching_light",
+
+  "duration": 16,
+  "startup": 4,
+  "active": 3,
+  "recovery": 9,
+
+  "requiresCrouch": true,
+  "airOk": false,
+
+  "hitboxes": [
+    {
+      "id": 1,
+      "box": { "x": 22, "y": 12, "w": 42, "h": 18 },
+      "startFrame": 4,
+      "endFrame": 6,
+      "level": "low",
+      "damage": 20,
+      "hitstun": 12,
+      "blockstun": 8,
+      "hitstopAttacker": 6,
+      "hitstopDefender": 8,
+      "pushbackHitAttacker": -1,
+      "pushbackHitDefender": 2.2,
+      "pushbackBlockAttacker": -1.4,
+      "pushbackBlockDefender": 1.8
+    }
+  ],
+
+  "hurtboxWindows": [],
+  "invulWindows": [],
+  "movement": [],
+  "cancelWindows": []
+}

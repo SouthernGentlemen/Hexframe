@@ -1,0 +1,11 @@
+{
+  "name": "walk_backward",
+  "loop": true,
+  "duration": 24,
+  "note": "The same gait as walk_forward, leaning away and stepping in the other order.",
+  "keyframes": [
+    { "frame": 0,  "bones": { "torso": { "rotation": -5 }, "leg_upper_l": { "rotation": -20 }, "leg_lower_l": { "rotation": 12 }, "leg_upper_r": { "rotation": 20 }, "leg_lower_r": { "rotation": -16 }, "arm_upper_l": { "rotation": -8 }, "arm_upper_r": { "rotation": -26 } } },
+    { "frame": 12, "bones": { "leg_upper_l": { "rotation": 20 }, "leg_lower_l": { "rotation": -16 }, "leg_upper_r": { "rotation": -20 }, "leg_lower_r": { "rotation": 12 }, "arm_upper_l": { "rotation": -26 }, "arm_upper_r": { "rotation": -8 } } },
+    { "frame": 24, "bones": { "leg_upper_l": { "rotation": -20 }, "leg_lower_l": { "rotation": 12 }, "leg_upper_r": { "rotation": 20 }, "leg_lower_r": { "rotation": -16 }, "arm_upper_l": { "rotation": -8 }, "arm_upper_r": { "rotation": -26 } } }
+  ]
+}
