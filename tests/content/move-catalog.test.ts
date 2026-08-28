@@ -25,9 +25,14 @@ describe("move catalog and loadout", () => {
 
   it("has a distinct presentation clip for every added move", () => {
     expect(Object.keys(ADDITIONAL_ANIMATIONS)).toHaveLength(26);
+    const contactSilhouettes = new Set<string>();
     for (const move of TEST_FIGHTER.moves.slice(2)) {
-      expect(ADDITIONAL_ANIMATIONS[move.animation]?.name).toBe(move.animation);
+      const animation = ADDITIONAL_ANIMATIONS[move.animation];
+      expect(animation?.name).toBe(move.animation);
+      expect(animation?.keyframes).toHaveLength(5);
+      contactSilhouettes.add(JSON.stringify(animation?.keyframes[2]?.bones));
     }
+    expect(contactSilhouettes.size).toBe(26);
   });
 
   it("maps a configurable 16-move loadout to 16 independent action bits", () => {

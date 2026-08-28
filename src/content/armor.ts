@@ -68,6 +68,8 @@ export interface ArmorDef {
   grade: ArmorGrade;
   icon: string;
   description: string;
+  /** The set's shared fantasy and the build behavior its three-piece perk enables. */
+  setDescription: string;
   /** Flat defense shown on the character sheet and consumed by the damage formula. */
   armor: number;
   skills: readonly ArmorSkillGrant[];
@@ -246,6 +248,14 @@ const SETS: ReadonlyArray<{
   },
 ];
 
+export const ARMOR_SET_DESCRIPTIONS: Readonly<Record<string, string>> = {
+  Gravecloth: "Burial cloth reinforced with scavenged iron and stitched to move without sound. Three pieces awaken Grave Step, granting strike immunity during the opening frames of a backdash.",
+  Briarbone: "Thorned hide and venom-treated bone plates built for relentless pressure. Three pieces activate Venom Edge, reducing the stamina cost of poison techniques.",
+  Stormglass: "Conductive crystal armor that stores charge instead of dispersing it. Three pieces activate Static Conductor, allowing an additional Shock stack before cashout.",
+  Voidwarden: "Umbral armor designed to remain weightless when its wearer leaves the ground. Three pieces activate Void Channel, reducing stamina costs for aerial techniques.",
+  Crownfire: "Furnace-forged armor that turns a burning opponent's pain into an opening. Three pieces activate Burning Brand, increasing hitstun when cashing out against burning targets.",
+};
+
 const SLOT_NAMES: Record<ArmorSlot, string> = {
   head: "Helm",
   chest: "Mail",
@@ -256,6 +266,44 @@ const SLOT_NAMES: Record<ArmorSlot, string> = {
 
 const SLOT_ICONS: Record<ArmorSlot, string> = { head: "H", chest: "C", arms: "A", waist: "W", legs: "L" };
 
+const ITEM_DESCRIPTIONS: Readonly<Record<string, Readonly<Record<ArmorSlot, string>>>> = {
+  gravecloth: {
+    head: "A soot-dark burial hood pinned with an iron brow that never catches the light.",
+    chest: "Layered gravecloth mail cut loose at the shoulders so its wearer can vanish mid-step.",
+    arms: "Silent iron-thread wraps that keep a retreating guard quick and close.",
+    waist: "A whisper-light burial sash weighted just enough to anchor sudden evasive movement.",
+    legs: "Soft-soled greaves stitched for a backward step no blade can easily follow.",
+  },
+  briarbone: {
+    head: "A thorn-crowned bone mask lacquered with venom until even its breath tastes bitter.",
+    chest: "Overlapping briar hide and rib plates that flex under relentless close-range pressure.",
+    arms: "Barbed bone bracers whose toxin channels feed every clawing hand technique.",
+    waist: "A knotted hide belt hung with sealed venom glands for long, punishing engagements.",
+    legs: "Hooked greaves that dig into the floor while poison pressure drives forward.",
+  },
+  stormglass: {
+    head: "A faceted crystal helm that catches stray charge and cages it behind the eyes.",
+    chest: "Conductive crystal mail designed to accumulate electrical charge without grounding the wearer.",
+    arms: "Blue-glass vambraces webbed with gold conductors that make every impact crackle twice.",
+    waist: "An insulated stormglass coil that keeps gathered voltage circling the core.",
+    legs: "Charged crystal greaves that leave a sharp ozone trace across the arena floor.",
+  },
+  voidwarden: {
+    head: "An umbral helm whose hollow crown seems to weigh less whenever the ground falls away.",
+    chest: "Layered void-mail that loosens into weightless shadow the instant its wearer takes flight.",
+    arms: "Long black vambraces tuned to guide aerial momentum through every reaching strike.",
+    waist: "A gravity-thin coil that holds the body centered through impossible airborne turns.",
+    legs: "Weightless greaves made to extend an air route without dragging its wearer back to earth.",
+  },
+  crownfire: {
+    head: "A blackened crown whose vents glow hotter as nearby flesh burns.",
+    chest: "Furnace-plated mail built to hold heat against the chest rather than shed it.",
+    arms: "Heavy ignition bracers that channel violent motion directly through the hands.",
+    waist: "A heat-scarred waistguard that anchors the body during committed attacks.",
+    legs: "Forged greaves made for advancing through flame instead of away from it.",
+  },
+};
+
 export const ARMOR_CATALOG: readonly ArmorDef[] = SETS.flatMap((set) =>
   ARMOR_SLOTS.map((slot, index): ArmorDef => ({
     id: `${set.id}-${slot}`,
@@ -264,7 +312,8 @@ export const ARMOR_CATALOG: readonly ArmorDef[] = SETS.flatMap((set) =>
     slot,
     grade: set.grade,
     icon: SLOT_ICONS[slot],
-    description: `${set.name} armor shaped for a ${slot} slot build.`,
+    description: ITEM_DESCRIPTIONS[set.id]?.[slot] ?? `${set.name} ${SLOT_NAMES[slot].toLowerCase()}.`,
+    setDescription: ARMOR_SET_DESCRIPTIONS[set.name] ?? "",
     armor: set.baseArmor + index,
     skills: [...set.skills[slot], { id: set.perkId, points: 1 }],
     recipe: [

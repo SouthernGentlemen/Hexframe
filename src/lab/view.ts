@@ -1,7 +1,7 @@
 import { HitLevel } from "../combat/types";
 import type { CharacterDef, MoveDef } from "../combat/types";
 import { ACTION_SLOT_LABELS } from "../input/action-layout";
-import type { ArmorDef, ArmorInventory, ArmorSkillId, MaterialDef } from "../content/armor";
+import type { ArmorDef, ArmorInventory, ArmorSkillId, ArmorSlot, MaterialDef } from "../content/armor";
 import {
   ARMOR_CATALOG,
   ARMOR_SKILLS,
@@ -136,7 +136,7 @@ export function buildLabView({ character, buildState, preferences, dummyOptions,
             <div class="inventory-vault">
               <section class="inventory-panel" id="inventory-panel-armor" role="tabpanel" aria-labelledby="inventory-tab-armor" data-inventory-panel="armor"><div class="armor-item-grid" id="armor-inventory-grid">${inventory}</div></section>
               <section class="inventory-panel" id="inventory-panel-materials" role="tabpanel" aria-labelledby="inventory-tab-materials" data-inventory-panel="materials" hidden><div class="material-item-grid">${materials}</div></section>
-              <aside class="gear-detail" id="gear-detail" aria-live="polite">${armorDetailMarkup(initialArmor, armorById(preset.equipment[initialArmor.slot]))}</aside>
+              <aside class="gear-detail" id="gear-detail" aria-live="polite">${armorDetailMarkup(initialArmor, armorById(preset.equipment[initialArmor.slot]), preset.equipment)}</aside>
             </div>
           </section>
         </div>
@@ -171,13 +171,28 @@ function materialInventoryButton(material: MaterialDef, inventory: Readonly<Armo
   return `<button type="button" class="material-item" data-gamepad-nav data-material-item="${material.id}" aria-label="${material.name}, ${count} owned"><span class="material-icon" aria-hidden="true">${material.icon}</span><strong data-material-count="${material.id}">${count}</strong><small>${material.name}</small></button>`;
 }
 
-export function armorDetailMarkup(item: ArmorDef, equipped: ArmorDef | null): string {
+export function armorDetailMarkup(
+  item: ArmorDef,
+  equipped: ArmorDef | null,
+  equipment: Readonly<Partial<Record<ArmorSlot, string>>> = {},
+): string {
   const delta = item.armor - (equipped?.armor ?? 0);
   const deltaLabel = delta === 0 ? "equipped value" : `${delta > 0 ? "+" : ""}${delta} vs equipped`;
-  return `<div class="detail-heading"><span class="gear-icon grade-${item.grade}" aria-hidden="true">${item.icon}</span><div><small>${item.grade} · ${item.slot} · ${item.setName} set</small><h3>${item.name}</h3></div></div><p>${item.description}</p><dl class="detail-defense"><div><dt>Armor</dt><dd>${item.armor}</dd></div><div class="${delta > 0 ? "positive" : delta < 0 ? "negative" : ""}"><dt>Compare</dt><dd>${deltaLabel}</dd></div></dl><div class="detail-skills"><h4>Skills</h4>${item.skills.map((grant) => {
+  const prospective = { ...equipment, [item.slot]: item.id };
+  const points = armorSkillPoints(prospective);
+  const regularSkills = item.skills.filter((grant) => !armorSkillById(grant.id).thresholds.some((threshold) => threshold.effect.perk));
+  const setGrant = item.skills.find((grant) => armorSkillById(grant.id).thresholds.some((threshold) => threshold.effect.perk));
+  const skillMarkup = regularSkills.map((grant) => {
     const skill = armorSkillById(grant.id);
-    return `<div><span><b>${skill.name}</b><small>+${grant.points} point${grant.points === 1 ? "" : "s"}</small></span><em>${skill.thresholds.map((threshold) => threshold.points).join(" / ")}</em></div>`;
-  }).join("")}</div>`;
+    return `<div class="detail-skill"><span><b>${skill.name}</b><small>+${grant.points} · build total ${points[skill.id]}</small></span><ul>${skill.thresholds.map((threshold) => `<li class="${points[skill.id] >= threshold.points ? "active" : ""}"><b>${threshold.points}</b><span>${threshold.description}</span></li>`).join("")}</ul></div>`;
+  }).join("");
+  const setMarkup = setGrant ? (() => {
+    const skill = armorSkillById(setGrant.id);
+    const perk = skill.thresholds.find((threshold) => threshold.effect.perk);
+    const progress = points[skill.id];
+    return `<section class="detail-set"><div><span><b>${skill.name}</b><small>Set progress</small></span><em>${Math.min(progress, 3)} / 3</em></div><p>${item.setDescription}</p>${perk ? `<dl><dt>${perk.points} pieces</dt><dd>${perk.description}</dd></dl>` : ""}</section>`;
+  })() : "";
+  return `<div class="detail-heading"><span class="gear-icon grade-${item.grade}" aria-hidden="true">${item.icon}</span><div><small>${item.grade} · ${item.slot} · ${item.setName} set</small><h3>${item.name}</h3></div></div><p>${item.description}</p><dl class="detail-defense"><div><dt>Armor</dt><dd>${item.armor}</dd></div><div class="${delta > 0 ? "positive" : delta < 0 ? "negative" : ""}"><dt>Compare</dt><dd>${deltaLabel}</dd></div></dl><div class="detail-skills"><h4>Skills & thresholds</h4>${skillMarkup}</div>${setMarkup}`;
 }
 
 export function materialDetailMarkup(material: MaterialDef, inventory: Readonly<ArmorInventory>): string {

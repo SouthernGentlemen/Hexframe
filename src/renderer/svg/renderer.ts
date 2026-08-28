@@ -2,7 +2,8 @@ import type { CharacterDef, FrameReport, SimState } from "../../combat/types";
 import { StateId } from "../../combat/types";
 import { debugBoxes } from "../../combat/collision/boxes";
 import type { RawAnimation, RawRig } from "../../content/raw-types";
-import { animationForState, sampleAnimation } from "../animation/animator";
+import type { AnimationPlayback } from "../animation/animator";
+import { animationForState, animationFrameForState, sampleAnimation } from "../animation/animator";
 import { applyPose, buildFighterNode } from "../character/rig";
 import type { FighterNode } from "../character/rig";
 import type { DebugToggles } from "./debug-overlay";
@@ -14,6 +15,7 @@ export interface FighterRendererAssets {
   model: string;
   rig: RawRig;
   animations: Record<string, RawAnimation>;
+  playback?: Readonly<Record<string, AnimationPlayback>>;
 }
 
 export interface RendererAssets {
@@ -49,7 +51,13 @@ export class Renderer {
       const clipName = animationForState(fighter, this.chars[player]);
       const clip = asset.animations[clipName] ?? asset.animations["idle"];
       if (clip) {
-        const frame = fighter.state === StateId.Attack ? fighter.moveFrame : fighter.stateFrame;
+        const frame = animationFrameForState(
+          fighter,
+          this.chars[player],
+          clipName,
+          clip,
+          asset.playback?.[clipName],
+        );
         applyPose(node, sampleAnimation(clip, frame));
       }
       const position = worldToScreen(fighter.x, fighter.y);

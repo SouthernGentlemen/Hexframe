@@ -3,7 +3,12 @@ import type { FighterState, FrameReport, SimConfig } from "../combat/types";
 import { ContactKind, DebuffEventKind, DebuffKind, HitLevel } from "../combat/types";
 import { Simulation } from "../combat/simulation/simulation";
 import { DEFAULT_MOVE_LOADOUT, testFighterWithBuild, testFighterWithLoadout } from "../content/test-fighter";
-import { TEST_FIGHTER_ANIMATIONS, TEST_FIGHTER_MODEL, TEST_FIGHTER_RIG } from "../content/test-fighter-assets";
+import {
+  TEST_FIGHTER_ANIMATIONS,
+  TEST_FIGHTER_MODEL,
+  TEST_FIGHTER_PLAYBACK,
+  TEST_FIGHTER_RIG,
+} from "../content/test-fighter-assets";
 import type { ArmorSlot } from "../content/armor";
 import {
   ARMOR_CATALOG,
@@ -97,7 +102,12 @@ export function startLab(mount: HTMLElement): () => void {
   const secondKeyboard = new KeyboardController(window, DEFAULT_KEYMAP_P2, NO_ACTION_KEYMAP);
   const gamepad = new GamepadController();
   const renderer = new Renderer(required("stage"), sim.characters(), {
-    fighters: [0, 1].map(() => ({ model: TEST_FIGHTER_MODEL, rig: TEST_FIGHTER_RIG, animations: TEST_FIGHTER_ANIMATIONS })),
+    fighters: [0, 1].map(() => ({
+      model: TEST_FIGHTER_MODEL,
+      rig: TEST_FIGHTER_RIG,
+      animations: TEST_FIGHTER_ANIMATIONS,
+      playback: TEST_FIGHTER_PLAYBACK,
+    })),
   });
   const moveShowcase = new MoveShowcase(required("move-showcase-stage"), playerCharacter, {
     model: TEST_FIGHTER_MODEL,
@@ -557,7 +567,11 @@ export function startLab(mount: HTMLElement): () => void {
   function renderArmorDetail(itemId: string): void {
     const item = armorById(itemId);
     if (!item) return;
-    required("gear-detail").innerHTML = armorDetailMarkup(item, armorById(activeBuild.equipment[item.slot]));
+    required("gear-detail").innerHTML = armorDetailMarkup(
+      item,
+      armorById(activeBuild.equipment[item.slot]),
+      activeBuild.equipment,
+    );
   }
 
   function renderMaterialDetail(materialId: string): void {
