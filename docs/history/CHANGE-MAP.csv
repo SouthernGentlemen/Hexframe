@@ -68,3 +68,4 @@ HF-066,77b28c5b584eb4587343f884eae08f245d675df4,,,,,reconstructed-from-deploymen
 HF-067,d72d8eb89c3572f3b484cf3f0164e6bc501cdfd0,,,,,reconstructed-from-deployment,,v0.7.0,the readme and release records
 HF-068,ed8ffab0ba093746afca22c56996cb78730daa7b,,,,,reconstructed-from-deployment,,v0.7.0,the public launch
 HF-069,,,,,,reconstructed-from-deployment,,v0.7.0,provenance map completed with public commit SHAs; this row cannot carry its own SHA because the file is part of the commit it would name
+HF-070,,,,,2026-08-28,forward-fix,,v0.7.1,title screen uses the Hexframe public product identity; this row cannot carry its own SHA because the file is part of the commit it would name

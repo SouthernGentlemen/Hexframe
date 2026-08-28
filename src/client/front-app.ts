@@ -141,7 +141,7 @@ function shell(content: string, label: string): string {
 }
 
 function titleMarkup(): string {
-  return `<main class="route-title"><p>WIZARD GANG PRESENTS</p><h1>SHADOW<span>MONEY</span></h1><a href="/play/" autofocus>Press any button</a><footer><a href="/settings/#about">About</a></footer></main>`;
+  return `<main class="route-title"><p>WIZARD GANG PRESENTS</p><h1>HEX<span>FRAME</span></h1><a href="/play/" autofocus>Press any button</a><footer><a href="/settings/#about">About</a></footer></main>`;
 }
 
 function mainMenuMarkup(state: FrontState): string {
