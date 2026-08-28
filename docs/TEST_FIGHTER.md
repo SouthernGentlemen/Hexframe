@@ -169,3 +169,8 @@ renderer interpolates between keyframes. **The simulation never reads any of thi
 animation may be re-timed, re-posed or replaced entirely without a single combat value
 moving, and `tests/content` asserts that the animation frame count and the move duration
 are allowed to differ, so nobody quietly couples them later.
+
+The loadout showcase replays these same clips on hover or focus. `move-effects.ts`
+derives a stable particle profile from each move id and its tags, so all 24 attacks have
+distinct visual signatures in both the showcase and live combat without adding particle
+state to snapshots or hashes.

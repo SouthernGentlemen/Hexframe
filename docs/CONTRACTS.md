@@ -387,6 +387,10 @@ export function applyPose(node: FighterNode, pose: Record<string, { rotation?: n
 export function sampleAnimation(anim: RawAnimation, frame: number): Record<string, { rotation?: number; x?: number; y?: number }>
 export function animationForState(f: FighterState, c: CharacterDef): string
 
+// svg/move-effects.ts
+export function moveEffectProfile(moveId: number, tags: readonly string[]): MoveEffectProfile
+export function drawMoveParticles(layer: SVGGElement, move: MoveDef, x: number, y: number, facing: number, frame: number, scale?: number): void
+
 // svg/debug-overlay.ts
 export interface DebugToggles { hitboxes: boolean; hurtboxes: boolean; pushboxes: boolean; origins: boolean; skeleton: boolean; boneNames: boolean; velocity: boolean }
 export function drawDebug(layer: SVGGElement, boxes: DebugBoxes, state: SimState, toggles: DebugToggles): void
@@ -441,8 +445,10 @@ training modes out of the snapshot and out of the hash.
 
 `build-state.ts` persists three local loadout/equipment presets. `preferences.ts` is the
 single persisted source for audio, visual, accessibility and input options. `view.ts`
-provides the modal, WAI-ARIA tabs, labeled controls and keyboard/gamepad input diagram;
-`app.ts` owns focus trapping/restoration and the shared keyboard/gamepad navigation path.
+provides separate Loadout and Gear panels, the move-data catalog, labeled controls and
+keyboard/gamepad input diagram. `move-showcase.ts` replays authored clips on hover or
+focus. `app.ts` owns focus trapping/restoration and the shared keyboard/gamepad
+navigation path.
 
 ---
 

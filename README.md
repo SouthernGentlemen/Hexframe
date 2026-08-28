@@ -65,9 +65,15 @@ Y/X/B/A. Shift or LT selects action bank two, Space or RT selects bank three, an
 both selects bank four: 16 independent action inputs in total. The private lab's loadout
 menu assigns any 16 of the 24 moves to those inputs and persists the build locally.
 
-The Armory keeps combat-facing information up front: keyboard/gamepad input diagrams,
-the 16-action assignment deck, equipment, inventory, and a status codex explaining
-primer/payoff routes. Training internals and hitbox overlays remain on separate tabs.
+The Armory separates Loadout and Gear so neither screen has competing nested panels.
+Loadout contains the keyboard/gamepad diagram, 16-action assignment deck, full frame-data
+catalog, and an animated hover/focus showcase. Gear contains equipped slots, character
+stats, inventory and item detail. The status codex explains primer/payoff routes;
+training internals and hitbox overlays remain on separate tabs.
+
+Every attack has a deterministic presentation profile. The 24 profiles combine authored
+fighter clips with distinct elemental colors, particle shapes, orbit counts, sizes,
+rotations and motion, while remaining downstream of combat state.
 
 Settings are also keyboard/gamepad navigable and persist locally. Audio mixing, audio
 captions, visual-effect reduction, reduced motion, text scaling, high contrast, color

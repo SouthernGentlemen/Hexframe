@@ -1,6 +1,6 @@
 import { px } from "../combat/constants";
 import type { FighterState, FrameReport, SimConfig } from "../combat/types";
-import { ContactKind, DebuffEventKind, DebuffKind } from "../combat/types";
+import { ContactKind, DebuffEventKind, DebuffKind, HitLevel } from "../combat/types";
 import { Simulation } from "../combat/simulation/simulation";
 import { DEFAULT_MOVE_LOADOUT, testFighterWithBuild, testFighterWithLoadout } from "../content/test-fighter";
 import { TEST_FIGHTER_ANIMATIONS, TEST_FIGHTER_MODEL, TEST_FIGHTER_RIG } from "../content/test-fighter-assets";
@@ -24,6 +24,7 @@ import type { LabPreferences } from "./preferences";
 import { Timeline } from "./timeline/timeline";
 import type { LabSpeed } from "./timeline/timeline";
 import { buildLabView } from "./view";
+import { MoveShowcase } from "./move-showcase";
 
 const FRAME_MS = 1000 / 60;
 const FOCUSABLE = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex='-1'])";
@@ -36,7 +37,7 @@ const DUMMY_OPTIONS: readonly [DummyModeValue, string][] = [
   [DummyMode.Reversal, "Reversal"],
 ];
 
-type MenuTab = "loadout" | "status" | "settings" | "training" | "debug";
+type MenuTab = "loadout" | "gear" | "status" | "settings" | "training" | "debug";
 type SettingsTab = "audio" | "video" | "accessibility" | "controls";
 
 function edge(now: GamepadUiState, before: GamepadUiState, key: keyof GamepadUiState): boolean {
@@ -66,6 +67,11 @@ export function startLab(mount: HTMLElement): () => void {
   const renderer = new Renderer(required("stage"), sim.characters(), {
     fighters: [0, 1].map(() => ({ model: TEST_FIGHTER_MODEL, rig: TEST_FIGHTER_RIG, animations: TEST_FIGHTER_ANIMATIONS })),
   });
+  const moveShowcase = new MoveShowcase(required("move-showcase-stage"), playerCharacter, {
+    model: TEST_FIGHTER_MODEL,
+    rig: TEST_FIGHTER_RIG,
+    animations: TEST_FIGHTER_ANIMATIONS,
+  });
   const panel = new DebugPanel(required("debug-panel"));
   const toggles: DebugToggles = { hitboxes: false, hurtboxes: false, pushboxes: false, origins: false, skeleton: false, boneNames: false, velocity: false };
 
@@ -88,12 +94,14 @@ export function startLab(mount: HTMLElement): () => void {
   let focusBeforeMenu: HTMLElement | null = null;
   let captionTimer = 0;
   let selectedGearSlot: GearSlot = "focus";
+  let showcasedMoveId = -1;
 
   gamepad.setDeadzone(preferences.controls.stickDeadzone);
   gameAudio.setCaptionHandler(showCaption);
   gameAudio.update(preferences.audio);
+  showMovePreview(activeBuild.loadout[0], true);
 
-  const render = (): void => {
+  const render = (now = performance.now()): void => {
     const state = sim.getState();
     renderer.render(state, lastReport ?? timeline.lastReport, toggles);
     panel.update(state, sim.characters(), lastReport ?? timeline.lastReport, hashState(state));
@@ -114,6 +122,7 @@ export function startLab(mount: HTMLElement): () => void {
     required("active-tags").textContent = move?.tags.join(" · ") ?? "Choose any 16 of 24 moves";
     const pause = mount.querySelector<HTMLButtonElement>("[data-action='pause']");
     if (pause) pause.textContent = timeline.paused ? "Play" : "Pause";
+    moveShowcase.render(now);
   };
 
   const loop = (now: number): void => {
@@ -130,7 +139,7 @@ export function startLab(mount: HTMLElement): () => void {
         processReports(reports);
       }
     }
-    render();
+    render(now);
     animationId = requestAnimationFrame(loop);
   };
 
@@ -184,6 +193,15 @@ export function startLab(mount: HTMLElement): () => void {
     if (target.type === "range" && target.dataset.prefSection && target.dataset.prefKey) updatePreference(target);
   };
 
+  const previewMove = (event: Event): void => {
+    const target = event.target instanceof Element
+      ? event.target.closest<HTMLElement>("select[data-loadout-slot], [data-move-preview]")
+      : null;
+    if (!target) return;
+    const moveId = target instanceof HTMLSelectElement ? Number(target.value) : Number(target.dataset.movePreview);
+    showMovePreview(moveId);
+  };
+
   const keydown = (event: KeyboardEvent): void => {
     if (!event.ctrlKey && !event.metaKey && !event.altKey) gameAudio.ensure();
     if (menuOpen() && event.code === "Tab") {
@@ -214,6 +232,8 @@ export function startLab(mount: HTMLElement): () => void {
   mount.addEventListener("click", click);
   mount.addEventListener("change", change);
   mount.addEventListener("input", input);
+  mount.addEventListener("pointerover", previewMove);
+  mount.addEventListener("focusin", previewMove);
   window.addEventListener("keydown", keydown);
   document.addEventListener("visibilitychange", visibility);
   motionQuery.addEventListener("change", motionChange);
@@ -233,12 +253,15 @@ export function startLab(mount: HTMLElement): () => void {
     mount.removeEventListener("click", click);
     mount.removeEventListener("change", change);
     mount.removeEventListener("input", input);
+    mount.removeEventListener("pointerover", previewMove);
+    mount.removeEventListener("focusin", previewMove);
     window.removeEventListener("keydown", keydown);
     document.removeEventListener("visibilitychange", visibility);
     motionQuery.removeEventListener("change", motionChange);
     keyboard.dispose();
     secondKeyboard.dispose();
     renderer.dispose();
+    moveShowcase.dispose();
     gameAudio.setCaptionHandler(null);
     gameAudio.dispose();
     mount.replaceChildren();
@@ -316,6 +339,7 @@ export function startLab(mount: HTMLElement): () => void {
     activeBuild = buildState.presets[index];
     selectedGearSlot = "focus";
     rebuildActiveBuild();
+    showMovePreview(activeBuild.loadout[0], true);
     const item = gearById(activeBuild.equipment[selectedGearSlot]);
     if (item) renderGearDetail(item.id);
   }
@@ -324,6 +348,7 @@ export function startLab(mount: HTMLElement): () => void {
     if (slot < 0 || slot >= activeBuild.loadout.length || !validMoveIds.has(moveId)) return;
     activeBuild.loadout[slot] = moveId;
     rebuildActiveBuild();
+    showMovePreview(moveId, true);
   }
 
   function resetActiveLoadout(): void {
@@ -335,6 +360,7 @@ export function startLab(mount: HTMLElement): () => void {
     if (!Number.isInteger(slot) || slot < 0 || slot >= activeBuild.loadout.length) return;
     for (const button of mount.querySelectorAll<HTMLElement>("[data-select-action]")) button.classList.toggle("selected", Number(button.dataset.selectAction) === slot);
     const select = mount.querySelector(`[data-loadout-slot='${slot}']`) as unknown as HTMLSelectElement | null;
+    showMovePreview(activeBuild.loadout[slot]);
     select?.focus();
     select?.scrollIntoView({ block: "nearest", behavior: preferences.accessibility.motion === "reduced" ? "auto" : "smooth" });
   }
@@ -361,6 +387,7 @@ export function startLab(mount: HTMLElement): () => void {
     Object.assign(playerCharacter, fresh);
     persistBuildState(buildState);
     syncBuildUi();
+    if (showcasedMoveId > 0) showMovePreview(showcasedMoveId, true);
     resetMatch();
   }
 
@@ -372,13 +399,17 @@ export function startLab(mount: HTMLElement): () => void {
       const move = playerCharacter.moves.find((candidate) => candidate.id === activeBuild.loadout[slot]);
       const tags = mount.querySelector<HTMLElement>(`[data-assignment-tags='${slot}']`);
       if (tags) tags.textContent = move?.tags.slice(0, 3).join(" · ") ?? "unassigned";
+      const row = select.closest<HTMLElement>("[data-move-preview]");
+      if (row) row.dataset.movePreview = String(activeBuild.loadout[slot]);
+      const mapped = mount.querySelector<HTMLElement>(`[data-select-action='${slot}']`);
+      if (mapped) mapped.dataset.movePreview = String(activeBuild.loadout[slot]);
     }
     for (const button of mount.querySelectorAll<HTMLButtonElement>("[data-preset]")) {
       const active = Number(button.dataset.preset) === buildState.activePreset;
       button.classList.toggle("active", active);
       button.setAttribute("aria-pressed", String(active));
     }
-    required("build-number").textContent = `BUILD ${String(buildState.activePreset + 1).padStart(2, "0")}`;
+    for (const label of mount.querySelectorAll<HTMLElement>("[data-build-number]")) label.textContent = `BUILD ${String(buildState.activePreset + 1).padStart(2, "0")}`;
     required("character-sheet-title").textContent = activeBuild.name;
     required("stat-vitality").textContent = String(Math.trunc(playerCharacter.health / 100));
     for (const slot of GEAR_SLOTS) {
@@ -398,6 +429,26 @@ export function startLab(mount: HTMLElement): () => void {
     const item = gearById(itemId);
     if (!item) return;
     required("gear-detail").innerHTML = `<span class="gear-icon" aria-hidden="true">${item.icon}</span><div><small>${item.rarity} ${item.slot}</small><h4>${item.name}</h4><p>${item.description}</p></div><ul>${item.tags.map((tag) => `<li>${tag}</li>`).join("")}</ul>`;
+  }
+
+  function showMovePreview(moveId: number, force = false): void {
+    const move = playerCharacter.moves.find((candidate) => candidate.id === moveId);
+    if (!move || (!force && showcasedMoveId === move.id)) return;
+    showcasedMoveId = move.id;
+    moveShowcase.select(move.id);
+    const hitbox = move.hitboxes[0];
+    const level = hitbox?.level === HitLevel.Low ? "LOW" : hitbox?.level === HitLevel.Overhead ? "OVERHEAD" : "MID";
+    required("move-showcase-code").textContent = `MOVE ${String(move.id).padStart(2, "0")} · ${level}`;
+    required("move-showcase-name").textContent = move.key.replaceAll("_", " ");
+    required("move-showcase-description").textContent = move.description;
+    required("move-stat-damage").textContent = String(hitbox?.damage ?? 0);
+    required("move-stat-startup").textContent = `${move.startup}f`;
+    required("move-stat-active").textContent = `${move.active}f`;
+    required("move-stat-recovery").textContent = `${move.recovery}f`;
+    required("move-stat-hitstun").textContent = `${hitbox?.hitstun ?? 0}f`;
+    required("move-stat-blockstun").textContent = `${hitbox?.blockstun ?? 0}f`;
+    required("move-showcase-tags").innerHTML = move.tags.map((tag) => `<li>${tag}</li>`).join("");
+    for (const card of mount.querySelectorAll<HTMLElement>(".move-card[data-move-preview]")) card.classList.toggle("previewing", Number(card.dataset.movePreview) === move.id);
   }
 
   function updatePreference(target: HTMLInputElement | HTMLSelectElement): void {
@@ -558,7 +609,7 @@ export function startLab(mount: HTMLElement): () => void {
   }
 
   function cycleTab(delta: number): void {
-    const tabs: MenuTab[] = ["loadout", "status", "settings", "training", "debug"];
+    const tabs: MenuTab[] = ["loadout", "gear", "status", "settings", "training", "debug"];
     const index = tabs.indexOf(activeTab);
     showTab(tabs[(index + delta + tabs.length) % tabs.length]);
     mount.querySelector<HTMLButtonElement>(`[data-menu-tab='${activeTab}']`)?.focus();

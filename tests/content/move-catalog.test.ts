@@ -13,6 +13,8 @@ describe("move catalog and loadout", () => {
     expect(new Set(TEST_FIGHTER.moves.map((move) => move.id)).size).toBe(24);
     expect(new Set(TEST_FIGHTER.moves.map((move) => move.key)).size).toBe(24);
     expect(TEST_FIGHTER.moves.every((move) => move.tags.length >= 3)).toBe(true);
+    expect(TEST_FIGHTER.moves.every((move) => move.description.trim().length >= 20)).toBe(true);
+    expect(TEST_FIGHTER.moves.every((move) => move.startup > 0 && move.active > 0 && move.recovery > 0 && move.hitboxes[0]?.damage > 0)).toBe(true);
     expect(TEST_FIGHTER.moves.flatMap((move) => move.tags)).toEqual(
       expect.arrayContaining(["burn", "poison", "freeze", "shock", "bleed"]),
     );
