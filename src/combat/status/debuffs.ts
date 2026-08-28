@@ -1,5 +1,7 @@
 import type { DebuffEvent, ElementalResistances, FighterState, FrameReport, SimState } from "../types";
 import { DebuffEventKind, DebuffKind } from "../types";
+import { StateId } from "../types";
+import { enterState } from "../state/machine";
 
 const BURN_DURATION = 90;
 const POISON_DURATION = 180;
@@ -13,18 +15,18 @@ export function isFrozen(fighter: FighterState): boolean {
 }
 
 /** Apply deterministic DOT, expire stacks, and emit presentation-only status events. */
-export function tickDebuffs(state: SimState, report: FrameReport): void {
+export function tickDebuffs(state: SimState, report: FrameReport, teams?: readonly number[]): void {
   for (let player = 0; player < state.fighters.length; player++) {
     const fighter = state.fighters[player];
-    const source = player === 0 ? 1 : 0;
+    const source = firstHostileIndex(state, player, teams);
 
     if (fighter.burnFrames > 0) {
-      if (fighter.burnFrames % 15 === 0) damageTick(state, fighter, source, player, DebuffKind.Burn, fighter.burnStacks * 2, report);
+      if (fighter.burnFrames % 15 === 0) damageTick(state, fighter, source, player, DebuffKind.Burn, fighter.burnStacks * 2, report, teams);
       fighter.burnFrames--;
       if (fighter.burnFrames === 0) fighter.burnStacks = 0;
     }
     if (fighter.poisonFrames > 0) {
-      if (fighter.poisonFrames % 15 === 0) damageTick(state, fighter, source, player, DebuffKind.Poison, fighter.poisonStacks, report);
+      if (fighter.poisonFrames % 15 === 0) damageTick(state, fighter, source, player, DebuffKind.Poison, fighter.poisonStacks, report, teams);
       fighter.poisonFrames--;
       if (fighter.poisonFrames === 0) fighter.poisonStacks = 0;
     }
@@ -38,7 +40,7 @@ export function tickDebuffs(state: SimState, report: FrameReport): void {
     }
     if (fighter.bleedFrames > 0) {
       const moving = fighter.vx !== 0 || fighter.vy !== 0;
-      if (moving && fighter.bleedFrames % 10 === 0) damageTick(state, fighter, source, player, DebuffKind.Bleed, fighter.bleedStacks * 2, report);
+      if (moving && fighter.bleedFrames % 10 === 0) damageTick(state, fighter, source, player, DebuffKind.Bleed, fighter.bleedStacks * 2, report, teams);
       fighter.bleedFrames--;
       if (fighter.bleedFrames === 0) fighter.bleedStacks = 0;
     }
@@ -136,12 +138,31 @@ function damageTick(
   debuff: DebuffEvent["debuff"],
   damage: number,
   report: FrameReport,
+  teams?: readonly number[],
 ): void {
   if (damage <= 0 || fighter.health <= 0) return;
   fighter.health = Math.max(0, fighter.health - damage);
-  if (fighter.health === 0) state.roundOver = 1;
+  if (fighter.health === 0) {
+    enterState(fighter, StateId.Defeat);
+    if (oneTeamRemains(state, teams)) state.roundOver = 1;
+  }
   const [stacks, frames] = valuesOf(fighter, debuff);
   report.debuffs.push(event(source, target, debuff, DebuffEventKind.Tick, stacks, frames, damage));
+}
+
+function firstHostileIndex(state: SimState, fighterIndex: number, teams?: readonly number[]): number {
+  const ownTeam = teams?.[fighterIndex] ?? fighterIndex;
+  return state.fighters.findIndex((fighter, index) =>
+    index !== fighterIndex && fighter.health > 0 && (teams?.[index] ?? index) !== ownTeam,
+  );
+}
+
+function oneTeamRemains(state: SimState, teams?: readonly number[]): boolean {
+  const livingTeams = new Set<number>();
+  for (let index = 0; index < state.fighters.length; index++) {
+    if (state.fighters[index].health > 0) livingTeams.add(teams?.[index] ?? index);
+  }
+  return livingTeams.size <= 1;
 }
 
 function valuesOf(fighter: FighterState, debuff: DebuffEvent["debuff"]): [number, number] {

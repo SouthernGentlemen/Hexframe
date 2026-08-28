@@ -76,4 +76,21 @@ describe("tag-driven debuffs", () => {
     expect(target.freezeFrames).toBe(112);
     expect(target.shockFrames).toBe(135);
   });
+
+  it("does not end a team round when damage over time defeats only one teammate", () => {
+    const sim = createSim();
+    const state = sim.getState();
+    state.fighters.push(structuredClone(state.fighters[0]));
+    state.inputHistory.push(new Array(state.inputHistory[0].length).fill(0));
+    const target = state.fighters[0];
+    target.health = 1;
+    target.poisonStacks = 1;
+    target.poisonFrames = 180;
+
+    tickDebuffs(state, report(), [0, 1, 0]);
+
+    expect(target.health).toBe(0);
+    expect(target.state).toBe(StateId.Defeat);
+    expect(state.roundOver).toBe(0);
+  });
 });

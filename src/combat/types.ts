@@ -332,6 +332,7 @@ export const StateId = {
   Dash: 13,
   Knockdown: 14,
   GuardBreak: 15,
+  Defeat: 16,
 } as const;
 export type StateIdValue = (typeof StateId)[keyof typeof StateId];
 
@@ -473,11 +474,11 @@ export interface SimState {
   frame: number;
   /** Deterministic RNG word. Part of the state, so a rollback replays the same rolls. */
   rng: number;
-  /** Always exactly `PLAYER_COUNT` entries, in player-index order. */
+  /** One entry per configured fighter, in fighter-index order. */
   fighters: FighterState[];
   entities: EntityState[];
   stage: StageState;
-  /** 1 once a fighter has reached zero health. The lab does not stop the clock. */
+  /** 1 once only one living team remains. The lab does not stop the clock. */
   roundOver: number;
   /**
    * The last `COMMAND_HISTORY_FRAMES` input frames per player, as a ring indexed by
@@ -582,9 +583,13 @@ export interface EntityEvent {
 // ---------------------------------------------------------------------------
 
 export interface SimConfig {
-  characters: [CharacterDef, CharacterDef];
+  /** One authored definition per fighter. Two-player rollback may still use exactly two. */
+  characters: readonly CharacterDef[];
   /** Starting ground origins in sim units. */
-  startX: [number, number];
+  startX: readonly number[];
+  /** Fighters sharing a team cannot damage one another unless friendly fire is enabled. */
+  teams?: readonly number[];
+  friendlyFire?: boolean;
   /** Seed for the deterministic RNG. */
   seed: number;
   stage?: StageDef;

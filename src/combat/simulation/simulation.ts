@@ -28,7 +28,6 @@ import {
   COMMAND_HISTORY_FRAMES,
   GROUND_Y,
   NO_MOVE,
-  PLAYER_COUNT,
   STAGE_HALF_WIDTH,
   STAMINA_REGEN_DELAY,
 } from "../constants";
@@ -66,10 +65,20 @@ export class Simulation {
    */
   static initialState(config: SimConfig): SimState {
     const fighters: FighterState[] = [];
-    for (let p = 0; p < PLAYER_COUNT; p++) {
+    if (config.characters.length < 2 || config.characters.length > 6) {
+      throw new RangeError(`Simulation requires 2..6 fighters, got ${config.characters.length}`);
+    }
+    if (config.startX.length !== config.characters.length) {
+      throw new RangeError("Simulation requires one spawn position per fighter");
+    }
+    if (config.teams && config.teams.length !== config.characters.length) {
+      throw new RangeError("Simulation requires one team id per fighter");
+    }
+    for (let p = 0; p < config.characters.length; p++) {
       const c = config.characters[p];
       const x = config.startX[p];
-      const otherX = config.startX[p === 0 ? 1 : 0];
+      const target = nearestHostileIndex(config, p);
+      const otherX = target >= 0 ? config.startX[target] : x + 1;
       // At equal starting marks player 0 faces right, for the same reason every other tie
       // in the engine is broken by index: the answer has to be defined somewhere.
       const facing: Facing = x <= otherX ? 1 : -1;
@@ -110,7 +119,7 @@ export class Simulation {
     }
 
     const inputHistory: number[][] = [];
-    for (let p = 0; p < PLAYER_COUNT; p++) {
+    for (let p = 0; p < config.characters.length; p++) {
       inputHistory.push(new Array<number>(COMMAND_HISTORY_FRAMES).fill(0));
     }
 
@@ -189,7 +198,7 @@ export class Simulation {
     }
 
     // Status timers and damage-over-time are simulation time, never wall-clock time.
-    tickDebuffs(s, report);
+    tickDebuffs(s, report, this.config.teams);
 
     // 2-3. Resolve commands, and update fighter states.
     //
@@ -274,7 +283,8 @@ export class Simulation {
     //    middle of a move or while being hit, which is what keeps a crossup a crossup.
     for (let p = 0; p < s.fighters.length; p++) {
       const f = s.fighters[p];
-      const other = s.fighters[p === 0 ? 1 : 0];
+      const target = nearestLivingHostileIndex(s, this.config, p);
+      const other = target >= 0 ? s.fighters[target] : undefined;
       if (other === undefined || frozen[p]) continue;
       if (f.airborne === 1 || !isActionable(f)) continue;
       if (other.x > f.x) f.facing = 1;
@@ -287,8 +297,8 @@ export class Simulation {
     // 7-10. Hurtboxes, attack hitboxes, intersection, and hits, blocks and throws.
     //       All four are one call: a box is only interesting at the moment it is tested,
     //       and building intermediate lists nobody keeps would be work for its own sake.
-    resolveContacts(s, this.chars, inputs, report);
-    resolveEntities(s, this.chars, inputs, report, this.config.stage);
+    resolveContacts(s, this.chars, inputs, report, this.config.teams, this.config.friendlyFire === true);
+    resolveEntities(s, this.chars, inputs, report, this.config.stage, this.config.teams);
 
     // 11-13. Hitstop, stun and health were written by step 10. They are decremented at
     //        the top of the following frame, so a hitstop of 7 freezes exactly 7 frames.
@@ -385,4 +395,36 @@ export class Simulation {
   private dashProfile(f: FighterState, c: CharacterDef) {
     return f.dashForward === 1 ? c.dashForward : c.dashBackward;
   }
+}
+
+function nearestHostileIndex(config: SimConfig, fighterIndex: number): number {
+  const ownTeam = config.teams?.[fighterIndex] ?? fighterIndex;
+  let best = -1;
+  let bestDistance = Number.MAX_SAFE_INTEGER;
+  for (let index = 0; index < config.characters.length; index++) {
+    if (index === fighterIndex || (config.teams?.[index] ?? index) === ownTeam) continue;
+    const distance = Math.abs(config.startX[index] - config.startX[fighterIndex]);
+    if (distance < bestDistance || (distance === bestDistance && index < best)) {
+      best = index;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+function nearestLivingHostileIndex(state: SimState, config: SimConfig, fighterIndex: number): number {
+  const ownTeam = config.teams?.[fighterIndex] ?? fighterIndex;
+  const fighter = state.fighters[fighterIndex];
+  let best = -1;
+  let bestDistance = Number.MAX_SAFE_INTEGER;
+  for (let index = 0; index < state.fighters.length; index++) {
+    const candidate = state.fighters[index];
+    if (index === fighterIndex || candidate.health === 0 || (config.teams?.[index] ?? index) === ownTeam) continue;
+    const distance = Math.abs(candidate.x - fighter.x);
+    if (distance < bestDistance || (distance === bestDistance && index < best)) {
+      best = index;
+      bestDistance = distance;
+    }
+  }
+  return best;
 }

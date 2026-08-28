@@ -36,7 +36,7 @@ export const GROUND_Y = 0;
 /** Half the playable stage width in sim units; the camera is fixed and shows all of it. */
 export const STAGE_HALF_WIDTH = px(460);
 
-/** Number of fighters in a match. Two, and the simulation is written to that shape. */
+/** Number of peers in the current two-player rollback transport, not the simulation limit. */
 export const PLAYER_COUNT = 2;
 
 /** Sentinel in `FighterState.moveId` meaning "not performing a move". */
@@ -56,7 +56,7 @@ export const STAMINA_REGEN_DELAY = 36;
 export const COMMAND_HISTORY_FRAMES = 32;
 
 /** Snapshot format tag. Bump when the serialised layout changes; readers reject others. */
-export const SNAPSHOT_VERSION = 7;
+export const SNAPSHOT_VERSION = 8;
 
 /** FNV-1a 32-bit parameters, used for every determinism hash in the project. */
 export const FNV_OFFSET_BASIS = 0x811c9dc5;

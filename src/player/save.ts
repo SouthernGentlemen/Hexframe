@@ -63,9 +63,9 @@ export function createDefaultPlayerSave(): PlayerSave {
     },
   };
   const starter = DEFAULT_MOVE_LOADOUT.slice();
-  const loadout = (name: string): BuildPreset => ({
+  const loadout = (name: string, moves: readonly number[] = starter): BuildPreset => ({
     name,
-    loadout: starter.slice(),
+    loadout: moves.slice(),
     equipment: { ...EMPTY_EQUIPMENT },
   });
   return {
@@ -97,9 +97,9 @@ export function createDefaultPlayerSave(): PlayerSave {
       activeId: "loadout-01",
       order: [...PLAYER_LOADOUT_IDS],
       byId: {
-        "loadout-01": loadout("Belfry Initiate"),
-        "loadout-02": loadout("Unforged Route"),
-        "loadout-03": loadout("New Build"),
+        "loadout-01": loadout("The Unbound"),
+        "loadout-02": loadout("Venom Engine", [...starter.slice(0, 12), 26, 15, 16, 22]),
+        "loadout-03": loadout("Prism Lock", [...starter.slice(0, 12), 24, 8, 23, 9]),
       },
     },
   };

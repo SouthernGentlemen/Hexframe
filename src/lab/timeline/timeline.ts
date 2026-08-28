@@ -1,4 +1,4 @@
-import { PLAYER_COUNT, Simulation } from "../../combat";
+import { Simulation } from "../../combat";
 import type { FrameReport, InputFrame } from "../../combat";
 import { SnapshotRing } from "../../rollback/snapshots/ring";
 import { deserializeState, serializeState } from "../../rollback/snapshots/snapshot";
@@ -16,7 +16,7 @@ export interface RecordedInputFrame {
 const SPEED_UNIT = 100;
 
 /** Inputs handed to `step()` before anything has supplied a provider: everyone neutral. */
-const NEUTRAL_INPUTS: readonly InputFrame[] = new Array<number>(PLAYER_COUNT).fill(0);
+const NEUTRAL_INPUTS: readonly InputFrame[] = [];
 
 /**
  * The laboratory's deterministic clock, rewind buffer, and event history.
@@ -228,7 +228,7 @@ export class Timeline {
     const source = override ?? (frame < this.latestRecordedFrame && recorded
       ? recorded
       : this.inputProvider(frame));
-    const inputs = Array.from({ length: PLAYER_COUNT }, (_, player) => source[player] ?? 0);
+    const inputs = Array.from({ length: this.sim.getState().fighters.length }, (_, player) => source[player] ?? 0);
 
     this.inputHistory.set(frame, inputs);
     const report = this.sim.step(inputs);

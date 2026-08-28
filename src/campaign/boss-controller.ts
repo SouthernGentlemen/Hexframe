@@ -3,11 +3,13 @@ import { StateId, actionBit } from "../combat/types";
 
 /** Deterministic four-move phase sequencer for the Bell Warden. */
 export class BellWardenController {
+  constructor(private readonly fighterIndex = 1) {}
+
   reset(): void {}
 
   inputFor(state: SimState): InputFrame {
     if (state.stage.bossActive === 0 || state.roundOver === 1) return 0;
-    const boss = state.fighters[1];
+    const boss = state.fighters[this.fighterIndex];
     if (!boss) return 0;
     const actionable = boss.state === StateId.Idle || boss.state === StateId.WalkForward || boss.state === StateId.WalkBackward || boss.state === StateId.Crouch;
     if (!actionable) return 0;

@@ -1,11 +1,13 @@
 import { px } from "../constants";
 import type { FrameReport, SimState, StageDef } from "../types";
 import { EntityEventKind, EntityKind, InputBit, InteractableKind } from "../types";
+import { StateId } from "../types";
 import { overlaps } from "../collision/aabb";
 import { activeHitboxesOf } from "../collision/boxes";
 import type { CharacterDef, EntityState, InputFrame } from "../types";
 import { pressedOn } from "../../input/buffer/history";
 import { randomRange } from "../simulation/rng";
+import { enterState } from "../state/machine";
 
 const PICKUP_RANGE = px(24);
 const INTERACT_RANGE = px(58);
@@ -60,17 +62,20 @@ export function resolveEntities(
   inputs: readonly InputFrame[],
   report: FrameReport,
   stage: StageDef | undefined,
+  teams?: readonly number[],
 ): void {
   const player = state.fighters[0];
   const spawned: EntityState[] = [];
 
-  const boss = state.fighters[1];
+  const playerTeam = teams?.[0] ?? 0;
+  const bossIndex = state.fighters.findIndex((fighter, index) => fighter.health > 0 && (teams?.[index] ?? index) !== playerTeam);
+  const boss = state.fighters[bossIndex];
   if (
-    stage?.id === "black-belfry" &&
+    stage?.id.startsWith("black-belfry") &&
     state.stage.bossActive === 1 &&
     state.roundOver === 0 &&
     boss &&
-    boss.health * 100 <= chars[1].health * 58 &&
+    boss.health * 100 <= chars[bossIndex].health * 58 &&
     state.frame % 150 === 30
   ) {
     const offset = randomRange(state, -120, 120);
@@ -135,7 +140,9 @@ export function resolveEntities(
 
     if (entity.kind === EntityKind.Interactable) {
       const inRange = Math.abs(player.x - entity.x) <= Math.trunc(entity.w / 2) + INTERACT_RANGE;
-      if (!inRange || !pressedOn(state, 0, state.frame, InputBit.Interact)) continue;
+      const automaticCheckpoint = entity.owner === InteractableKind.Checkpoint && entity.hitFlags === 0 && inRange;
+      if (entity.owner === InteractableKind.Checkpoint && entity.hitFlags !== 0) continue;
+      if (!automaticCheckpoint && (!inRange || !pressedOn(state, 0, state.frame, InputBit.Interact))) continue;
       if (entity.owner === InteractableKind.BossGate && entity.hitFlags === 0) {
         state.stage.arenaLocked = 1;
         state.stage.bossActive = 1;
@@ -143,10 +150,11 @@ export function resolveEntities(
         entity.hitFlags = 1;
       } else if (entity.owner === InteractableKind.Checkpoint) {
         state.stage.checkpoint = entity.id;
-        player.health = chars[0].health;
-        player.stamina = chars[0].stamina;
-        entity.hitFlags = 1;
-      } else if (entity.owner === InteractableKind.ArsenalShrine) {
+        for (let index = 0; index < state.fighters.length; index++) {
+          if ((teams?.[index] ?? index) !== playerTeam) continue;
+          state.fighters[index].health = chars[index].health;
+          state.fighters[index].stamina = chars[index].stamina;
+        }
         entity.hitFlags = 1;
       } else if (entity.owner === InteractableKind.Chest || entity.owner === InteractableKind.BossReward) {
         if (entity.hitFlags !== 0) continue;
@@ -166,23 +174,34 @@ export function resolveEntities(
           continue;
         }
       }
-      const hurt = {
-        x0: player.x - Math.trunc(chars[0].pushboxStand.w / 2),
-        y0: player.y,
-        x1: player.x + Math.trunc(chars[0].pushboxStand.w / 2),
-        y1: player.y + chars[0].pushboxStand.h,
-      };
-      if (overlaps(hurt, entityBox(entity))) {
-        player.health = Math.max(0, player.health - entity.value);
+      for (let target = 0; target < state.fighters.length; target++) {
+        const fighter = state.fighters[target];
+        if (fighter.health === 0 || (teams?.[target] ?? target) !== playerTeam) continue;
+        const hurt = {
+          x0: fighter.x - Math.trunc(chars[target].pushboxStand.w / 2),
+          y0: fighter.y,
+          x1: fighter.x + Math.trunc(chars[target].pushboxStand.w / 2),
+          y1: fighter.y + chars[target].pushboxStand.h,
+        };
+        if (!overlaps(hurt, entityBox(entity))) continue;
+        fighter.health = Math.max(0, fighter.health - entity.value);
+        if (fighter.health === 0) {
+          enterState(fighter, StateId.Defeat);
+          if (state.fighters.every((candidate, index) => (teams?.[index] ?? index) !== playerTeam || candidate.health === 0)) {
+            state.roundOver = 1;
+          }
+        }
         entity.hitFlags = 1;
-        emit(report, entity, EntityEventKind.Damaged);
+        emit(report, entity, EntityEventKind.Damaged, target);
+        break;
       }
     }
   }
 
   state.entities.push(...spawned);
 
-  if (state.fighters[1]?.health === 0 && stage?.bossReward && state.stage.rewardSpawned === 0) {
+  const enemiesDefeated = state.fighters.every((fighter, index) => (teams?.[index] ?? index) === playerTeam || fighter.health === 0);
+  if (enemiesDefeated && stage?.bossReward && state.stage.rewardSpawned === 0) {
     const reward = stage.bossReward;
     const entity: EntityState = {
       ...reward,

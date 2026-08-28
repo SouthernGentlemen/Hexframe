@@ -110,6 +110,8 @@ export function resolveContacts(
   chars: readonly CharacterDef[],
   inputs: readonly InputFrame[],
   report: FrameReport,
+  teams?: readonly number[],
+  friendlyFire = false,
 ): void {
   for (let a = 0; a < state.fighters.length; a++) {
     const attacker = state.fighters[a];
@@ -119,6 +121,7 @@ export function resolveContacts(
 
     for (let d = 0; d < state.fighters.length; d++) {
       if (d === a) continue;
+      if (!friendlyFire && (teams?.[a] ?? a) === (teams?.[d] ?? d)) continue;
       const defender = state.fighters[d];
       const defenderChar = chars[d];
 
@@ -219,7 +222,13 @@ export function resolveContacts(
             report,
             attackerChar.perks.staticConductor ? 4 : 3,
           );
-          if (defender.health === 0) state.roundOver = 1;
+          if (defender.health === 0) {
+            defender.stun = 0;
+            defender.vx = 0;
+            defender.vy = 0;
+            enterState(defender, StateId.Defeat);
+            if (oneTeamRemains(state, teams)) state.roundOver = 1;
+          }
         }
 
         const event: ContactEvent = {
@@ -256,6 +265,14 @@ export function resolveContacts(
       }
     }
   }
+}
+
+function oneTeamRemains(state: SimState, teams?: readonly number[]): boolean {
+  const living = new Set<number>();
+  for (let index = 0; index < state.fighters.length; index++) {
+    if (state.fighters[index].health > 0) living.add(teams?.[index] ?? index);
+  }
+  return living.size <= 1;
 }
 
 /**
