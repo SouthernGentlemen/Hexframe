@@ -18,8 +18,9 @@ import { moveTimelineMarkup } from "../lab/inspector";
 import { attachVersionBadge } from "./version-badge";
 import "./styles/codex.css";
 
-const mount = document.querySelector<HTMLElement>("#codex");
-if (!mount) throw new Error("Codex mount is missing");
+const mountNode = document.querySelector<HTMLElement>("#codex");
+if (!mountNode) throw new Error("Codex mount is missing");
+const mount: HTMLElement = mountNode;
 
 const character = testFighterWithLoadout(DEFAULT_MOVE_LOADOUT);
 const initialId = moveIdFromPath(window.location.pathname);
