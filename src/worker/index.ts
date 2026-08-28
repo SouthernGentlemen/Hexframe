@@ -14,17 +14,11 @@ import type { Env } from "./env";
 import { handleLogin, handleLogout } from "./routes/login";
 import { handleLab } from "./routes/lab";
 import { handleLabApi } from "./routes/api-lab";
+import { handleCodex } from "./routes/codex";
 import { handlePlay, handleTraining } from "./routes/play";
 import { handleSaveApi } from "./routes/api-save";
 export { PlayerSaveObject } from "./player-save-object";
 
-/**
- * Headers put on everything, gated or not.
- *
- * `Set-Cookie` is carried across explicitly with `getSetCookie()`. Ordinary header
- * iteration folds repeated `Set-Cookie` lines into one comma-joined value, which is a
- * silent way to lose a session cookie the day a second one is added.
- */
 function harden(response: Response): Response {
   const headers = new Headers(response.headers);
   const cookies = response.headers.getSetCookie();
@@ -42,21 +36,12 @@ function harden(response: Response): Response {
 }
 
 function notFound(pathname: string): Response {
-  // A real body rather than an empty 404: an empty response during development is
-  // indistinguishable from a Worker that crashed, and the two want different fixes.
   return new Response(`Not found: ${pathname}\n`, {
     status: 404,
     headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
   });
 }
 
-/**
- * Everything that is not a route: the built client, its hashed bundles, and any file the
- * public shell asks for.
- *
- * The upstream request is rebuilt as a bare GET so that no client header — cookie
- * included — is forwarded to the asset server; there is nothing it needs from one.
- */
 async function passThrough(request: Request, env: Env, url: URL): Promise<Response> {
   if (request.method !== "GET" && request.method !== "HEAD") {
     return new Response("Method not allowed\n", {
@@ -97,7 +82,7 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
 
   if (path === "/training" || path.startsWith("/training/")) return handleTraining(request, env, url);
 
-  if (path === "/codex" || path.startsWith("/codex/")) return handleLab(request, env, url);
+  if (path === "/codex" || path.startsWith("/codex/")) return handleCodex(request, env, url);
 
   if (
     path === "/campaign" || path.startsWith("/campaign/") ||
@@ -118,8 +103,6 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
   }
 
   if (path === "/api" || path.startsWith("/api/")) {
-    // Any other /api path is answered as JSON rather than falling through to the assets,
-    // where a missing file would come back as an HTML page an API client cannot read.
     return new Response(JSON.stringify({ error: "not_found" }), {
       status: 404,
       headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
@@ -135,8 +118,6 @@ export default {
     try {
       return harden(await route(request, env, url));
     } catch (error) {
-      // The message is logged, never returned: an internal error string can name a
-      // binding, a path or a stack frame, and none of that is the client's business.
       console.error("worker.error", url.pathname, error);
       return harden(
         new Response("Internal error\n", {
