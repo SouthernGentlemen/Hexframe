@@ -8,6 +8,7 @@ import type { FighterNode } from "../character/rig";
 import type { DebugToggles } from "./debug-overlay";
 import { drawDebug } from "./debug-overlay";
 import { createStage, fmt, SVG_NS, worldToScreen } from "./stage";
+import { drawMoveParticles, styleImpact } from "./move-effects";
 
 export interface FighterRendererAssets {
   model: string;
@@ -59,7 +60,7 @@ export class Renderer {
       node.root.classList.toggle("fighter-hitstop", fighter.hitstop > 0);
     }
 
-    this.drawEffects(report);
+    this.drawEffects(state, report);
     this.stage.svg.classList.toggle("stage-impact", (report?.contacts.length ?? 0) > 0);
     drawDebug(this.stage.layers.debug, debugBoxes(state, this.chars), state, toggles);
 
@@ -72,24 +73,38 @@ export class Renderer {
     this.nodes.length = 0;
   }
 
-  private drawEffects(report: FrameReport | null): void {
+  private drawEffects(state: SimState, report: FrameReport | null): void {
     this.stage.layers.effects.replaceChildren();
+    for (let player = 0; player < state.fighters.length; player++) {
+      const fighter = state.fighters[player];
+      if (fighter.state !== StateId.Attack) continue;
+      const move = this.chars[player].moves.find((candidate) => candidate.id === fighter.moveId);
+      if (!move) continue;
+      const point = worldToScreen(fighter.x, fighter.y);
+      drawMoveParticles(this.stage.layers.effects, move, point.x, point.y, fighter.facing, fighter.moveFrame);
+    }
     if (!report) return;
     for (const contact of report.contacts) {
       const point = worldToScreen(contact.x, contact.y);
       const burst = document.createElementNS(SVG_NS, "g");
-      burst.setAttribute("class", "contact-burst");
+      const move = this.chars[contact.attacker].moves.find((candidate) => candidate.id === contact.moveId);
+      const profile = move ? styleImpact(burst, move) : null;
+      if (!move) burst.setAttribute("class", "contact-burst effect-physical");
       burst.setAttribute("transform", `translate(${fmt(point.x)} ${fmt(point.y)})`);
       const circle = document.createElementNS(SVG_NS, "circle");
-      circle.setAttribute("r", "9");
+      circle.setAttribute("r", fmt(profile ? 7 + profile.radius * 0.15 : 9));
       circle.setAttribute("class", "contact-ring");
+      if (profile) circle.setAttribute("stroke", profile.secondary);
       burst.appendChild(circle);
-      for (let ray = 0; ray < 4; ray++) {
+      const rays = profile?.count ?? 4;
+      for (let ray = 0; ray < rays; ray++) {
         const line = document.createElementNS(SVG_NS, "line");
-        line.setAttribute("x1", "-14");
-        line.setAttribute("x2", "14");
+        const length = 12 + ((contact.moveId + ray) % 9);
+        line.setAttribute("x1", fmt(-length));
+        line.setAttribute("x2", fmt(length));
         line.setAttribute("class", "contact-ray");
-        line.setAttribute("transform", `rotate(${ray * 45})`);
+        if (profile) line.setAttribute("stroke", ray % 2 === 0 ? profile.primary : profile.secondary);
+        line.setAttribute("transform", `rotate(${fmt((profile?.rotation ?? 0) + ray * (180 / rays))})`);
         burst.appendChild(line);
       }
       if (contact.damage > 0) {
