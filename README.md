@@ -3,9 +3,11 @@
 A deterministic 2D fighting-game simulator, and the laboratory used to build it.
 
 The order of work is deliberate: this is a **combat simulator first and a game second**.
-The current build carries one stage, one fighter, one dummy and 24 tagged moves, and around
-them the machinery that everything later depends on — a fixed 60 Hz integer simulation,
-snapshots, state hashes, rollback, and a lab that can pause, step, rewind and inspect it.
+The current build carries one stage, one fighter, one dummy, 24 tagged moves, five
+deterministic status systems, three persistent loadouts and 12 equippable items. Around
+them is the machinery that everything later depends on — a fixed 60 Hz integer
+simulation, snapshots, state hashes, rollback, and a lab that can pause, step, rewind and
+inspect it.
 
 ## Layout
 
@@ -15,7 +17,7 @@ src/input       input frames, the buffer, and the command parser
 src/rollback    serialisation, hashing, the snapshot ring, the rollback session
 src/content     JSON → runtime combat data, and the validator that guards the door
 src/renderer    SVG. downstream of the simulation and never able to influence it
-src/lab         the laboratory: timeline, dummy, debug panel
+src/lab         the laboratory: timeline, armory, settings, dummy, debug panel
 src/worker      Cloudflare Worker: routing, the /lab session gate, static assets
 characters/     authored content, in world pixels and frames
 schemas/        JSON Schema for every content type
@@ -63,6 +65,16 @@ Y/X/B/A. Shift or LT selects action bank two, Space or RT selects bank three, an
 both selects bank four: 16 independent action inputs in total. The private lab's loadout
 menu assigns any 16 of the 24 moves to those inputs and persists the build locally.
 
+The Armory keeps combat-facing information up front: keyboard/gamepad input diagrams,
+the 16-action assignment deck, equipment, inventory, and a status codex explaining
+primer/payoff routes. Training internals and hitbox overlays remain on separate tabs.
+
+Settings are also keyboard/gamepad navigable and persist locally. Audio mixing, audio
+captions, visual-effect reduction, reduced motion, text scaling, high contrast, color
+vision palettes, status patterns, dyslexia-friendly type, strong focus indicators,
+screen-reader combat announcements, deadzone and vibration controls all have explicit
+user-facing controls. System motion preferences are honored by default.
+
 ## The two rules worth restating
 
 **Visual data is not combat data.** Changing a torso lean in `characters/*/animations/`
@@ -76,7 +88,8 @@ a rollback that re-runs the same frames has to land on the same bits.
 
 ## Not here yet
 
-0.1 is the foundation: the deterministic core, rollback, the lab, and the tagged move catalog. Still to
-come — the projectile and throw archetypes, the `MatchRoom` Durable Object, the two-browser
+0.1 is the foundation: the deterministic core, rollback, the armory/training lab, gear,
+status routes, accessibility preferences and the tagged move catalog. Still to come —
+the projectile and throw archetypes, the `MatchRoom` Durable Object, the two-browser
 WebSocket match, and the network condition simulator. They are additions on top of this
 core, not changes to it.

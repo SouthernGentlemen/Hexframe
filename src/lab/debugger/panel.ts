@@ -37,6 +37,7 @@ export class DebugPanel {
           <div><dt>move</dt><dd>${move?.key ?? "—"}${move ? ` · ${fighter.moveFrame}` : ""}</dd></div>
           <div><dt>timers</dt><dd>stop ${fighter.hitstop} · stun ${fighter.stun}</dd></div>
           <div><dt>health</dt><dd>${fighter.health} / ${character.health}</dd></div>
+          <div><dt>status</dt><dd>burn ${fighter.burnStacks} · poison ${fighter.poisonStacks} · freeze ${fighter.freezeStacks} · shock ${fighter.shockStacks} · bleed ${fighter.bleedStacks}</dd></div>
         </dl>
       </article>`;
     });

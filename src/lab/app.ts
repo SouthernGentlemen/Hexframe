@@ -1,69 +1,43 @@
 import { px } from "../combat/constants";
-import { ACTION_SLOT_COUNT } from "../combat/types";
-import type { FrameReport, SimConfig } from "../combat/types";
+import type { FighterState, FrameReport, SimConfig } from "../combat/types";
+import { ContactKind, DebuffEventKind, DebuffKind } from "../combat/types";
 import { Simulation } from "../combat/simulation/simulation";
-import {
-  commandsForLoadout,
-  DEFAULT_MOVE_LOADOUT,
-  testFighterWithLoadout,
-} from "../content/test-fighter";
-import {
-  TEST_FIGHTER_ANIMATIONS,
-  TEST_FIGHTER_MODEL,
-  TEST_FIGHTER_RIG,
-} from "../content/test-fighter-assets";
-import { ACTION_SLOT_LABELS } from "../input/action-layout";
+import { DEFAULT_MOVE_LOADOUT, testFighterWithBuild, testFighterWithLoadout } from "../content/test-fighter";
+import { TEST_FIGHTER_ANIMATIONS, TEST_FIGHTER_MODEL, TEST_FIGHTER_RIG } from "../content/test-fighter-assets";
+import type { GearSlot } from "../content/gear";
+import { GEAR_SLOTS, gearById } from "../content/gear";
+import { STATUS_RULES } from "../content/status-rules";
+import { gameAudio } from "../client/audio/audio-manager";
 import { GamepadController } from "../input/controller/gamepad";
 import type { GamepadUiState } from "../input/controller/gamepad";
 import { KeyboardController } from "../input/controller/keyboard";
-import {
-  DEFAULT_ACTION_KEYMAP,
-  DEFAULT_KEYMAP_P1,
-  DEFAULT_KEYMAP_P2,
-  NO_ACTION_KEYMAP,
-} from "../input/controller/keymap";
+import { DEFAULT_ACTION_KEYMAP, DEFAULT_KEYMAP_P1, DEFAULT_KEYMAP_P2, NO_ACTION_KEYMAP } from "../input/controller/keymap";
 import { hashState } from "../rollback/hashing/fnv";
 import type { DebugToggles } from "../renderer/svg/debug-overlay";
 import { Renderer } from "../renderer/svg/renderer";
+import { loadBuildState, persistBuildState } from "./build-state";
 import { DebugPanel } from "./debugger/panel";
 import { DummyController, DummyMode } from "./dummy/dummy";
 import type { DummyModeValue } from "./dummy/dummy";
+import { applyPreferences, loadPreferences, persistPreferences, resetPreferences } from "./preferences";
+import type { LabPreferences } from "./preferences";
 import { Timeline } from "./timeline/timeline";
 import type { LabSpeed } from "./timeline/timeline";
+import { buildLabView } from "./view";
 
 const FRAME_MS = 1000 / 60;
-const LOADOUT_STORAGE_KEY = "hexframe.move-loadout.v1";
+const FOCUSABLE = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex='-1'])";
 
 const DUMMY_OPTIONS: readonly [DummyModeValue, string][] = [
-  [DummyMode.Stand, "Stand"],
-  [DummyMode.Crouch, "Crouch"],
-  [DummyMode.Jump, "Jump"],
-  [DummyMode.BlockNone, "Block none"],
-  [DummyMode.BlockAll, "Block all"],
-  [DummyMode.BlockAfterFirstHit, "Block after first hit"],
-  [DummyMode.Record, "Record P2"],
-  [DummyMode.Playback, "Playback"],
-  [DummyMode.Counterattack, "Counterattack"],
+  [DummyMode.Stand, "Stand"], [DummyMode.Crouch, "Crouch"], [DummyMode.Jump, "Jump"],
+  [DummyMode.BlockNone, "Block none"], [DummyMode.BlockAll, "Block all"],
+  [DummyMode.BlockAfterFirstHit, "Block after first hit"], [DummyMode.Record, "Record P2"],
+  [DummyMode.Playback, "Playback"], [DummyMode.Counterattack, "Counterattack"],
   [DummyMode.Reversal, "Reversal"],
 ];
 
-type MenuTab = "loadout" | "training" | "debug";
-
-function safeLoadout(validMoveIds: ReadonlySet<number>): number[] {
-  try {
-    const value: unknown = JSON.parse(localStorage.getItem(LOADOUT_STORAGE_KEY) ?? "null");
-    if (!Array.isArray(value) || value.length !== ACTION_SLOT_COUNT) {
-      return DEFAULT_MOVE_LOADOUT.slice();
-    }
-    return value.map((moveId, slot) =>
-      typeof moveId === "number" && validMoveIds.has(moveId)
-        ? moveId
-        : DEFAULT_MOVE_LOADOUT[slot],
-    );
-  } catch {
-    return DEFAULT_MOVE_LOADOUT.slice();
-  }
-}
+type MenuTab = "loadout" | "status" | "settings" | "training" | "debug";
+type SettingsTab = "audio" | "video" | "accessibility" | "controls";
 
 function edge(now: GamepadUiState, before: GamepadUiState, key: keyof GamepadUiState): boolean {
   return now[key] && !before[key];
@@ -73,108 +47,16 @@ function edge(now: GamepadUiState, before: GamepadUiState, key: keyof GamepadUiS
 export function startLab(mount: HTMLElement): () => void {
   const catalogCharacter = testFighterWithLoadout(DEFAULT_MOVE_LOADOUT);
   const validMoveIds = new Set(catalogCharacter.moves.map((move) => move.id));
-  const loadout = safeLoadout(validMoveIds);
-  const playerCharacter = testFighterWithLoadout(loadout);
+  const buildState = loadBuildState(validMoveIds);
+  let activeBuild = buildState.presets[buildState.activePreset];
+  const playerCharacter = testFighterWithBuild(activeBuild.loadout, activeBuild.equipment);
   const dummyCharacter = testFighterWithLoadout(DEFAULT_MOVE_LOADOUT);
-  const config: SimConfig = {
-    characters: [playerCharacter, dummyCharacter],
-    startX: [px(-120), px(120)],
-    seed: 0x5eed,
-  };
+  const preferences = loadPreferences();
+  applyPreferences(preferences);
 
-  const moveOptions = playerCharacter.moves
-    .map((move) => `<option value="${move.id}">${move.id.toString().padStart(2, "0")} · ${move.key.replaceAll("_", " ")} · ${move.tags.join(" / ")}</option>`)
-    .join("");
-  const loadoutRows = ACTION_SLOT_LABELS.map((label) => {
-    const selected = loadout[label.slot];
-    return `<label class="loadout-row" data-gamepad-nav tabindex="0">
-      <span class="slot-number">${String(label.slot + 1).padStart(2, "0")}</span>
-      <kbd>${label.keyboard}</kbd><kbd class="pad-key">${label.gamepad}</kbd>
-      <select data-loadout-slot="${label.slot}" aria-label="Move for action ${label.slot + 1}">
-        ${moveOptions.replace(`value="${selected}"`, `value="${selected}" selected`)}
-      </select>
-    </label>`;
-  }).join("");
-  const moveLibrary = playerCharacter.moves.map((move) => `<article class="move-card">
-    <span>${String(move.id).padStart(2, "0")}</span>
-    <div><h3>${move.key.replaceAll("_", " ")}</h3><p>${move.description}</p><ul>${move.tags.map((tag) => `<li>${tag}</li>`).join("")}</ul></div>
-  </article>`).join("");
+  mount.innerHTML = buildLabView({ character: playerCharacter, buildState, preferences, dummyOptions: DUMMY_OPTIONS });
 
-  mount.innerHTML = `<main class="lab-shell">
-    <header class="lab-header">
-      <div class="brand"><p class="eyebrow">HEXFRAME / LAB</p><h1>Build your route.</h1></div>
-      <div class="header-actions">
-        <span class="controller-state" id="controller-state">Keyboard</span>
-        <button class="primary" type="button" data-action="pause">Pause</button>
-        <button type="button" data-action="menu" aria-haspopup="dialog">Build & settings</button>
-      </div>
-    </header>
-
-    <section class="playfield-card">
-      <div class="hud" aria-label="Fighter health">
-        <div class="hud-player"><span>YOU</span><div class="health-track"><i id="health-p1"></i></div><strong id="health-text-p1">1000</strong></div>
-        <div class="frame-readout"><span id="play-state">LIVE</span><strong id="frame-readout">0</strong></div>
-        <div class="hud-player hud-player-right"><strong id="health-text-p2">1000</strong><div class="health-track"><i id="health-p2"></i></div><span>DUMMY</span></div>
-      </div>
-      <div id="stage" class="stage"></div>
-      <div class="current-route"><span>ACTIVE</span><strong id="active-move">Ready</strong><em id="active-tags">Choose any 16 of 24 moves</em></div>
-    </section>
-
-    <footer class="control-legend">
-      <span><b>MOVE</b> WASD / left stick</span>
-      <span><b>ACTIONS</b> arrows / Y X B A</span>
-      <span><b>BANK 2</b> Shift / LT</span>
-      <span><b>BANK 3</b> Space / RT</span>
-      <span><b>MENU</b> Esc / View</span>
-      <span><b>PAUSE</b> P / Start</span>
-    </footer>
-
-    <div class="menu-scrim" id="menu-scrim" hidden>
-      <aside class="lab-menu" id="lab-menu" role="dialog" aria-modal="true" aria-labelledby="menu-title">
-        <header class="menu-header"><div><p class="eyebrow">LOADOUT SYSTEM</p><h2 id="menu-title">Build & settings</h2></div><button type="button" data-action="close-menu" data-gamepad-nav>Close</button></header>
-        <nav class="menu-tabs" aria-label="Settings sections">
-          <button class="active" type="button" data-menu-tab="loadout" data-gamepad-nav>Move loadout</button>
-          <button type="button" data-menu-tab="training" data-gamepad-nav>Training</button>
-          <button type="button" data-menu-tab="debug" data-gamepad-nav>Debug</button>
-        </nav>
-
-        <section class="menu-page active" data-menu-page="loadout">
-          <div class="page-intro"><div><h2>16 action inputs. 24 possible moves.</h2><p>Assign a move to every keyboard/gamepad chord. Matching tags are the vocabulary for building your own combo routes.</p></div><button type="button" data-action="default-loadout" data-gamepad-nav>Reset assignments</button></div>
-          <div class="loadout-grid">${loadoutRows}</div>
-          <div class="library-heading"><h2>Move library</h2><span>24 unique attacks</span></div>
-          <div class="move-library">${moveLibrary}</div>
-        </section>
-
-        <section class="menu-page" data-menu-page="training" hidden>
-          <div class="settings-grid">
-            <label data-gamepad-nav tabindex="0"><span>Simulation speed</span><select data-control="speed"><option value="25">25%</option><option value="50">50%</option><option value="100" selected>100%</option><option value="200">200%</option></select></label>
-            <label data-gamepad-nav tabindex="0"><span>Training dummy</span><select data-control="dummy">${DUMMY_OPTIONS.map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}</select></label>
-          </div>
-          <div class="timeline-tools">
-            <button type="button" data-action="back" data-gamepad-nav>Step −1</button>
-            <button type="button" data-action="forward" data-gamepad-nav>Step +1</button>
-            <button type="button" data-action="reset" data-gamepad-nav>Reset match</button>
-            <span id="timeline-status">Frame 0</span>
-          </div>
-          <div class="save-states"><h3>Save states</h3>${[1, 2, 3].map((slot) => `<div><span>Slot ${slot}</span><button type="button" data-save="${slot}" data-gamepad-nav>Save</button><button type="button" data-load="${slot}" data-gamepad-nav disabled>Load</button></div>`).join("")}</div>
-        </section>
-
-        <section class="menu-page" data-menu-page="debug" hidden>
-          <p class="debug-warning">These tools expose engine internals. They do not affect combat state.</p>
-          <div class="toggle-grid">
-            ${[
-              ["hitboxes", "Hitboxes"], ["hurtboxes", "Hurtboxes"], ["pushboxes", "Pushboxes"],
-              ["origins", "Origins"], ["skeleton", "Skeleton"], ["boneNames", "Bone names"], ["velocity", "Velocity"],
-            ].map(([key, label]) => `<label class="toggle" data-gamepad-nav tabindex="0"><input type="checkbox" data-debug="${key}"><span>${label}</span></label>`).join("")}
-          </div>
-          <div class="debug-card"><div class="card-heading"><span>Authoritative state</span><em>LIVE</em></div><div id="debug-panel"></div></div>
-        </section>
-
-        <footer class="menu-footer"><span>D-pad navigate · A select · B close · LB/RB tabs</span><form method="post" action="/logout"><button class="ghost" type="submit" data-gamepad-nav>Sign out <span id="session-label"></span></button></form></footer>
-      </aside>
-    </div>
-  </main>`;
-
+  const config: SimConfig = { characters: [playerCharacter, dummyCharacter], startX: [px(-120), px(120)], seed: 0x5eed };
   const sim = new Simulation(config);
   const timeline = new Timeline(sim, 900);
   const dummy = new DummyController();
@@ -185,10 +67,7 @@ export function startLab(mount: HTMLElement): () => void {
     fighters: [0, 1].map(() => ({ model: TEST_FIGHTER_MODEL, rig: TEST_FIGHTER_RIG, animations: TEST_FIGHTER_ANIMATIONS })),
   });
   const panel = new DebugPanel(required("debug-panel"));
-  const toggles: DebugToggles = {
-    hitboxes: false, hurtboxes: false, pushboxes: false, origins: false,
-    skeleton: false, boneNames: false, velocity: false,
-  };
+  const toggles: DebugToggles = { hitboxes: false, hurtboxes: false, pushboxes: false, origins: false, skeleton: false, boneNames: false, velocity: false };
 
   timeline.inputProvider = () => {
     if (menuOpen()) return [0, 0];
@@ -203,8 +82,16 @@ export function startLab(mount: HTMLElement): () => void {
   let elapsed = 0;
   let lastReport: FrameReport | null = null;
   let activeTab: MenuTab = "loadout";
+  let activeSettingsTab: SettingsTab = "audio";
   let resumeAfterMenu = false;
   let previousUi = gamepad.sampleUi();
+  let focusBeforeMenu: HTMLElement | null = null;
+  let captionTimer = 0;
+  let selectedGearSlot: GearSlot = "focus";
+
+  gamepad.setDeadzone(preferences.controls.stickDeadzone);
+  gameAudio.setCaptionHandler(showCaption);
+  gameAudio.update(preferences.audio);
 
   const render = (): void => {
     const state = sim.getState();
@@ -220,6 +107,7 @@ export function startLab(mount: HTMLElement): () => void {
       const percent = Math.max(0, Math.min(100, (fighter.health / maximum) * 100));
       required(`health-p${player + 1}`).style.width = `${percent}%`;
       required(`health-text-p${player + 1}`).textContent = String(fighter.health);
+      renderDebuffs(player, fighter);
     }
     const move = playerCharacter.moves.find((candidate) => candidate.id === state.fighters[0].moveId);
     required("active-move").textContent = move?.key.replaceAll("_", " ") ?? "Ready";
@@ -237,7 +125,10 @@ export function startLab(mount: HTMLElement): () => void {
     if (realFrames > 0) {
       elapsed -= realFrames * FRAME_MS;
       const reports = timeline.tick(realFrames);
-      if (reports.length > 0) lastReport = reports[reports.length - 1];
+      if (reports.length > 0) {
+        lastReport = reports[reports.length - 1];
+        processReports(reports);
+      }
     }
     render();
     animationId = requestAnimationFrame(loop);
@@ -246,6 +137,8 @@ export function startLab(mount: HTMLElement): () => void {
   const click = (event: Event): void => {
     const button = (event.target as Element).closest<HTMLButtonElement>("button");
     if (!button) return;
+    gameAudio.ensure();
+    gameAudio.play("confirm");
     const action = button.dataset.action;
     if (action === "pause") timeline.paused = !timeline.paused;
     if (action === "menu") openMenu();
@@ -253,8 +146,14 @@ export function startLab(mount: HTMLElement): () => void {
     if (action === "back") stepFrames(-1);
     if (action === "forward") stepFrames(1);
     if (action === "reset") resetMatch();
-    if (action === "default-loadout") setDefaultLoadout();
+    if (action === "default-loadout") resetActiveLoadout();
+    if (action === "reset-preferences") replacePreferences(resetPreferences());
     if (button.dataset.menuTab) showTab(button.dataset.menuTab as MenuTab);
+    if (button.dataset.settingsTab) showSettingsTab(button.dataset.settingsTab as SettingsTab);
+    if (button.dataset.preset !== undefined) switchPreset(Number(button.dataset.preset));
+    if (button.dataset.selectAction !== undefined) selectAction(Number(button.dataset.selectAction));
+    if (button.dataset.gearSlot) selectGearSlot(button.dataset.gearSlot as GearSlot);
+    if (button.dataset.gearItem) equipGear(button.dataset.gearItem);
     const save = button.dataset.save;
     if (save) {
       timeline.saveState(Number(save));
@@ -276,10 +175,22 @@ export function startLab(mount: HTMLElement): () => void {
     if (debug) toggles[debug] = (target as HTMLInputElement).checked;
     const slotText = target.dataset.loadoutSlot;
     if (slotText !== undefined) assignMove(Number(slotText), Number(target.value));
+    if (target.dataset.prefSection && target.dataset.prefKey) updatePreference(target);
     render();
   };
 
+  const input = (event: Event): void => {
+    const target = event.target as HTMLInputElement;
+    if (target.type === "range" && target.dataset.prefSection && target.dataset.prefKey) updatePreference(target);
+  };
+
   const keydown = (event: KeyboardEvent): void => {
+    if (!event.ctrlKey && !event.metaKey && !event.altKey) gameAudio.ensure();
+    if (menuOpen() && event.code === "Tab") {
+      trapFocus(event);
+      return;
+    }
+    if (menuOpen() && handleTabKey(event)) return;
     if (event.code === "Escape") {
       event.preventDefault();
       menuOpen() ? closeMenu() : openMenu();
@@ -294,15 +205,22 @@ export function startLab(mount: HTMLElement): () => void {
     render();
   };
 
+  const visibility = (): void => gameAudio.handleVisibility(document.hidden);
+  const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const motionChange = (): void => {
+    if (preferences.accessibility.motion === "system") applyPreferences(preferences);
+  };
+
   mount.addEventListener("click", click);
   mount.addEventListener("change", change);
+  mount.addEventListener("input", input);
   window.addEventListener("keydown", keydown);
+  document.addEventListener("visibilitychange", visibility);
+  motionQuery.addEventListener("change", motionChange);
   void fetch("/api/lab/session")
     .then((response) => (response.ok ? response.json() : null))
     .then((session: unknown) => {
-      if (typeof session === "object" && session !== null && "username" in session && typeof session.username === "string") {
-        required("session-label").textContent = session.username;
-      }
+      if (typeof session === "object" && session !== null && "username" in session && typeof session.username === "string") required("session-label").textContent = session.username;
     })
     .catch(() => undefined);
   render();
@@ -311,12 +229,18 @@ export function startLab(mount: HTMLElement): () => void {
   return () => {
     disposed = true;
     cancelAnimationFrame(animationId);
+    window.clearTimeout(captionTimer);
     mount.removeEventListener("click", click);
     mount.removeEventListener("change", change);
+    mount.removeEventListener("input", input);
     window.removeEventListener("keydown", keydown);
+    document.removeEventListener("visibilitychange", visibility);
+    motionQuery.removeEventListener("change", motionChange);
     keyboard.dispose();
     secondKeyboard.dispose();
     renderer.dispose();
+    gameAudio.setCaptionHandler(null);
+    gameAudio.dispose();
     mount.replaceChildren();
   };
 
@@ -332,24 +256,41 @@ export function startLab(mount: HTMLElement): () => void {
 
   function openMenu(): void {
     if (menuOpen()) return;
+    focusBeforeMenu = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     resumeAfterMenu = !timeline.paused;
     timeline.paused = true;
     required("menu-scrim").hidden = false;
+    setGameContentInert(true);
     visibleGamepadTargets()[0]?.focus();
   }
 
   function closeMenu(): void {
     if (!menuOpen()) return;
     required("menu-scrim").hidden = true;
+    setGameContentInert(false);
     if (resumeAfterMenu) timeline.paused = false;
     resumeAfterMenu = false;
-    mount.querySelector<HTMLButtonElement>("[data-action='menu']")?.focus();
+    (focusBeforeMenu ?? mount.querySelector<HTMLButtonElement>("[data-action='menu']"))?.focus();
+  }
+
+  function setGameContentInert(inert: boolean): void {
+    const scrim = required("menu-scrim");
+    const main = required("game-content");
+    for (const child of main.children) {
+      if (child === scrim || !(child instanceof HTMLElement)) continue;
+      child.inert = inert;
+      if (inert) child.setAttribute("aria-hidden", "true");
+      else child.removeAttribute("aria-hidden");
+    }
   }
 
   function showTab(tab: MenuTab): void {
     activeTab = tab;
     for (const button of mount.querySelectorAll<HTMLButtonElement>("[data-menu-tab]")) {
-      button.classList.toggle("active", button.dataset.menuTab === tab);
+      const active = button.dataset.menuTab === tab;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+      button.tabIndex = active ? 0 : -1;
     }
     for (const page of mount.querySelectorAll<HTMLElement>("[data-menu-page]")) {
       const active = page.dataset.menuPage === tab;
@@ -358,24 +299,147 @@ export function startLab(mount: HTMLElement): () => void {
     }
   }
 
+  function showSettingsTab(tab: SettingsTab): void {
+    activeSettingsTab = tab;
+    for (const button of mount.querySelectorAll<HTMLButtonElement>("[data-settings-tab]")) {
+      const active = button.dataset.settingsTab === tab;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+      button.tabIndex = active ? 0 : -1;
+    }
+    for (const page of mount.querySelectorAll<HTMLElement>("[data-settings-panel]")) page.hidden = page.dataset.settingsPanel !== tab;
+  }
+
+  function switchPreset(index: number): void {
+    if (!Number.isInteger(index) || index < 0 || index >= buildState.presets.length) return;
+    buildState.activePreset = index;
+    activeBuild = buildState.presets[index];
+    selectedGearSlot = "focus";
+    rebuildActiveBuild();
+    const item = gearById(activeBuild.equipment[selectedGearSlot]);
+    if (item) renderGearDetail(item.id);
+  }
+
   function assignMove(slot: number, moveId: number): void {
-    if (slot < 0 || slot >= ACTION_SLOT_COUNT || !validMoveIds.has(moveId)) return;
-    loadout[slot] = moveId;
-    playerCharacter.commands = commandsForLoadout(playerCharacter, loadout);
-    localStorage.setItem(LOADOUT_STORAGE_KEY, JSON.stringify(loadout));
+    if (slot < 0 || slot >= activeBuild.loadout.length || !validMoveIds.has(moveId)) return;
+    activeBuild.loadout[slot] = moveId;
+    rebuildActiveBuild();
+  }
+
+  function resetActiveLoadout(): void {
+    activeBuild.loadout = DEFAULT_MOVE_LOADOUT.slice();
+    rebuildActiveBuild();
+  }
+
+  function selectAction(slot: number): void {
+    if (!Number.isInteger(slot) || slot < 0 || slot >= activeBuild.loadout.length) return;
+    for (const button of mount.querySelectorAll<HTMLElement>("[data-select-action]")) button.classList.toggle("selected", Number(button.dataset.selectAction) === slot);
+    const select = mount.querySelector(`[data-loadout-slot='${slot}']`) as unknown as HTMLSelectElement | null;
+    select?.focus();
+    select?.scrollIntoView({ block: "nearest", behavior: preferences.accessibility.motion === "reduced" ? "auto" : "smooth" });
+  }
+
+  function selectGearSlot(slot: GearSlot): void {
+    if (!GEAR_SLOTS.includes(slot)) return;
+    selectedGearSlot = slot;
+    for (const button of mount.querySelectorAll<HTMLElement>("[data-gear-slot]")) button.classList.toggle("selected", button.dataset.gearSlot === slot);
+    const item = gearById(activeBuild.equipment[slot]);
+    if (item) renderGearDetail(item.id);
+  }
+
+  function equipGear(itemId: string): void {
+    const item = gearById(itemId);
+    if (!item) return;
+    selectedGearSlot = item.slot;
+    activeBuild.equipment[item.slot] = item.id;
+    rebuildActiveBuild();
+    renderGearDetail(item.id);
+  }
+
+  function rebuildActiveBuild(): void {
+    const fresh = testFighterWithBuild(activeBuild.loadout, activeBuild.equipment);
+    Object.assign(playerCharacter, fresh);
+    persistBuildState(buildState);
+    syncBuildUi();
     resetMatch();
   }
 
-  function setDefaultLoadout(): void {
-    for (let slot = 0; slot < ACTION_SLOT_COUNT; slot++) loadout[slot] = DEFAULT_MOVE_LOADOUT[slot];
+  function syncBuildUi(): void {
     for (const element of mount.querySelectorAll("[data-loadout-slot]")) {
       const select = element as unknown as HTMLSelectElement;
       const slot = Number(select.dataset.loadoutSlot);
-      select.value = String(loadout[slot]);
+      select.value = String(activeBuild.loadout[slot]);
+      const move = playerCharacter.moves.find((candidate) => candidate.id === activeBuild.loadout[slot]);
+      const tags = mount.querySelector<HTMLElement>(`[data-assignment-tags='${slot}']`);
+      if (tags) tags.textContent = move?.tags.slice(0, 3).join(" · ") ?? "unassigned";
     }
-    playerCharacter.commands = commandsForLoadout(playerCharacter, loadout);
-    localStorage.setItem(LOADOUT_STORAGE_KEY, JSON.stringify(loadout));
-    resetMatch();
+    for (const button of mount.querySelectorAll<HTMLButtonElement>("[data-preset]")) {
+      const active = Number(button.dataset.preset) === buildState.activePreset;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    }
+    required("build-number").textContent = `BUILD ${String(buildState.activePreset + 1).padStart(2, "0")}`;
+    required("character-sheet-title").textContent = activeBuild.name;
+    required("stat-vitality").textContent = String(Math.trunc(playerCharacter.health / 100));
+    for (const slot of GEAR_SLOTS) {
+      const item = gearById(activeBuild.equipment[slot]);
+      const button = mount.querySelector<HTMLButtonElement>(`[data-gear-slot='${slot}']`);
+      if (!button || !item) continue;
+      button.className = `gear-slot rarity-${item.rarity}${selectedGearSlot === slot ? " selected" : ""}`;
+      button.setAttribute("aria-label", `${slot}: ${item.name}`);
+      const icon = button.querySelector<HTMLElement>(".gear-icon");
+      const name = button.querySelector<HTMLElement>("[data-equipped-name]");
+      if (icon) icon.textContent = item.icon;
+      if (name) name.textContent = item.name;
+    }
+  }
+
+  function renderGearDetail(itemId: string): void {
+    const item = gearById(itemId);
+    if (!item) return;
+    required("gear-detail").innerHTML = `<span class="gear-icon" aria-hidden="true">${item.icon}</span><div><small>${item.rarity} ${item.slot}</small><h4>${item.name}</h4><p>${item.description}</p></div><ul>${item.tags.map((tag) => `<li>${tag}</li>`).join("")}</ul>`;
+  }
+
+  function updatePreference(target: HTMLInputElement | HTMLSelectElement): void {
+    const section = target.dataset.prefSection as keyof LabPreferences;
+    const key = target.dataset.prefKey;
+    if (!key || !(section in preferences)) return;
+    const value: unknown = target instanceof HTMLInputElement && target.type === "checkbox"
+      ? target.checked
+      : target.dataset.prefNumber !== undefined ? Number(target.value) : target.value;
+    const record = preferences[section] as unknown as Record<string, unknown>;
+    record[key] = value;
+    persistPreferences(preferences);
+    applyPreferences(preferences);
+    gameAudio.update(preferences.audio);
+    gamepad.setDeadzone(preferences.controls.stickDeadzone);
+    const output = mount.querySelector<HTMLOutputElement>(`[data-pref-output='${section}.${key}']`);
+    if (output && target instanceof HTMLInputElement) {
+      const percent = Math.round(Number(target.value) * 100);
+      output.value = `${percent}%`;
+      target.setAttribute("aria-valuetext", `${percent}%`);
+    }
+  }
+
+  function replacePreferences(next: LabPreferences): void {
+    for (const section of Object.keys(next) as (keyof LabPreferences)[]) Object.assign(preferences[section], next[section]);
+    applyPreferences(preferences);
+    gameAudio.update(preferences.audio);
+    gamepad.setDeadzone(preferences.controls.stickDeadzone);
+    for (const element of mount.querySelectorAll("[data-pref-section][data-pref-key]")) {
+      const target = element as unknown as HTMLInputElement | HTMLSelectElement;
+      const section = target.dataset.prefSection as keyof LabPreferences;
+      const key = target.dataset.prefKey ?? "";
+      const value = (preferences[section] as unknown as Record<string, unknown>)[key];
+      if (target instanceof HTMLInputElement && target.type === "checkbox") target.checked = Boolean(value);
+      else target.value = String(value);
+      if (target instanceof HTMLInputElement && target.type === "range") {
+        const percent = Math.round(Number(target.value) * 100);
+        const output = mount.querySelector<HTMLOutputElement>(`[data-pref-output='${section}.${key}']`);
+        if (output) output.value = `${percent}%`;
+        target.setAttribute("aria-valuetext", `${percent}%`);
+      }
+    }
   }
 
   function resetMatch(): void {
@@ -388,6 +452,45 @@ export function startLab(mount: HTMLElement): () => void {
     timeline.paused = true;
     timeline.stepFrames(count);
     lastReport = count > 0 ? timeline.lastReport : null;
+  }
+
+  function processReports(reports: readonly FrameReport[]): void {
+    const announcements: string[] = [];
+    for (const report of reports) {
+      for (const contact of report.contacts) {
+        gameAudio.play(contact.kind === ContactKind.Hit ? "hit" : "block");
+        if (contact.kind === ContactKind.Hit) gamepad.rumble(preferences.controls.vibration, 95);
+        announcements.push(contact.kind === ContactKind.Hit ? `Player ${contact.attacker + 1} hits for ${contact.damage}.` : `Player ${contact.defender + 1} blocks.`);
+      }
+      for (const event of report.debuffs) {
+        if (event.kind === DebuffEventKind.Applied || event.kind === DebuffEventKind.Triggered) gameAudio.play(cueForDebuff(event.debuff));
+        if (event.kind !== DebuffEventKind.Tick) {
+          const rule = STATUS_RULES.find((candidate) => candidate.debuff === event.debuff);
+          announcements.push(`${rule?.name ?? "Status"} ${event.stacks} stack${event.stacks === 1 ? "" : "s"} on player ${event.target + 1}.`);
+        }
+      }
+    }
+    if (preferences.accessibility.screenReaderCombat && announcements.length > 0) required("combat-announcer").textContent = announcements.slice(-3).join(" ");
+  }
+
+  function renderDebuffs(player: number, fighter: FighterState): void {
+    const statuses = [
+      ["burn", fighter.burnStacks, fighter.burnFrames], ["poison", fighter.poisonStacks, fighter.poisonFrames],
+      ["freeze", fighter.freezeStacks, fighter.freezeFrames], ["shock", fighter.shockStacks, fighter.shockFrames],
+      ["bleed", fighter.bleedStacks, fighter.bleedFrames],
+    ] as const;
+    const active = statuses.filter(([, stacks, frames]) => stacks > 0 && frames > 0);
+    const lane = required(`debuff-p${player + 1}`);
+    lane.innerHTML = active.map(([tag, stacks, frames]) => `<span class="debuff-chip status-${tag}"><i aria-hidden="true">${STATUS_RULES.find((rule) => rule.tag === tag)?.glyph ?? "?"}</i><b>${tag}</b><em>×${stacks}</em><small>${Math.ceil(frames / 60)}s</small></span>`).join("");
+    lane.setAttribute("aria-label", active.length > 0 ? active.map(([tag, stacks]) => `${tag}, ${stacks} stacks`).join("; ") : "No active debuffs");
+  }
+
+  function showCaption(text: string): void {
+    const caption = required("audio-caption");
+    caption.textContent = text;
+    caption.hidden = false;
+    window.clearTimeout(captionTimer);
+    captionTimer = window.setTimeout(() => { caption.hidden = true; }, 1250);
   }
 
   function handleGamepadUi(): void {
@@ -412,33 +515,35 @@ export function startLab(mount: HTMLElement): () => void {
   }
 
   function visibleGamepadTargets(): HTMLElement[] {
-    return [...mount.querySelectorAll<HTMLElement>("[data-gamepad-nav]")].filter(
-      (element) => !element.closest("[hidden]") && !(element instanceof HTMLButtonElement && element.disabled),
-    );
+    return [...mount.querySelectorAll<HTMLElement>("[data-gamepad-nav]")].filter((element) => !element.closest("[hidden]") && !(element instanceof HTMLButtonElement && element.disabled));
   }
 
   function focusGamepadTarget(delta: number): void {
     const targets = visibleGamepadTargets();
     if (targets.length === 0) return;
-    const current = document.activeElement instanceof HTMLElement
-      ? targets.findIndex((target) => target === document.activeElement || target.contains(document.activeElement))
-      : -1;
-    targets[(current + delta + targets.length) % targets.length]?.focus();
+    const current = document.activeElement instanceof HTMLElement ? targets.findIndex((target) => target === document.activeElement || target.contains(document.activeElement)) : -1;
+    const raw = current + delta;
+    const next = preferences.controls.menuWrap ? (raw + targets.length) % targets.length : Math.max(0, Math.min(targets.length - 1, raw));
+    targets[next]?.focus();
+    gameAudio.play("navigate");
   }
 
   function adjustFocused(delta: number): void {
     const active = document.activeElement;
-    const select = active instanceof HTMLSelectElement
-      ? active
-      : active instanceof HTMLElement ? active.querySelector("select") as HTMLSelectElement | null : null;
+    const select = active instanceof HTMLSelectElement ? active : active instanceof HTMLElement ? active.querySelector("select") : null;
     if (select) {
       select.selectedIndex = Math.max(0, Math.min(select.options.length - 1, select.selectedIndex + delta));
       select.dispatchEvent(new Event("change", { bubbles: true }));
       return;
     }
-    const checkbox = active instanceof HTMLInputElement && active.type === "checkbox"
-      ? active
-      : active instanceof HTMLElement ? active.querySelector<HTMLInputElement>("input[type='checkbox']") : null;
+    const range = active instanceof HTMLInputElement && active.type === "range" ? active : active instanceof HTMLElement ? active.querySelector<HTMLInputElement>("input[type='range']") : null;
+    if (range) {
+      const step = Number(range.step) || 1;
+      range.value = String(Math.max(Number(range.min), Math.min(Number(range.max), Number(range.value) + step * delta)));
+      range.dispatchEvent(new Event("input", { bubbles: true }));
+      return;
+    }
+    const checkbox = active instanceof HTMLInputElement && active.type === "checkbox" ? active : active instanceof HTMLElement ? active.querySelector<HTMLInputElement>("input[type='checkbox']") : null;
     if (checkbox) {
       checkbox.checked = delta > 0;
       checkbox.dispatchEvent(new Event("change", { bubbles: true }));
@@ -453,13 +558,57 @@ export function startLab(mount: HTMLElement): () => void {
   }
 
   function cycleTab(delta: number): void {
-    const tabs: MenuTab[] = ["loadout", "training", "debug"];
+    const tabs: MenuTab[] = ["loadout", "status", "settings", "training", "debug"];
     const index = tabs.indexOf(activeTab);
     showTab(tabs[(index + delta + tabs.length) % tabs.length]);
     mount.querySelector<HTMLButtonElement>(`[data-menu-tab='${activeTab}']`)?.focus();
+  }
+
+  function handleTabKey(event: KeyboardEvent): boolean {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.code)) return false;
+    const target = event.target instanceof Element ? event.target.closest<HTMLButtonElement>("[role='tab']") : null;
+    if (!target) return false;
+    event.preventDefault();
+    const settings = target.dataset.settingsTab !== undefined;
+    const tabs = settings ? [...mount.querySelectorAll<HTMLButtonElement>("[data-settings-tab]")] : [...mount.querySelectorAll<HTMLButtonElement>("[data-menu-tab]")];
+    const index = tabs.indexOf(target);
+    const next = event.code === "Home" ? 0 : event.code === "End" ? tabs.length - 1 : (index + (event.code === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+    const button = tabs[next];
+    if (settings) showSettingsTab(button.dataset.settingsTab as SettingsTab);
+    else showTab(button.dataset.menuTab as MenuTab);
+    button.focus();
+    return true;
+  }
+
+  function trapFocus(event: KeyboardEvent): void {
+    const dialog = required("lab-menu");
+    const items = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((element) => !element.closest("[hidden]") && !element.inert);
+    if (items.length === 0) {
+      event.preventDefault();
+      dialog.focus();
+      return;
+    }
+    const first = items[0];
+    const last = items[items.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || !(active instanceof Node) || !dialog.contains(active))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (active === last || !(active instanceof Node) || !dialog.contains(active))) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 }
 
 function isFormControl(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement;
+}
+
+function cueForDebuff(debuff: number): "burn" | "poison" | "freeze" | "shock" | "bleed" {
+  if (debuff === DebuffKind.Burn) return "burn";
+  if (debuff === DebuffKind.Poison) return "poison";
+  if (debuff === DebuffKind.Freeze) return "freeze";
+  if (debuff === DebuffKind.Shock) return "shock";
+  return "bleed";
 }

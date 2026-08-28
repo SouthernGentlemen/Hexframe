@@ -60,6 +60,7 @@ export class Renderer {
     }
 
     this.drawEffects(report);
+    this.stage.svg.classList.toggle("stage-impact", (report?.contacts.length ?? 0) > 0);
     drawDebug(this.stage.layers.debug, debugBoxes(state, this.chars), state, toggles);
 
     this.stage.layers.fighters.classList.toggle("show-skeleton", toggles.skeleton);
@@ -90,6 +91,14 @@ export class Renderer {
         line.setAttribute("class", "contact-ray");
         line.setAttribute("transform", `rotate(${ray * 45})`);
         burst.appendChild(line);
+      }
+      if (contact.damage > 0) {
+        const damage = document.createElementNS(SVG_NS, "text");
+        damage.setAttribute("class", "damage-number");
+        damage.setAttribute("y", "-18");
+        damage.setAttribute("text-anchor", "middle");
+        damage.textContent = String(contact.damage);
+        burst.appendChild(damage);
       }
       this.stage.layers.effects.appendChild(burst);
     }
