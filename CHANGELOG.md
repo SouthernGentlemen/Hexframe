@@ -3,6 +3,54 @@
 Every entry is a controlled change. Ordered newest release first; within a release,
 changes keep their permanent IDs. See [docs/CHANGE-MANAGEMENT.md](docs/CHANGE-MANAGEMENT.md).
 
+## v0.7.2
+
+### Added
+- HF-079 Add a protected animated developer Codex route
+- HF-080 Add the developer Codex document
+- HF-081 Restore deterministic move animations in the Codex
+- HF-082 Add standalone developer Codex presentation
+
+### Fixed
+- HF-072 Restore the laboratory as the protected developer entry
+- HF-073 Remove text bodies from Training redirects
+- HF-076 Route the Codex through the animated laboratory
+- HF-078 Remove visible text from authentication redirects
+- HF-086 Preserve Codex mount narrowing across handlers
+
+### Changed
+- HF-074 Make the laboratory the Hexframe front door
+- HF-084 Route Codex URLs to the animated developer surface
+
+### Build
+- HF-083 Build the authenticated developer Codex
+
+### Verification
+- HF-075 Lock the protected lab entry behavior
+- HF-077 Verify lab-first root and animated Codex routing
+- HF-085 Verify protected animated Codex routing
+
+## v0.7.1
+
+### Fixed
+- HF-070 Use the Hexframe identity on the title screen
+
+### Documentation
+- HF-071 Record verified v0.7.0 and v0.7.1 production deployments
+
+## v0.7.0
+
+### Added
+- HF-063 Add the engineering governance record
+- HF-064 Add CI, release, and deployment workflows
+- HF-065 Add build-stamped deployment identity
+- HF-066 Add the MIT license
+- HF-067 Add the README and release records
+- HF-068 Add the public launch controls
+
+### Documentation
+- HF-069 Complete the reconstructed provenance map
+
 ## v0.6.0
 
 ### Added
@@ -106,4 +154,3 @@ changes keep their permanent IDs. See [docs/CHANGE-MANAGEMENT.md](docs/CHANGE-MA
 
 ### Verification
 - HF-012 Add deterministic state hashing
-

@@ -70,3 +70,23 @@ HF-068,ed8ffab0ba093746afca22c56996cb78730daa7b,,,,,reconstructed-from-deploymen
 HF-069,,,,,,reconstructed-from-deployment,,v0.7.0,provenance map completed with public commit SHAs; this row cannot carry its own SHA because the file is part of the commit it would name
 HF-070,,,,,2026-08-28,forward-fix,,v0.7.1,title screen uses the Hexframe public product identity; this row cannot carry its own SHA because the file is part of the commit it would name
 HF-071,,,,,2026-08-28,controlled-record,,,record the verified v0.7.0 and v0.7.1 production deployments; this row cannot carry its own SHA because the file is part of the commit it would name
+HF-072,16cd15fe136049ab20461a21ae3d293953e6e183,,,,2026-08-28,forward-fix,,v0.7.2,restore the laboratory as the protected developer entry
+HF-073,ace5f32dfcdcb60e9f44a946afa3bcdb616d3171,,,,2026-08-28,forward-fix,,v0.7.2,remove text bodies from Training redirects
+HF-074,d0d3f86fe5d59ebe4617e1b97e3a4539c47f42b8,,,,2026-08-28,forward-change,,v0.7.2,make the laboratory the Hexframe front door
+HF-075,c6729a44fceb5da1e549dd6865e1a8ec86135b82,,,,2026-08-28,verification,,v0.7.2,lock the protected lab entry behavior
+HF-076,21ebe70eb1cfd4af36aaa0777bb44d1c70b09234,,,,2026-08-28,forward-fix,,v0.7.2,route the Codex through the animated laboratory
+HF-077,7e0b8d3ccd622bd9e7c260786206fff2f0445555,,,,2026-08-28,verification,,v0.7.2,verify lab-first root and animated Codex routing
+HF-078,9f552acb9d5db9855585f236a251decd180ccba9,,,,2026-08-28,forward-fix,,v0.7.2,remove visible text from authentication redirects
+HF-079,da2d84c5a4a5eeb7f36de55b1eb1be4ded264864,,,,2026-08-28,forward-change,,v0.7.2,add a protected animated developer Codex route
+HF-080,6dbd00b051e028bfcc95332c8c51e029b669b5b1,,,,2026-08-28,forward-change,,v0.7.2,add the developer Codex document
+HF-081,8d9e0354a8fdd21dcb1330ae83ce829adff50da1,,,,2026-08-28,forward-change,,v0.7.2,restore deterministic move animations in the Codex
+HF-082,fa3ef93836d832c99c3ba2ab75deb397b95ffd87,,,,2026-08-28,forward-change,,v0.7.2,add standalone developer Codex presentation
+HF-083,79ecd39e0735e0e6210b270f1031a814fe5e7403,,,,2026-08-28,build-change,,v0.7.2,build the authenticated developer Codex
+HF-084,6bacbcc7da1d2110d4167c6b9d720110134ea848,,,,2026-08-28,forward-change,,v0.7.2,route Codex URLs to the animated developer surface
+HF-085,ef8eb51760715430ec58fcfe40d59afaa5c09c73,,,,2026-08-28,verification,,v0.7.2,verify protected animated Codex routing
+HF-086,598f86bb736b666e5ad0c059edce542632218c39,,,,2026-08-28,forward-fix,,v0.7.2,preserve Codex mount narrowing across handlers
+HF-087,f1b84158dbe3c60eab9d68bf694ce8a4987146b9,,,,2026-08-28,controlled-record,,v0.7.2,record the lab-focused v0.7.2 release
+HF-088,6d694e010ffa621da15d9b1a36da0b9d8f8cfbf3,,,,2026-08-28,controlled-record,,v0.7.2,bring the changelog through v0.7.2
+HF-089,c71090afd4c9eeaadb0257b745bc1417315bf6f7,,,,2026-08-28,controlled-record,,v0.7.2,describe Hexframe as a developer laboratory first
+HF-090,764d4ea88414419e906ea2c1323e7ef4e7bfb9eb,,,,2026-08-28,corrected-record,,v0.7.2,branch-local provenance write was truncated and superseded before merge
+HF-091,,,,,2026-08-28,corrective-record,,v0.7.2,restore and extend the complete change map; this row cannot carry its own SHA because the file is part of the commit it names
