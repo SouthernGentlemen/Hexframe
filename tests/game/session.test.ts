@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { defaultSession, readGameSession, sessionUrl, STAGE_CATALOG } from "../../src/game/session";
+import { aiSlot, defaultSession, readGameSession, sessionUrl, STAGE_CATALOG } from "../../src/game/session";
 
 describe("game session contract", () => {
   it("launches every mode through an explicit shared contract", () => {
@@ -24,7 +24,16 @@ describe("game session contract", () => {
     expect(readGameSession(url)?.stageId).toBe("black-belfry-arena");
 
     url.searchParams.set("opponent", "training-dummy");
-    expect(readGameSession(url)?.opponentId).toBe("bell-warden");
+    expect(readGameSession(url)?.encounterId).toBe("bell-warden");
+  });
+
+  it("round-trips AI party slots as loadout consumers", () => {
+    const fight = defaultSession("fight", "loadout-01");
+    fight.party.push(aiSlot("loadout-02", 2, "master"));
+    const restored = readGameSession(new URL(sessionUrl(fight), "https://hexframe.test"));
+    expect(restored).toEqual(fight);
+    expect(restored?.party[1].controller).toBe("ai");
+    expect(restored?.party[1].aiProfile?.difficulty).toBe("master");
   });
 
   it("treats the menu route as no active session", () => {

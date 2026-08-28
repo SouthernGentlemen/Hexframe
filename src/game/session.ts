@@ -4,18 +4,43 @@ import { px } from "../combat/constants";
 
 export type GameMode = "campaign" | "fight" | "training";
 export type StageId = "black-belfry-campaign" | "black-belfry-arena" | "training-grid";
-export type OpponentId = "bell-warden" | "training-dummy";
+export type EncounterId = "bell-warden" | "training-dummy";
+export type PartyController = "human" | "ai";
+export type AiDifficulty = "apprentice" | "standard" | "master";
+
+/** Presentation-independent knobs used by the deterministic loadout controller. */
+export interface AiProfile {
+  difficulty: AiDifficulty;
+  reactionDelay: number;
+  predictionHorizon: number;
+  routeDepth: number;
+  defensiveConsistency: number;
+  spacingAccuracy: number;
+  mistakeFrequency: number;
+  aggression: number;
+}
+
+/** A controller occupies a party slot; authored loadouts remain the character authority. */
+export interface PartySlot {
+  id: string;
+  controller: PartyController;
+  loadoutId: string;
+  aiProfile?: AiProfile;
+}
+
+export interface SessionOptions {
+  hazards: boolean;
+  developerTools: boolean;
+  tutorial: boolean;
+  friendlyFire: boolean;
+}
 
 export interface GameSession {
   mode: GameMode;
-  playerLoadoutId: string;
-  opponentId: OpponentId;
+  party: PartySlot[];
+  encounterId: EncounterId;
   stageId: StageId;
-  options: {
-    hazards: boolean;
-    developerTools: boolean;
-    tutorial: boolean;
-  };
+  options: SessionOptions;
 }
 
 export interface StageCatalogEntry {
@@ -29,6 +54,9 @@ export interface StageCatalogEntry {
   terrain: "Static" | "Scrolling";
   stage: StageDef;
 }
+
+const LOADOUT_ID = /^loadout-0[1-3]$/;
+const MAX_PARTY_SIZE = 3;
 
 const BLACK_BELFRY_CAMPAIGN: StageDef = { ...BLACK_BELFRY, id: "black-belfry-campaign" };
 
@@ -64,7 +92,7 @@ export const STAGE_CATALOG: Readonly<Record<StageId, StageCatalogEntry>> = {
     familyId: "black-belfry",
     name: "Black Belfry",
     variant: "campaign",
-    description: "Cross the ruined belfry, unlock its forge, and confront the Bell Warden.",
+    description: "Cross the ruined belfry and confront the Bell Warden.",
     size: "Large",
     hazards: true,
     terrain: "Scrolling",
@@ -94,32 +122,37 @@ export const STAGE_CATALOG: Readonly<Record<StageId, StageCatalogEntry>> = {
   },
 };
 
+export function aiProfile(difficulty: AiDifficulty = "standard"): AiProfile {
+  if (difficulty === "apprentice") {
+    return { difficulty, reactionDelay: 18, predictionHorizon: 4, routeDepth: 1, defensiveConsistency: 42, spacingAccuracy: 58, mistakeFrequency: 22, aggression: 48 };
+  }
+  if (difficulty === "master") {
+    return { difficulty, reactionDelay: 4, predictionHorizon: 18, routeDepth: 4, defensiveConsistency: 92, spacingAccuracy: 94, mistakeFrequency: 3, aggression: 78 };
+  }
+  return { difficulty, reactionDelay: 9, predictionHorizon: 10, routeDepth: 3, defensiveConsistency: 72, spacingAccuracy: 78, mistakeFrequency: 10, aggression: 64 };
+}
+
+export function humanSlot(loadoutId = "loadout-01"): PartySlot {
+  return { id: "party-1", controller: "human", loadoutId };
+}
+
+export function aiSlot(loadoutId: string, index = 2, difficulty: AiDifficulty = "standard"): PartySlot {
+  return { id: `party-${index}`, controller: "ai", loadoutId, aiProfile: aiProfile(difficulty) };
+}
+
 export function defaultSession(mode: GameMode, loadoutId = "loadout-01", developerTools = false): GameSession {
+  const common = {
+    mode,
+    party: [humanSlot(loadoutId)],
+    options: { hazards: mode === "campaign", developerTools, tutorial: false, friendlyFire: false },
+  };
   if (mode === "campaign") {
-    return {
-      mode,
-      playerLoadoutId: loadoutId,
-      opponentId: "bell-warden",
-      stageId: "black-belfry-campaign",
-      options: { hazards: true, developerTools, tutorial: false },
-    };
+    return { ...common, encounterId: "bell-warden", stageId: "black-belfry-campaign" };
   }
   if (mode === "fight") {
-    return {
-      mode,
-      playerLoadoutId: loadoutId,
-      opponentId: "bell-warden",
-      stageId: "black-belfry-arena",
-      options: { hazards: false, developerTools, tutorial: false },
-    };
+    return { ...common, encounterId: "bell-warden", stageId: "black-belfry-arena" };
   }
-  return {
-    mode,
-    playerLoadoutId: loadoutId,
-    opponentId: "training-dummy",
-    stageId: "training-grid",
-    options: { hazards: false, developerTools, tutorial: false },
-  };
+  return { ...common, encounterId: "training-dummy", stageId: "training-grid" };
 }
 
 export function readGameSession(url: URL): GameSession | null {
@@ -130,34 +163,71 @@ export function readGameSession(url: URL): GameSession | null {
     : developerTools ? "training" : null;
   if (!mode) return null;
 
-  const fallback = defaultSession(mode, "loadout-01", developerTools);
-  const loadout = url.searchParams.get("loadout");
+  const legacyLoadout = validLoadout(url.searchParams.get("loadout")) ?? "loadout-01";
+  const fallback = defaultSession(mode, legacyLoadout, developerTools);
   const stage = url.searchParams.get("stage");
-  const opponent = url.searchParams.get("opponent");
-  const compatibleOpponent = mode === "training" ? "training-dummy" : "bell-warden";
+  const encounter = url.searchParams.get("encounter") ?? url.searchParams.get("opponent");
   return {
     ...fallback,
-    playerLoadoutId: /^loadout-0[1-3]$/.test(loadout ?? "") ? loadout! : fallback.playerLoadoutId,
+    party: readParty(url.searchParams.get("party"), legacyLoadout, mode),
     stageId: stage && stage in STAGE_CATALOG && STAGE_CATALOG[stage as StageId].variant === mode
       ? stage as StageId
       : fallback.stageId,
-    opponentId: opponent === compatibleOpponent ? opponent : fallback.opponentId,
+    encounterId: encounter === (mode === "training" ? "training-dummy" : "bell-warden")
+      ? encounter
+      : fallback.encounterId,
     options: {
       ...fallback.options,
       tutorial: mode === "training" && url.searchParams.get("tutorial") === "1",
+      friendlyFire: mode !== "training" && url.searchParams.get("friendlyFire") === "1",
     },
   };
 }
 
 export function sessionUrl(session: GameSession): string {
-  const path = session.mode === "training" ? "/training/" : "/play/";
   const query = new URLSearchParams({
     mode: session.mode,
-    loadout: session.playerLoadoutId,
-    opponent: session.opponentId,
+    party: writeParty(session.party),
+    encounter: session.encounterId,
     stage: session.stageId,
   });
   if (session.options.developerTools) query.set("debug", "1");
   if (session.options.tutorial) query.set("tutorial", "1");
-  return `${path}?${query}`;
+  if (session.options.friendlyFire) query.set("friendlyFire", "1");
+  return `/${session.mode}/?${query}`;
+}
+
+function readParty(value: string | null, legacyLoadout: string, mode: GameMode): PartySlot[] {
+  if (!value) return [humanSlot(legacyLoadout)];
+  const slots: PartySlot[] = [];
+  for (const token of value.split(",").slice(0, MAX_PARTY_SIZE)) {
+    const [controllerCode, rawLoadout, rawDifficulty] = token.split(".");
+    const loadoutId = validLoadout(rawLoadout);
+    if (!loadoutId) continue;
+    if (slots.length === 0) {
+      slots.push(humanSlot(loadoutId));
+      continue;
+    }
+    if (mode !== "training" && controllerCode === "a") {
+      const difficulty = isDifficulty(rawDifficulty) ? rawDifficulty : "standard";
+      slots.push(aiSlot(loadoutId, slots.length + 1, difficulty));
+    }
+  }
+  return slots.length > 0 ? slots : [humanSlot(legacyLoadout)];
+}
+
+function writeParty(party: readonly PartySlot[]): string {
+  return party.slice(0, MAX_PARTY_SIZE).map((slot, index) => {
+    const controller = index === 0 ? "h" : slot.controller === "ai" ? "a" : "h";
+    const difficulty = slot.aiProfile?.difficulty ?? "standard";
+    return `${controller}.${validLoadout(slot.loadoutId) ?? "loadout-01"}.${difficulty}`;
+  }).join(",");
+}
+
+function validLoadout(value: string | null | undefined): string | null {
+  return value && LOADOUT_ID.test(value) ? value : null;
+}
+
+function isDifficulty(value: string | undefined): value is AiDifficulty {
+  return value === "apprentice" || value === "standard" || value === "master";
 }
