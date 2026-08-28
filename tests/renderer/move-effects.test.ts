@@ -9,8 +9,8 @@ describe("move particle profiles", () => {
       const profile = moveEffectProfile(move.id, move.tags, move.key);
       return [profile.kind, profile.effect, profile.trail, profile.impact].join(":");
     });
-    expect(signatures).toHaveLength(28);
-    expect(new Set(signatures).size).toBe(28);
+    expect(signatures).toHaveLength(29);
+    expect(new Set(signatures).size).toBe(29);
   });
 
   it("assigns technique-specific visual verbs within the same element family", () => {

@@ -41,9 +41,11 @@ interface LabViewOptions {
   preferences: LabPreferences;
   dummyOptions: readonly [number, string][];
   publicPlay?: boolean;
+  unlockedMoveIds?: readonly number[];
+  unlockedRecipeIds?: readonly string[];
 }
 
-export function buildLabView({ character, buildState, preferences, dummyOptions, publicPlay = false }: LabViewOptions): string {
+export function buildLabView({ character, buildState, preferences, dummyOptions, publicPlay = false, unlockedMoveIds, unlockedRecipeIds }: LabViewOptions): string {
   const preset = buildState.presets[buildState.activePreset];
   const initialMove = character.moves.find((move) => move.id === preset.loadout[0]) ?? character.moves[0];
   const moveOptions = option(0, "— Unassigned —") + character.moves.map((move) => option(move.id, `${String(move.id).padStart(2, "0")} · ${moveName(move)} · ${primaryDamage(move)} dmg · ${move.startup}f`)).join("");
@@ -76,7 +78,9 @@ export function buildLabView({ character, buildState, preferences, dummyOptions,
     const label = ACTION_SLOT_LABELS[slot];
     return `<button type="button" class="mapped-input${slot === 0 ? " selected" : ""}" data-gamepad-nav data-route-column="${column}" data-select-action="${slot}" data-move-preview="${preset.loadout[slot]}" aria-label="Action ${slot + 1}: ${label.keyboard}, ${label.gamepad}"><span>${bank.input}</span><kbd class="keyboard-key">${label.keyboard}</kbd><kbd class="pad-key">${label.gamepad}</kbd></button>`;
   }).join("")}</section>`).join("");
-  const moveLibrary = character.moves.map((move) => moveCard(move, preset.loadout)).join("");
+  const unlockedMoves = unlockedMoveIds ? new Set(unlockedMoveIds) : null;
+  const unlockedRecipes = unlockedRecipeIds ? new Set(unlockedRecipeIds) : null;
+  const moveLibrary = character.moves.map((move) => moveCard(move, preset.loadout, unlockedMoves?.has(move.id) ?? true)).join("");
   const codexMoveLibrary = character.moves.map((move) => codexMoveButton(move, preset.loadout)).join("");
   const statusCards = STATUS_RULES.map((rule) => {
     const moves = character.moves.filter((move) => move.tags.includes(rule.tag)).map(moveName);
@@ -92,7 +96,8 @@ export function buildLabView({ character, buildState, preferences, dummyOptions,
     <header class="lab-header debugger-header"><div class="brand"><p class="eyebrow">${publicPlay ? "HEXFRAME / PUBLIC PLAYTEST" : "HEXFRAME / DETERMINISTIC COMBAT LAB V0"}</p><h1>${publicPlay ? "Prime. Link. Cash out." : "Combat operating system."}</h1><p>${publicPlay ? "Build a sixteen-technique arsenal. Route statuses. Finish the fight." : "Every panel describes one authoritative frame."}</p></div><div class="header-actions"><span class="controller-state" id="controller-state">Keyboard ready</span><button type="button" data-action="menu" aria-haspopup="dialog">${publicPlay ? "Arsenal · Codex · System" : "Open systems"}</button></div></header>
 
     ${publicPlay ? `<section class="first-launch" id="first-launch" role="dialog" aria-modal="true" aria-labelledby="first-launch-title" hidden><div><p>HEXFRAME</p><h2 id="first-launch-title">Learn the ropes</h2><span>~5 minute interactive tutorial</span><p>Direction chooses your route. Modifiers advance it.</p><button class="primary" type="button" data-action="start-tutorial">Start tutorial</button><button type="button" data-action="skip-tutorial">Go straight to training</button></div></section>` : ""}
-    <aside class="tutorial-hud" id="tutorial-hud" aria-live="polite" hidden><header><span id="tutorial-lesson-count">LESSON 1 / 8</span><strong id="tutorial-title">Movement</strong></header><div class="tutorial-objective"><small>OBJECTIVE</small><b id="tutorial-objective">Move forward</b><em id="tutorial-success"></em></div><p id="tutorial-hint"></p><strong class="tutorial-telegraph" id="tutorial-telegraph" hidden></strong><footer><button type="button" data-action="skip-tutorial-lesson">Skip lesson</button><button class="primary" type="button" data-action="next-tutorial-lesson" hidden>Next lesson</button><button type="button" data-action="exit-tutorial">Exit tutorial</button></footer></aside>
+    ${publicPlay ? `<section class="campaign-reward" id="campaign-reward" role="dialog" aria-modal="true" aria-labelledby="campaign-reward-title" hidden><div><p>BOSS REWARD</p><h2 id="campaign-reward-title">New technique unlocked</h2><strong>GRAVE TOLL</strong><p>Warden Core ×1 · Stormglass ×4 · Iron Scrap ×6</p><p>New recipe: Warden's Vambraces</p><div><button type="button" data-action="campaign-preview">Preview</button><button class="primary" type="button" data-action="campaign-assign">Assign Grave Toll</button><button type="button" data-action="campaign-forge">Open Forge</button></div></div></section>` : ""}
+    <aside class="tutorial-hud" id="tutorial-hud" aria-live="polite" hidden><header><span id="tutorial-lesson-count">LESSON 1 / 9</span><strong id="tutorial-title">Movement</strong></header><div class="tutorial-objective"><small>OBJECTIVE</small><b id="tutorial-objective">Move forward</b><em id="tutorial-success"></em></div><p id="tutorial-hint"></p><strong class="tutorial-telegraph" id="tutorial-telegraph" hidden></strong><footer><button type="button" data-action="skip-tutorial-lesson">Skip lesson</button><button class="primary" type="button" data-action="next-tutorial-lesson" hidden>Next lesson</button><button type="button" data-action="exit-tutorial">Exit tutorial</button></footer></aside>
 
     ${publicPlay ? "" : `<section class="frame-console" aria-label="Frame transport controls">
       <div class="global-frame"><span>FRAME</span><strong id="frame-readout">000000</strong><em id="play-state">LIVE</em></div>
@@ -109,7 +114,8 @@ export function buildLabView({ character, buildState, preferences, dummyOptions,
 
     <section class="debugger-workspace">
       <section class="playfield-card" aria-label="Combat arena">
-        <div class="hud" aria-label="Fighter health and stamina"><div class="hud-player"><span>P1</span><div class="hud-meter-stack"><div class="health-track"><i id="health-p1"></i></div><div class="stamina-track"><i id="stamina-p1"></i></div></div><strong><b id="health-text-p1">${character.health}</b><small id="stamina-text-p1">${character.stamina} STA</small></strong></div><div class="hud-player hud-player-right"><strong><b id="health-text-p2">1000</b><small id="stamina-text-p2">100 STA</small></strong><div class="hud-meter-stack"><div class="health-track"><i id="health-p2"></i></div><div class="stamina-track"><i id="stamina-p2"></i></div></div><span>DUMMY</span></div></div>
+        <div class="hud" aria-label="Fighter health and stamina"><div class="hud-player"><span>P1</span><div class="hud-meter-stack"><div class="health-track"><i id="health-p1"></i></div><div class="stamina-track"><i id="stamina-p1"></i></div></div><strong><b id="health-text-p1">${character.health}</b><small id="stamina-text-p1">${character.stamina} STA</small></strong></div><div class="hud-player hud-player-right"><strong><b id="health-text-p2">${publicPlay ? 1800 : 1000}</b><small id="stamina-text-p2">${publicPlay ? "THE BELL WARDEN" : "100 STA"}</small></strong><div class="hud-meter-stack"><div class="health-track"><i id="health-p2"></i></div><div class="stamina-track"><i id="stamina-p2"></i></div></div><span>${publicPlay ? "BOSS" : "DUMMY"}</span></div></div>
+        ${publicPlay ? `<aside class="campaign-hud" id="campaign-hud" aria-live="polite"><small>BLACK BELFRY</small><strong id="campaign-objective">Reach the Arsenal Shrine</strong><span id="campaign-loot">Iron Scrap 2 · Grave Thread 3</span></aside>` : ""}
         <div class="status-lane status-lane-you" id="debuff-p1" aria-label="Your active debuffs"></div><div class="status-lane status-lane-dummy" id="debuff-p2" aria-label="Dummy active debuffs"></div><div id="stage" class="stage"></div><div class="paused-overlay" id="paused-overlay" role="status" hidden><strong>PAUSED</strong><span>Press Start or Space to resume</span></div>
         <div class="current-route"><span>ACTIVE</span><strong id="active-move">Ready</strong><em id="active-tags">Choose any 16 of ${character.moves.length} moves</em></div><div class="audio-caption" id="audio-caption" role="status" aria-live="polite" hidden></div><div class="sr-only" id="combat-announcer" role="status" aria-live="polite"></div>
       </section>
@@ -124,7 +130,7 @@ export function buildLabView({ character, buildState, preferences, dummyOptions,
       <section class="scenario-console" aria-labelledby="scenario-title"><header><p>HEADLESS-READY CAPTURE</p><h2 id="scenario-title">Reproducible scenario</h2></header><p>Capture exact per-frame inputs and the expected terminal hash. Replay it through the same deterministic clock or export it as a combat fixture.</p><div class="scenario-actions"><button type="button" data-action="scenario-capture">Capture current run</button><button type="button" data-action="scenario-replay" disabled>Replay & verify</button><button type="button" data-action="scenario-export" disabled>Export JSON</button><label class="scenario-import">Import JSON<input type="file" accept="application/json,.json" data-control="scenario-import"></label></div><output id="scenario-status">No scenario captured.</output></section>
     </section>`}
 
-    <footer class="control-legend"><span><b>MOVE</b> WASD / left stick</span><span><b>NEUTRAL</b> arrows / Y X B A</span><span><b>SETUP</b> Shift / LT</span><span><b>POWER</b> E / RT</span><span><b>FINALE</b> Shift+E / LT+RT</span>${publicPlay ? "" : "<span><b>SCRUB</b> , and . / LB RB</span><span><b>PLAY</b> Space / Start</span>"}<span><b>MENU</b> Esc / View</span></footer>
+    <footer class="control-legend"><span><b>MOVE</b> WASD / left stick</span><span><b>ATTACK</b> arrows / Y X B A</span><span><b>SETUP</b> Shift / LT</span><span><b>POWER</b> Ctrl/⌘ / RT</span><span><b>FINALE</b> Shift+Ctrl/⌘ / LT+RT</span><span><b>INTERACT</b> E / RB</span>${publicPlay ? "" : "<span><b>SCRUB</b> , and . / LB RB</span><span><b>PLAY</b> Space / Start</span>"}<span><b>MENU</b> Esc / View</span></footer>
 
     <div class="menu-scrim" id="menu-scrim" hidden><aside class="lab-menu" id="lab-menu" role="dialog" aria-modal="true" aria-labelledby="menu-title" tabindex="-1">
       <header class="menu-header"><div><p class="eyebrow">HEXFRAME / BUILDCRAFT</p><h2 id="menu-title">Arsenal, codex & system</h2></div><button type="button" data-action="close-menu" data-gamepad-nav aria-label="Close systems and return to game">Close</button></header>
@@ -167,7 +173,7 @@ export function buildLabView({ character, buildState, preferences, dummyOptions,
 
       <section class="menu-page craft-page" id="page-craft" role="tabpanel" aria-labelledby="tab-craft" data-menu-page="craft" hidden>
         <div class="armory-titlebar"><div><p class="eyebrow">FORGE / ARMOR RECIPES</p><h2>Crafting</h2></div><span class="craft-owned"><b id="craft-owned-count">${ownedArmor.length}</b> / ${ARMOR_CATALOG.length} OWNED</span></div>
-        <div class="craft-workspace"><section class="recipe-sheet" aria-labelledby="recipe-title"><div class="panel-heading"><div><small>FIVE GRADES · FIVE SLOTS</small><h3 id="recipe-title">Armor recipes</h3></div><span>SELECT A PIECE</span></div><div class="recipe-grid">${ARMOR_CATALOG.map((item) => craftRecipeButton(item, buildState.inventory)).join("")}</div></section><aside class="craft-detail" id="craft-detail" aria-live="polite">${craftDetailMarkup(initialCraft, buildState.inventory)}</aside></div>
+        <div class="craft-workspace"><section class="recipe-sheet" aria-labelledby="recipe-title"><div class="panel-heading"><div><small>FIVE GRADES · FIVE SLOTS</small><h3 id="recipe-title">Armor recipes</h3></div><span>SELECT A PIECE</span></div><div class="recipe-filters" aria-label="Recipe filters"><button class="active" type="button" data-craft-filter="all">ALL</button><button type="button" data-craft-filter="new">NEW</button><button type="button" data-craft-filter="craftable">CRAFTABLE</button>${ARMOR_SLOTS.map((slot) => `<button type="button" data-craft-filter="${slot}">${slot.toUpperCase()}</button>`).join("")}</div><div class="recipe-grid">${ARMOR_CATALOG.map((item) => craftRecipeButton(item, buildState.inventory, unlockedRecipes?.has(item.id) ?? true)).join("")}</div></section><aside class="craft-detail" id="craft-detail" aria-live="polite">${craftDetailMarkup(initialCraft, buildState.inventory, armorById(preset.equipment[initialCraft.slot]), preset.equipment, unlockedRecipes?.has(initialCraft.id) ?? true)}</aside></div>
       </section>
 
       <section class="menu-page codex-page codex-moves-page" id="page-moves" role="tabpanel" aria-labelledby="tab-moves" data-menu-page="moves" hidden>
@@ -202,7 +208,7 @@ function presetManager(buildState: BuildState): string {
   const active = buildState.presets[buildState.activePreset];
   return `<div class="preset-manager">${presetSwitcher(buildState)}<label><span>BUILD NAME</span><input type="text" maxlength="32" value="${active.name}" data-build-name aria-label="Build name"></label><div class="preset-actions"><button type="button" data-gamepad-nav data-preset-action="rename">Rename</button><button type="button" data-gamepad-nav data-preset-action="duplicate">Duplicate</button><button type="button" data-gamepad-nav data-preset-action="clear">Clear</button><button type="button" data-gamepad-nav data-preset-action="reset">Reset</button></div><div class="duplicate-chooser" data-duplicate-chooser hidden><span>DUPLICATE INTO</span>${buildState.presets.map((build, index) => `<button type="button" data-gamepad-nav data-duplicate-target="${index}" ${index === buildState.activePreset ? "disabled" : ""}>${index + 1} · ${build.name}</button>`).join("")}</div><output data-build-changes>All changes saved</output></div>`;
 }
-function deviceOutlines(): string { return `<div class="device-outlines" aria-hidden="true"><div class="keyboard-outline"><div class="wasd-keys"><i>W</i><i>A</i><i>S</i><i>D</i></div><div class="arrow-keys"><i>↑</i><i>←</i><i>↓</i><i>→</i></div><b>SHIFT</b><b>SPACE</b></div><div class="gamepad-outline"><i class="trigger lt">LT</i><i class="trigger rt">RT</i><span class="pad-dpad">＋</span><span class="pad-stick left-stick"></span><span class="pad-stick right-stick"></span><div class="face-cluster"><i>Y</i><i>X</i><i>B</i><i>A</i></div></div></div>`; }
+function deviceOutlines(): string { return `<div class="device-outlines" aria-hidden="true"><div class="keyboard-outline"><div class="wasd-keys"><i>W</i><i>A</i><i>S</i><i>D</i></div><div class="arrow-keys"><i>↑</i><i>←</i><i>↓</i><i>→</i></div><b>SHIFT</b><b>CTRL / ⌘</b><em>E · INTERACT</em></div><div class="gamepad-outline"><i class="trigger lt">LT</i><i class="trigger rt">RT</i><span class="pad-dpad">＋</span><span class="pad-stick left-stick"></span><span class="pad-stick right-stick"></span><div class="face-cluster"><i>Y</i><i>X</i><i>B</i><i>A</i></div><em>RB · INTERACT</em></div></div>`; }
 
 function moveFilters(): string {
   const buttons = (kind: string, values: readonly string[]) => values.map((value, index) => `<button class="${index === 0 ? "active" : ""}" type="button" data-gamepad-nav data-move-filter="${kind}" data-filter-value="${value}" aria-pressed="${index === 0}">${value.toUpperCase()}</button>`).join("");
@@ -255,26 +261,40 @@ export function skillBoardMarkup(points: Readonly<Record<ArmorSkillId, number>>)
   }).join("")}`;
 }
 
-export function craftRecipeButton(item: ArmorDef, inventory: Readonly<ArmorInventory>): string {
+export function craftRecipeButton(item: ArmorDef, inventory: Readonly<ArmorInventory>, unlocked = true): string {
   const owned = inventory.armor.includes(item.id);
-  const craftable = canCraftArmor(item, inventory);
-  return `<button type="button" class="recipe-item grade-${item.grade}${owned ? " owned" : craftable ? " craftable" : ""}" data-gamepad-nav data-craft-item="${item.id}" aria-label="View ${item.name} recipe, ${owned ? "owned" : craftable ? "craftable" : "missing materials"}"><span class="gear-icon" aria-hidden="true">${item.icon}</span><span><strong>${item.name}</strong><small>${item.slot} · ${item.armor} armor</small></span><em>${owned ? "OWNED" : craftable ? "READY" : item.grade.toUpperCase()}</em></button>`;
+  const craftable = unlocked && canCraftArmor(item, inventory);
+  return `<button type="button" class="recipe-item grade-${item.grade}${owned ? " owned" : craftable ? " craftable" : ""}${unlocked ? "" : " locked"}" data-gamepad-nav data-craft-item="${item.id}" data-craft-slot="${item.slot}" data-craft-grade="${item.grade}" data-craft-ready="${craftable}" data-craft-new="${unlocked && !owned}" aria-label="View ${item.name} recipe, ${unlocked ? owned ? "owned" : craftable ? "craftable" : "missing materials" : "locked"}"><span class="gear-icon" aria-hidden="true">${item.icon}</span><span><strong>${item.name}</strong><small>${item.slot} · ${item.armor} armor</small></span><em>${unlocked ? owned ? "OWNED" : craftable ? "READY" : item.grade.toUpperCase() : "LOCKED"}</em></button>`;
 }
 
-export function craftDetailMarkup(item: ArmorDef, inventory: Readonly<ArmorInventory>): string {
+export function craftDetailMarkup(
+  item: ArmorDef,
+  inventory: Readonly<ArmorInventory>,
+  current: ArmorDef | null = null,
+  equipment: Readonly<Partial<Record<ArmorSlot, string>>> = {},
+  unlocked = true,
+): string {
   const owned = inventory.armor.includes(item.id);
-  const craftable = canCraftArmor(item, inventory);
-  return `<div class="craft-preview"><span class="gear-icon grade-${item.grade}" aria-hidden="true">${item.icon}</span><small>${item.grade} · ${item.slot}</small><h3>${item.name}</h3><strong>${item.armor} ARMOR</strong></div><div class="craft-skill-list"><h4>Armor skills</h4>${item.skills.map((grant) => `<div><span>${armorSkillById(grant.id).name}</span><b>+${grant.points}</b></div>`).join("")}</div><div class="recipe-costs"><h4>Required materials</h4>${item.recipe.map((cost) => {
+  const craftable = unlocked && canCraftArmor(item, inventory);
+  const nextEquipment = { ...equipment, [item.slot]: item.id };
+  const beforeSet = Math.min(3, Object.values(equipment).map((id) => armorById(id ?? "")).filter((piece) => piece?.setName === item.setName).length);
+  const afterSet = Math.min(3, Object.values(nextEquipment).map((id) => armorById(id ?? "")).filter((piece) => piece?.setName === item.setName).length);
+  const beforeSkills = armorSkillPoints(equipment);
+  const afterSkills = armorSkillPoints(nextEquipment);
+  const activated = item.skills.map((grant) => armorSkillById(grant.id)).find((skill) =>
+    activeSkillThreshold(skill, beforeSkills[skill.id])?.points !== activeSkillThreshold(skill, afterSkills[skill.id])?.points,
+  );
+  return `<div class="craft-preview"><span class="gear-icon grade-${item.grade}" aria-hidden="true">${item.icon}</span><small>${item.grade} · ${item.slot}</small><h3>${item.name}</h3><strong>${unlocked ? `${item.armor} ARMOR` : "RECIPE LOCKED"}</strong></div><dl class="craft-compare"><div><dt>Armor</dt><dd>${current?.armor ?? 0} → ${item.armor} <b>${item.armor - (current?.armor ?? 0) >= 0 ? "+" : ""}${item.armor - (current?.armor ?? 0)}</b></dd></div><div><dt>${item.setName} set</dt><dd>${beforeSet}/3 → ${afterSet}/3</dd></div>${activated ? `<div class="activated"><dt>Activated</dt><dd>${activated.name}</dd></div>` : ""}</dl><div class="craft-skill-list"><h4>Build effects</h4>${item.skills.map((grant) => `<div><span>${armorSkillById(grant.id).name}</span><b>+${grant.points}</b></div>`).join("")}</div><div class="recipe-costs"><h4>Required materials</h4>${item.recipe.map((cost) => {
     const material = materialById(cost.materialId);
     const current = inventory.materials[cost.materialId] ?? 0;
-    return `<div class="${current >= cost.quantity ? "met" : "missing"}"><span>${material?.name ?? cost.materialId}</span><b><span data-material-count="${cost.materialId}">${current}</span> / ${cost.quantity}</b></div>`;
-  }).join("")}</div><button class="primary craft-button" type="button" data-action="craft-selected" data-gamepad-nav ${owned || !craftable ? "disabled" : ""}>${owned ? "Already owned" : craftable ? "Craft armor" : "Missing materials"}</button>`;
+    return `<div class="${current >= cost.quantity ? "met" : "missing"}"><span>${material?.name ?? cost.materialId}<small>Source: ${material?.source ?? "Exploration and boss drops"}</small></span><b><span data-material-count="${cost.materialId}">${current}</span> / ${cost.quantity}</b></div>`;
+  }).join("")}</div><div class="craft-actions"><button class="craft-button" type="button" data-action="craft-selected" data-gamepad-nav ${owned || !craftable ? "disabled" : ""}>${!unlocked ? "Defeat its source to unlock" : owned ? "Already owned" : craftable ? "Craft" : "Missing materials"}</button><button class="primary craft-button" type="button" data-action="craft-equip" data-gamepad-nav ${owned || !craftable ? "disabled" : ""}>Craft + equip</button></div>`;
 }
 
-function moveCard(move: MoveDef, loadout: readonly number[]): string {
+function moveCard(move: MoveDef, loadout: readonly number[], unlocked: boolean): string {
   const families = moveFamilies(move);
   const search = `${moveName(move)} ${move.description} ${move.tags.join(" ")}`.toLowerCase();
-  return `<button type="button" class="move-card" data-gamepad-nav data-move-preview="${move.id}" data-equip-move="${move.id}" data-move-role="${moveRole(move)}" data-move-family="${families.join(" ")}" data-move-terrain="${moveTerrain(move)}" data-move-search-text="${search}" aria-label="Equip ${moveName(move)} into selected slot"><span class="move-card-index">${String(move.id).padStart(2, "0")}</span><div><header><h3>${moveName(move)}</h3><em>${moveLevel(move)}</em></header><p class="move-card-role">${moveRole(move).toUpperCase()} · ${(families.length > 0 ? families : ["physical"]).join(" · ").toUpperCase()} · ${moveTerrain(move).toUpperCase()}</p><p>${move.description}</p><dl><div><dt>DMG</dt><dd>${primaryDamage(move)}</dd></div><div><dt>START</dt><dd>${move.startup}f</dd></div><div><dt>STA</dt><dd>${move.staminaCost}</dd></div></dl><strong class="equipped-state" data-equipped-move="${move.id}">${equippedSummary(loadout, move.id)}</strong><ul>${move.tags.map((tag) => `<li>${tag}</li>`).join("")}</ul></div></button>`;
+  return `<button type="button" class="move-card${unlocked ? "" : " locked"}" data-gamepad-nav data-move-preview="${move.id}" data-equip-move="${move.id}" data-move-role="${moveRole(move)}" data-move-family="${families.join(" ")}" data-move-terrain="${moveTerrain(move)}" data-move-search-text="${search}" aria-label="${unlocked ? "Equip" : "Locked technique"} ${moveName(move)} into selected slot" ${unlocked ? "" : "disabled"}><span class="move-card-index">${String(move.id).padStart(2, "0")}</span><div><header><h3>${moveName(move)}</h3><em>${unlocked ? moveLevel(move) : "LOCKED"}</em></header><p class="move-card-role">${moveRole(move).toUpperCase()} · ${(families.length > 0 ? families : ["physical"]).join(" · ").toUpperCase()} · ${moveTerrain(move).toUpperCase()}</p><p>${move.description}</p><dl><div><dt>DMG</dt><dd>${primaryDamage(move)}</dd></div><div><dt>START</dt><dd>${move.startup}f</dd></div><div><dt>STA</dt><dd>${move.staminaCost}</dd></div></dl><strong class="equipped-state" data-equipped-move="${move.id}">${unlocked ? equippedSummary(loadout, move.id) : "DEFEAT A BOSS TO UNLOCK"}</strong><ul>${move.tags.map((tag) => `<li>${tag}</li>`).join("")}</ul></div></button>`;
 }
 
 function moveShowcase(move: MoveDef, character: CharacterDef, loadout: readonly number[]): string {

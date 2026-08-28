@@ -4,8 +4,10 @@ import {
   ContactKind,
   DebuffEventKind,
   DebuffKind,
+  EntityEventKind,
   HitLevel,
   InputBit,
+  InteractableKind,
   StateId,
 } from "../combat/types";
 import { MoveId } from "../content/test-fighter";
@@ -18,7 +20,8 @@ export type TutorialLessonId =
   | "first-route"
   | "status"
   | "arsenal"
-  | "codex";
+  | "codex"
+  | "interaction";
 
 export type TutorialUiEvent =
   | "arsenal-opened"
@@ -104,7 +107,7 @@ export const TUTORIAL_LESSONS: readonly TutorialLesson[] = [
     steps: [
       { objective: "Press ↑ / Y — Starter", success: "Starter ready" },
       { objective: "Press LT + ↑ / Shift + ↑ — Link", success: "Link ready" },
-      { objective: "Press RT + ↑ / E + ↑ — Cashout", success: "Cashout ready" },
+      { objective: "Press RT + ↑ / Ctrl/⌘ + ↑ — Cashout", success: "Cashout ready" },
     ],
   },
   {
@@ -149,6 +152,14 @@ export const TUTORIAL_LESSONS: readonly TutorialLesson[] = [
       { objective: "Inspect or equip its route", success: "Codex complete" },
     ],
   },
+  {
+    id: "interaction",
+    title: "Enter the Belfry",
+    hint: "Walk to the Arsenal Shrine. E / RB is a deterministic world action.",
+    steps: [
+      { objective: "Walk to the Arsenal Shrine and press E / RB", success: "Loadout shrine activated" },
+    ],
+  },
 ];
 
 const DIRECTION_MOVES = [MoveId.EmberPalm, MoveId.VenomFang, MoveId.FrostHeel, MoveId.StormKnuckle];
@@ -168,9 +179,14 @@ export class TutorialController {
   private resetRequested = false;
   private readonly completed = loadCompletedLessons();
   private readonly onChange: (snapshot: TutorialSnapshot) => void;
+  private readonly defenseActions: readonly [number, number, number];
 
-  constructor(onChange: (snapshot: TutorialSnapshot) => void) {
+  constructor(
+    onChange: (snapshot: TutorialSnapshot) => void,
+    defenseActions: readonly [number, number, number] = [actionBit(0), actionBit(4), actionBit(2)],
+  ) {
     this.onChange = onChange;
+    this.defenseActions = defenseActions;
   }
 
   start(lessonId: TutorialLessonId = "movement"): void {
@@ -250,6 +266,11 @@ export class TutorialController {
     if (lesson.id === "arsenal" && this.stepIndex === 3) {
       success = reports.some((report) => report.moveStarts.some((event) => event.player === 0));
     }
+    if (lesson.id === "interaction") {
+      success = reports.some((report) => report.entityEvents.some((event) =>
+        event.kind === EntityEventKind.Interacted && event.owner === InteractableKind.ArsenalShrine,
+      ));
+    }
 
     if (success) this.completeStep();
   }
@@ -269,10 +290,7 @@ export class TutorialController {
     this.dummyClock++;
     const drillFrame = this.dummyClock % 110;
     if (drillFrame !== 52) return 0;
-    const level = DEFENSE_LEVELS[this.stepIndex];
-    if (level === HitLevel.Low) return actionBit(4);
-    if (level === HitLevel.Overhead) return actionBit(2);
-    return actionBit(0);
+    return this.defenseActions[this.stepIndex] ?? 0;
   }
 
   consumeResetRequest(): boolean {

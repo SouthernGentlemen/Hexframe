@@ -26,7 +26,7 @@ describe("lab accessibility contract", () => {
     expect(html.match(/data-material-item=/g)).toHaveLength(MATERIAL_CATALOG.length);
     expect(html.match(/data-craft-item=/g)).toHaveLength(ARMOR_CATALOG.length);
     expect(html).toContain('aria-label="Move for action 16"');
-    expect(html).toContain('aria-label="Action 16: Shift+E+↓, LT+RT+A"');
+    expect(html).toContain('aria-label="Action 16: Shift+Ctrl/⌘+↓, LT+RT+A"');
   });
 
   it("keeps modal, tabs, live regions, and reduced-effect settings semantic", () => {
@@ -38,8 +38,8 @@ describe("lab accessibility contract", () => {
     expect(html).toContain('id="page-armor"');
     expect(html).toContain('id="page-craft"');
     expect(html).toContain('id="page-moves"');
-    expect(html.match(/class="move-card"/g)).toHaveLength(28);
-    expect(html.match(/data-equip-move=/g)).toHaveLength(28);
+    expect(html.match(/class="move-card"/g)).toHaveLength(29);
+    expect(html.match(/data-equip-move=/g)).toHaveLength(29);
     expect(html).toContain('data-move-filter="role"');
     expect(html).toContain('data-preset-action="duplicate"');
     expect(html).toContain('id="move-showcase-stage"');

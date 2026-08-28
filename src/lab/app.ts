@@ -1,8 +1,8 @@
 import { px } from "../combat/constants";
 import type { FighterState, FrameReport, MoveDef, SimConfig } from "../combat/types";
-import { ContactKind, DebuffEventKind, DebuffKind, HitLevel } from "../combat/types";
+import { actionBit, ContactKind, DebuffEventKind, DebuffKind, EntityEventKind, EntityKind, HitLevel, InputBit, InteractableKind } from "../combat/types";
 import { Simulation } from "../combat/simulation/simulation";
-import { DEFAULT_MOVE_LOADOUT, testFighterWithBuild, testFighterWithLoadout } from "../content/test-fighter";
+import { DEFAULT_MOVE_LOADOUT, MoveId, testFighterWithBuild, testFighterWithLoadout } from "../content/test-fighter";
 import {
   TEST_FIGHTER_ANIMATIONS,
   TEST_FIGHTER_MODEL,
@@ -61,6 +61,17 @@ import { MoveDemonstration } from "./move-demonstration";
 import type { MoveDemonstrationMode, MoveDemonstrationState } from "./move-demonstration";
 import { markTutorialSeen, tutorialSeen, TutorialController, TUTORIAL_LESSONS } from "./tutorial";
 import type { TutorialSnapshot } from "./tutorial";
+import { BLACK_BELFRY, CampaignMaterial } from "../content/black-belfry";
+import { BELL_WARDEN } from "../content/bell-warden";
+import {
+  BELL_WARDEN_ANIMATIONS,
+  BELL_WARDEN_MODEL,
+  BELL_WARDEN_PLAYBACK,
+  BELL_WARDEN_RIG,
+} from "../content/bell-warden-assets";
+import { BellWardenController } from "../campaign/boss-controller";
+import { loadCampaignState, persistCampaignState } from "../campaign/state";
+import type { CampaignState } from "../campaign/state";
 import {
   ACTION_BANKS,
   actionSlotInput,
@@ -97,34 +108,68 @@ export function startLab(mount: HTMLElement): () => void {
   const publicPlay = window.location.pathname === "/play" || window.location.pathname.startsWith("/play/");
   const catalogCharacter = testFighterWithLoadout(DEFAULT_MOVE_LOADOUT);
   const validMoveIds = new Set([0, ...catalogCharacter.moves.map((move) => move.id)]);
-  const buildState = loadBuildState(validMoveIds);
+  const campaign: CampaignState | null = publicPlay ? loadCampaignState() : null;
+  const buildState = campaign?.builds ?? loadBuildState(validMoveIds);
   let activeBuild = buildState.presets[buildState.activePreset];
   const playerCharacter = testFighterWithBuild(activeBuild.loadout, activeBuild.equipment);
-  const dummyCharacter = testFighterWithLoadout(DEFAULT_MOVE_LOADOUT);
+  const dummyCharacter = publicPlay ? BELL_WARDEN : testFighterWithLoadout(DEFAULT_MOVE_LOADOUT);
   const preferences = loadPreferences();
   applyPreferences(preferences);
 
-  mount.innerHTML = buildLabView({ character: playerCharacter, buildState, preferences, dummyOptions: DUMMY_OPTIONS, publicPlay });
+  mount.innerHTML = buildLabView({
+    character: playerCharacter,
+    buildState,
+    preferences,
+    dummyOptions: DUMMY_OPTIONS,
+    publicPlay,
+    unlockedMoveIds: campaign?.unlockedMoveIds,
+    unlockedRecipeIds: campaign?.unlockedRecipeIds,
+  });
 
   // The lab reset is a canonical contact setup: standing light reaches the dummy without
   // hidden walking or timing, so the same move can be run, inspected, edited, and rerun.
-  const config: SimConfig = { characters: [playerCharacter, dummyCharacter], startX: [px(-18), px(18)], seed: 0x5eed };
+  const config: SimConfig = publicPlay
+    ? { characters: [playerCharacter, dummyCharacter], startX: [BLACK_BELFRY.spawnX, px(1130)], seed: 0x5eed, stage: BLACK_BELFRY }
+    : { characters: [playerCharacter, dummyCharacter], startX: [px(-18), px(18)], seed: 0x5eed };
   const sim = new Simulation(config);
   const timeline = new Timeline(sim, 900);
   timeline.paused = false;
   timeline.pauseOnContact = false;
   const dummy = new DummyController();
-  const tutorial = new TutorialController(syncTutorialUi);
-  const keyboard = new KeyboardController(window, DEFAULT_KEYMAP_P1, DEFAULT_ACTION_KEYMAP);
+  const boss = new BellWardenController();
+  const tutorial = new TutorialController(
+    syncTutorialUi,
+    publicPlay ? [actionBit(3), actionBit(2), actionBit(1)] : undefined,
+  );
+  const keyboard = new KeyboardController(window, DEFAULT_KEYMAP_P1, DEFAULT_ACTION_KEYMAP, {
+    ownsModifiedActions: () => document.hasFocus() && !menuOpen() && !firstLaunchOpen(),
+  });
   const secondKeyboard = new KeyboardController(window, DEFAULT_KEYMAP_P2, NO_ACTION_KEYMAP);
   const gamepad = new GamepadController();
   const renderer = new Renderer(required("stage"), sim.characters(), {
-    fighters: [0, 1].map(() => ({
-      model: TEST_FIGHTER_MODEL,
-      rig: TEST_FIGHTER_RIG,
-      animations: TEST_FIGHTER_ANIMATIONS,
-      playback: TEST_FIGHTER_PLAYBACK,
-    })),
+    fighters: [
+      {
+        model: TEST_FIGHTER_MODEL,
+        rig: TEST_FIGHTER_RIG,
+        animations: TEST_FIGHTER_ANIMATIONS,
+        playback: TEST_FIGHTER_PLAYBACK,
+      },
+      publicPlay
+        ? {
+            model: BELL_WARDEN_MODEL,
+            rig: BELL_WARDEN_RIG,
+            animations: BELL_WARDEN_ANIMATIONS,
+            playback: BELL_WARDEN_PLAYBACK,
+            presentationScale: 1.55,
+          }
+        : {
+            model: TEST_FIGHTER_MODEL,
+            rig: TEST_FIGHTER_RIG,
+            animations: TEST_FIGHTER_ANIMATIONS,
+            playback: TEST_FIGHTER_PLAYBACK,
+          },
+    ],
+    stage: publicPlay ? BLACK_BELFRY : undefined,
   });
   const demonstrationAssets = {
     model: TEST_FIGHTER_MODEL,
@@ -142,6 +187,7 @@ export function startLab(mount: HTMLElement): () => void {
     const playerInput = keyboard.sample() | gamepad.sample();
     lastPlayerInput = playerInput;
     if (tutorial.active) return [playerInput, tutorial.dummyInput(sim.getState())];
+    if (publicPlay) return [playerInput, boss.inputFor(sim.getState())];
     const secondPlayer = secondKeyboard.sample();
     dummy.capture(secondPlayer);
     return [playerInput, dummy.inputFor(sim.getState(), 1, timeline.lastReport)];
@@ -161,6 +207,7 @@ export function startLab(mount: HTMLElement): () => void {
   let captionTimer = 0;
   let selectedArmorSlot: ArmorSlot = "head";
   let selectedCraftArmorId = ARMOR_CATALOG.find((item) => !buildState.inventory.armor.includes(item.id))?.id ?? ARMOR_CATALOG[0].id;
+  let craftFilter = "all";
   let showcasedMoveId = -1;
   let capturedScenario: CombatScenario | null = null;
   let selectedInteraction: InteractionSelection | null = null;
@@ -209,9 +256,12 @@ export function startLab(mount: HTMLElement): () => void {
       const maxStamina = sim.characters()[player].stamina;
       const staminaPercent = Math.max(0, Math.min(100, (fighter.stamina / maxStamina) * 100));
       required(`stamina-p${player + 1}`).style.width = `${staminaPercent}%`;
-      required(`stamina-text-p${player + 1}`).textContent = `${fighter.stamina} STA`;
+      required(`stamina-text-p${player + 1}`).textContent = publicPlay && player === 1
+        ? (fighter.health * 100 <= dummyCharacter.health * 58 ? "PHASE II · CHAIN UNBOUND" : "PHASE I · READ THE BELL")
+        : `${fighter.stamina} STA`;
       renderDebuffs(player, fighter);
     }
+    if (campaign) syncCampaignHud(state);
     const move = playerCharacter.moves.find((candidate) => candidate.id === state.fighters[0].moveId);
     required("active-move").textContent = move?.key.replaceAll("_", " ") ?? "Ready";
     required("active-tags").textContent = move?.tags.join(" · ") ?? `Choose any 16 of ${playerCharacter.moves.length} moves`;
@@ -238,6 +288,9 @@ export function startLab(mount: HTMLElement): () => void {
         processReports(reports);
         tutorial.observe(lastPlayerInput, sim.getState(), reports);
         if (tutorial.consumeResetRequest()) resetMatch();
+      }
+      if (campaign && sim.getState().fighters[0].health === 0 && (lastPlayerInput & InputBit.Interact) !== 0) {
+        resetMatch();
       }
     }
     render(now);
@@ -278,6 +331,13 @@ export function startLab(mount: HTMLElement): () => void {
     }
     if (action === "demo-next") codexDemonstration.step(1);
     if (action === "craft-selected") craftSelectedArmor();
+    if (action === "craft-equip") craftSelectedArmor(true);
+    if (action === "campaign-preview") openCampaignDestination("moves");
+    if (action === "campaign-assign") {
+      assignMove(12, MoveId.GraveToll);
+      openCampaignDestination("loadout");
+    }
+    if (action === "campaign-forge") openCampaignDestination("craft");
     if (action === "reset-preferences" && confirmDestructive("Reset every setting to its default?")) replacePreferences(resetPreferences());
     if (action === "start-tutorial") startTutorial();
     if (action === "skip-tutorial") skipFirstLaunch();
@@ -304,6 +364,7 @@ export function startLab(mount: HTMLElement): () => void {
     if (button.dataset.armorItem) equipArmor(button.dataset.armorItem);
     if (button.dataset.materialItem) renderMaterialDetail(button.dataset.materialItem);
     if (button.dataset.craftItem) selectCraftArmor(button.dataset.craftItem);
+    if (button.dataset.craftFilter) setCraftFilter(button.dataset.craftFilter);
     if (button.dataset.contactFrame !== undefined && button.dataset.contactIndex !== undefined) {
       inspectInteraction(Number(button.dataset.contactFrame), Number(button.dataset.contactIndex));
     }
@@ -589,6 +650,7 @@ export function startLab(mount: HTMLElement): () => void {
 
   function assignMove(slot: number, moveId: number): void {
     if (slot < 0 || slot >= activeBuild.loadout.length || !validMoveIds.has(moveId)) return;
+    if (campaign && moveId !== 0 && !campaign.unlockedMoveIds.includes(moveId)) return;
     armedSlot = slot;
     if (activeBuild.loadout[slot] === moveId) {
       const existing = playerCharacter.moves.find((candidate) => candidate.id === moveId);
@@ -663,25 +725,51 @@ export function startLab(mount: HTMLElement): () => void {
     if (!item) return;
     selectedCraftArmorId = item.id;
     for (const button of mount.querySelectorAll<HTMLElement>("[data-craft-item]")) button.classList.toggle("selected", button.dataset.craftItem === item.id);
-    required("craft-detail").innerHTML = craftDetailMarkup(item, buildState.inventory);
+    required("craft-detail").innerHTML = craftDetailMarkup(
+      item,
+      buildState.inventory,
+      armorById(activeBuild.equipment[item.slot]),
+      activeBuild.equipment,
+      campaign?.unlockedRecipeIds.includes(item.id) ?? true,
+    );
   }
 
-  function craftSelectedArmor(): void {
+  function craftSelectedArmor(equip = false): void {
     const item = armorById(selectedCraftArmorId);
     if (!item || !canCraftArmor(item, buildState.inventory)) return;
+    if (campaign && !campaign.unlockedRecipeIds.includes(item.id)) return;
     if (preferences.controls.holdToConfirm && !confirmDestructive(`Craft ${item.name} and spend its listed materials?`)) return;
     for (const cost of item.recipe) buildState.inventory.materials[cost.materialId] -= cost.quantity;
     buildState.inventory.armor.push(item.id);
-    persistBuildState(buildState);
+    if (equip) {
+      activeBuild.equipment[item.slot] = item.id;
+      markBuildChanged();
+    }
+    persistProgress();
     if (!mount.querySelector(`[data-armor-item='${item.id}']`)) required("armor-inventory-grid").insertAdjacentHTML("beforeend", armorInventoryButton(item));
     syncInventoryUi();
+    if (equip) rebuildActiveBuild();
     selectCraftArmor(item.id);
+  }
+
+  function setCraftFilter(filter: string): void {
+    craftFilter = filter;
+    for (const button of mount.querySelectorAll<HTMLButtonElement>("[data-craft-filter]")) {
+      button.classList.toggle("active", button.dataset.craftFilter === filter);
+    }
+    for (const recipe of mount.querySelectorAll<HTMLButtonElement>("[data-craft-item]")) {
+      recipe.hidden = filter !== "all" &&
+        !(filter === "new" && recipe.dataset.craftNew === "true") &&
+        !(filter === "craftable" && recipe.dataset.craftReady === "true") &&
+        recipe.dataset.craftSlot !== filter &&
+        recipe.dataset.craftGrade !== filter;
+    }
   }
 
   function rebuildActiveBuild(): void {
     const fresh = testFighterWithBuild(activeBuild.loadout, activeBuild.equipment);
     Object.assign(playerCharacter, fresh);
-    persistBuildState(buildState);
+    persistProgress();
     syncBuildUi();
     if (showcasedMoveId > 0) showMovePreview(showcasedMoveId, true);
     pendingMatchReset = true;
@@ -766,7 +854,7 @@ export function startLab(mount: HTMLElement): () => void {
     }
     activeBuild.name = name;
     markBuildChanged();
-    persistBuildState(buildState);
+    persistProgress();
     syncBuildUi();
   }
 
@@ -849,6 +937,81 @@ export function startLab(mount: HTMLElement): () => void {
     return window.confirm(message);
   }
 
+  function persistProgress(): void {
+    if (campaign) {
+      campaign.builds = buildState;
+      campaign.inventory = buildState.inventory;
+      persistCampaignState(campaign);
+    } else {
+      persistBuildState(buildState);
+    }
+  }
+
+  function campaignMaterialId(code: number): string | null {
+    if (code === CampaignMaterial.IronScrap) return "iron-scrap";
+    if (code === CampaignMaterial.GraveThread) return "grave-thread";
+    if (code === CampaignMaterial.Stormglass) return "stormglass";
+    if (code === CampaignMaterial.WardenCore) return "warden-core";
+    return null;
+  }
+
+  function grantBellWardenReward(): void {
+    if (!campaign || campaign.completedBosses.includes("bell-warden")) return;
+    campaign.completedBosses.push("bell-warden");
+    if (!campaign.unlockedMoveIds.includes(MoveId.GraveToll)) campaign.unlockedMoveIds.push(MoveId.GraveToll);
+    if (!campaign.unlockedRecipeIds.includes("warden-arms")) campaign.unlockedRecipeIds.push("warden-arms");
+    buildState.inventory.materials["warden-core"] = (buildState.inventory.materials["warden-core"] ?? 0) + 1;
+    buildState.inventory.materials.stormglass = (buildState.inventory.materials.stormglass ?? 0) + 4;
+    buildState.inventory.materials["iron-scrap"] = (buildState.inventory.materials["iron-scrap"] ?? 0) + 6;
+    persistProgress();
+    syncInventoryUi();
+    const graveToll = mount.querySelector<HTMLButtonElement>(`[data-equip-move='${MoveId.GraveToll}']`);
+    if (graveToll) {
+      graveToll.disabled = false;
+      graveToll.classList.remove("locked");
+      graveToll.querySelector("em")!.textContent = "mid";
+      const equipped = graveToll.querySelector<HTMLElement>("[data-equipped-move]");
+      if (equipped) equipped.textContent = "NOT EQUIPPED";
+    }
+    const reward = required("campaign-reward");
+    reward.hidden = false;
+    timeline.paused = true;
+    reward.querySelector<HTMLButtonElement>("[data-action='campaign-preview']")?.focus();
+  }
+
+  function openCampaignDestination(tab: MenuTab): void {
+    const reward = mount.querySelector<HTMLElement>("#campaign-reward");
+    if (reward) reward.hidden = true;
+    timeline.paused = false;
+    openMenu();
+    showTab(tab);
+    if (tab === "moves") showMovePreview(MoveId.GraveToll, true);
+    if (tab === "craft") selectCraftArmor("warden-arms");
+  }
+
+  function syncCampaignHud(state: ReturnType<Simulation["getState"]>): void {
+    const objective = mount.querySelector<HTMLElement>("#campaign-objective");
+    const loot = mount.querySelector<HTMLElement>("#campaign-loot");
+    if (!objective || !loot || !campaign) return;
+    const playerX = state.fighters[0]?.x ?? BLACK_BELFRY.spawnX;
+    objective.textContent = state.fighters[0].health === 0
+      ? "Fallen · press E / RB to return to the checkpoint"
+      : campaign.completedBosses.includes("bell-warden")
+      ? "Refine your new build at the Forge"
+      : state.fighters[1].health === 0
+        ? "Claim the Warden's resonant reward"
+        : state.stage.bossActive === 1
+          ? (state.fighters[1].health * 100 <= dummyCharacter.health * 58 ? "Phase II · chains unbound" : "Read · defend · punish")
+          : playerX < px(-1080)
+            ? "Reach the Arsenal Shrine"
+            : playerX < px(-300)
+              ? "Traverse the Black Belfry"
+              : playerX < px(390)
+                ? "Find the checkpoint and Forge"
+                : "Open the boss gate · E / RB";
+    loot.textContent = `Iron Scrap ${buildState.inventory.materials["iron-scrap"] ?? 0} · Stormglass ${buildState.inventory.materials.stormglass ?? 0} · Warden Core ${buildState.inventory.materials["warden-core"] ?? 0}`;
+  }
+
   function setMoveFilter(kind: string, value: string): void {
     if (kind === "role") moveRoleFilter = value;
     if (kind === "family") moveFamilyFilter = value;
@@ -908,8 +1071,13 @@ export function startLab(mount: HTMLElement): () => void {
     }
     for (const button of [...mount.querySelectorAll<HTMLButtonElement>("[data-craft-item]")]) {
       const item = armorById(button.dataset.craftItem ?? "");
-      if (item) button.outerHTML = craftRecipeButton(item, buildState.inventory);
+      if (item) button.outerHTML = craftRecipeButton(
+        item,
+        buildState.inventory,
+        campaign?.unlockedRecipeIds.includes(item.id) ?? true,
+      );
     }
+    setCraftFilter(craftFilter);
   }
 
   function renderArmorDetail(itemId: string): void {
@@ -1186,6 +1354,10 @@ export function startLab(mount: HTMLElement): () => void {
   function finishTutorial(): void {
     if (menuOpen()) closeMenu();
     tutorial.stop();
+    if (campaign) {
+      campaign.tutorialComplete = true;
+      persistCampaignState(campaign);
+    }
     tutorialBuildInstalled = false;
     activeBuild = buildState.presets[buildState.activePreset];
     Object.assign(playerCharacter, testFighterWithBuild(activeBuild.loadout, activeBuild.equipment));
@@ -1213,6 +1385,11 @@ export function startLab(mount: HTMLElement): () => void {
     if (firstLaunch) firstLaunch.hidden = true;
     setFirstLaunchInert(false);
     timeline.paused = false;
+    if (campaign) {
+      campaign.tutorialComplete = true;
+      persistCampaignState(campaign);
+      return;
+    }
     openMenu();
     showTab("training");
     mount.querySelector<HTMLButtonElement>("[data-menu-tab='training']")?.focus();
@@ -1251,6 +1428,30 @@ export function startLab(mount: HTMLElement): () => void {
   function resetMatch(): void {
     timeline.reset();
     dummy.reset();
+    boss.reset();
+    if (publicPlay && campaign && !tutorial.active && campaign.checkpoint !== 0) {
+      const state = sim.getState();
+      const checkpoint = BLACK_BELFRY.interactables.find((entity) => entity.id === campaign.checkpoint);
+      if (checkpoint) state.fighters[0].x = checkpoint.x;
+    }
+    if (publicPlay && tutorial.active) {
+      const state = sim.getState();
+      const lesson = tutorial.snapshot().lessonId;
+      if (lesson === "interaction") {
+        state.fighters[0].x = BLACK_BELFRY.spawnX;
+        state.fighters[1].x = px(1130);
+        state.stage.arenaLocked = 0;
+        state.stage.bossActive = 0;
+        state.stage.bossActivatedFrame = 0;
+      } else {
+        state.fighters[0].x = px(820);
+        state.fighters[1].x = px(1080);
+        state.stage.arenaLocked = 1;
+        state.stage.bossActive = 0;
+        state.stage.bossActivatedFrame = 0;
+      }
+    }
+    lastPlayerInput = 0;
     lastReport = null;
     selectedInteraction = null;
     interactionRenderKey = "";
@@ -1270,7 +1471,52 @@ export function startLab(mount: HTMLElement): () => void {
       for (const contact of report.contacts) {
         gameAudio.play(contact.kind === ContactKind.Hit ? "hit" : "block");
         if (contact.kind === ContactKind.Hit) gamepad.rumble(preferences.controls.vibration, 95);
-        announcements.push(contact.kind === ContactKind.Hit ? `Player ${contact.attacker + 1} hits for ${contact.damage}.` : `Player ${contact.defender + 1} blocks.`);
+        else {
+          gamepad.rumble(preferences.controls.vibration * (contact.perfectGuard ? 0.55 : 0.28), contact.perfectGuard ? 75 : 48);
+          const meter = required(`stamina-p${contact.defender + 1}`).parentElement;
+          if (meter) {
+            meter.classList.remove("guard-spend");
+            void meter.offsetWidth;
+            meter.classList.add("guard-spend");
+          }
+        }
+        announcements.push(contact.kind === ContactKind.Hit
+          ? `Player ${contact.attacker + 1} hits for ${contact.damage}.`
+          : contact.guardBreak
+            ? `Player ${contact.defender + 1} guard broken.`
+            : contact.perfectGuard
+              ? `Player ${contact.defender + 1} perfect guards.`
+              : `Player ${contact.defender + 1} blocks and spends ${contact.guardStaminaDamage} stamina.`);
+      }
+      for (const event of report.entityEvents) {
+        if (!campaign) continue;
+        if (event.kind === EntityEventKind.PickedUp && event.entityKind === EntityKind.MaterialPickup) {
+          const materialId = campaignMaterialId(event.owner);
+          if (materialId) buildState.inventory.materials[materialId] = (buildState.inventory.materials[materialId] ?? 0) + event.value;
+          persistProgress();
+          syncInventoryUi();
+        }
+        if (event.kind === EntityEventKind.Interacted && event.owner === InteractableKind.Checkpoint) {
+          campaign.checkpoint = event.entityId;
+          persistProgress();
+        }
+        if (event.kind === EntityEventKind.Interacted && event.owner === InteractableKind.Chest) {
+          buildState.inventory.materials.stormglass = (buildState.inventory.materials.stormglass ?? 0) + 2;
+          buildState.inventory.materials["iron-scrap"] = (buildState.inventory.materials["iron-scrap"] ?? 0) + 2;
+          persistProgress();
+          syncInventoryUi();
+        }
+        if (event.kind === EntityEventKind.Interacted && event.owner === InteractableKind.BossReward) {
+          grantBellWardenReward();
+        }
+        if (!tutorial.active && event.kind === EntityEventKind.Interacted && event.owner === InteractableKind.ArsenalShrine) {
+          openMenu();
+          showTab("loadout");
+        }
+        if (!tutorial.active && event.kind === EntityEventKind.Interacted && event.owner === InteractableKind.Forge) {
+          openMenu();
+          showTab("craft");
+        }
       }
       for (const event of report.debuffs) {
         if (event.kind === DebuffEventKind.Applied || event.kind === DebuffEventKind.Triggered) gameAudio.play(cueForDebuff(event.debuff));

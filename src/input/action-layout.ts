@@ -2,7 +2,7 @@ import { ACTION_SLOT_COUNT } from "../combat/types";
 
 const KEYBOARD_KEYS = ["↑", "←", "→", "↓"] as const;
 const GAMEPAD_KEYS = ["Y", "X", "B", "A"] as const;
-const KEYBOARD_MODIFIERS = ["", "Shift+", "E+", "Shift+E+"] as const;
+const KEYBOARD_MODIFIERS = ["", "Shift+", "Ctrl/⌘+", "Shift+Ctrl/⌘+"] as const;
 const GAMEPAD_MODIFIERS = ["", "LT+", "RT+", "LT+RT+"] as const;
 
 export interface ActionSlotLabel {

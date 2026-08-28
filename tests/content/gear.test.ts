@@ -13,10 +13,10 @@ import {
 describe("armor builds", () => {
   it("ships a complete five-piece set at every color grade", () => {
     for (const slot of ARMOR_SLOTS) {
-      expect(ARMOR_CATALOG.filter((item) => item.slot === slot)).toHaveLength(5);
+      expect(ARMOR_CATALOG.filter((item) => item.id !== "warden-arms" && item.slot === slot)).toHaveLength(5);
     }
-    for (const grade of ARMOR_GRADES) expect(ARMOR_CATALOG.filter((item) => item.grade === grade)).toHaveLength(5);
-    expect(new Set(ARMOR_CATALOG.map((item) => item.description)).size).toBe(25);
+    for (const grade of ARMOR_GRADES) expect(ARMOR_CATALOG.filter((item) => item.id !== "warden-arms" && item.grade === grade)).toHaveLength(5);
+    expect(new Set(ARMOR_CATALOG.map((item) => item.description)).size).toBe(26);
     expect(new Set(ARMOR_CATALOG.map((item) => item.setDescription)).size).toBe(5);
   });
 

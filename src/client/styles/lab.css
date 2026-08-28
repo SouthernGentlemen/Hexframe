@@ -148,6 +148,8 @@ kbd { padding: 4px 6px; border: 1px solid #46515b; border-bottom-width: 2px; bor
 .health-track i { display: block; width: 100%; height: 100%; background: var(--acid); transition: width 100ms linear; }
 .stamina-track { height: 3px; overflow: hidden; background: rgba(255,255,255,.1); transform: skewX(-12deg); }
 .stamina-track i { display: block; width: 100%; height: 100%; background: #57b9df; transition: width 100ms linear; }
+@keyframes guard-spend { 35% { background: #eef5fa; box-shadow: 0 0 9px #b7d4e5; } }
+.stamina-track.guard-spend i { animation: guard-spend 180ms ease-out; }
 .hud-player-right .health-track { transform: skewX(12deg); }
 .hud-player-right .health-track i { margin-left: auto; background: #8999ff; }
 .hud-player-right .stamina-track { transform: skewX(12deg); }.hud-player-right .stamina-track i { margin-left: auto; }
@@ -159,6 +161,8 @@ kbd { padding: 4px 6px; border: 1px solid #46515b; border-bottom-width: 2px; bor
 .current-route em { grid-column: 2; color: #89929b; font: normal 9px ui-monospace, monospace; }
 .status-lane { position: absolute; z-index: 3; top: 48px; display: flex; flex-wrap: wrap; gap: 5px; max-width: 42%; opacity: var(--hud-opacity); pointer-events: none; }
 .status-lane-you { left: 22px; }.status-lane-dummy { right: 22px; justify-content: flex-end; }
+.campaign-hud { position: absolute; z-index: 4; top: 76px; left: 50%; display: grid; min-width: 250px; padding: 9px 13px; border-top: 1px solid #8d774a; background: rgba(7,8,12,.8); text-align: center; transform: translateX(-50%); pointer-events: none; }
+.campaign-hud small { color: #a98d56; font: 700 7px ui-monospace, monospace; letter-spacing: .18em; }.campaign-hud strong { margin-top: 3px; color: #f0e9db; font: 800 10px ui-monospace, monospace; text-transform: uppercase; }.campaign-hud span { margin-top: 3px; color: #9ba3aa; font: 7px ui-monospace, monospace; }
 .debuff-chip { display: inline-grid; grid-template-columns: 19px auto auto; align-items: center; gap: 5px; min-height: 27px; padding: 3px 7px 3px 3px; border: 1px solid currentColor; background: rgba(7,9,12,.88); color: #fff; font: 8px ui-monospace, monospace; text-transform: uppercase; }
 .debuff-chip i { display: grid; place-items: center; width: 19px; height: 19px; background: currentColor; color: #0b0e11; font-style: normal; font-weight: 900; }
 .debuff-chip em { font-style: normal; font-weight: 900; }.debuff-chip small { grid-column: 2 / -1; color: #d5d9dc; text-align: right; }
@@ -310,9 +314,12 @@ kbd { padding: 4px 6px; border: 1px solid #46515b; border-bottom-width: 2px; bor
 
 .craft-owned { color: #929ba4; font: 8px ui-monospace, monospace; letter-spacing: .12em; }.craft-owned b { color: var(--gold); }
 .craft-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(270px, 330px); gap: 1px; min-width: 0; background: var(--line); }.recipe-sheet { min-width: 0; padding: 18px; background: #0c1115; }.recipe-grid { display: grid; grid-template-columns: repeat(3, minmax(175px, 1fr)); gap: 6px; margin-top: 12px; }
+.recipe-filters { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }.recipe-filters button { min-height: 30px; padding: 5px 9px; font: 8px ui-monospace, monospace; }.recipe-filters button.active { border-color: var(--gold); color: var(--gold); }
+.recipe-item.locked, .move-card.locked { opacity: .48; filter: grayscale(.7); }
 .recipe-item { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 8px; min-width: 0; min-height: 58px; padding: 7px; background: #10161b; text-align: left; }.recipe-item .gear-icon { width: 40px; height: 40px; }.recipe-item strong, .recipe-item small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.recipe-item strong { color: #e1e5e8; font-size: 8px; }.recipe-item small { margin-top: 3px; color: #818b94; font: 7px ui-monospace, monospace; }.recipe-item > em { color: var(--grade); font: normal 7px ui-monospace, monospace; }.recipe-item.owned { opacity: .54; }.recipe-item.craftable { box-shadow: inset 3px 0 0 var(--acid); }.recipe-item.selected { border-color: var(--focus); background: #1b2025; }
 .craft-detail { min-width: 0; padding: 20px; background: radial-gradient(circle at 50% 5%, rgba(229,189,109,.14), transparent 20rem), #0b0f13; }.craft-preview { text-align: center; }.craft-preview .gear-icon { width: 78px; height: 78px; margin: 0 auto 10px; font-size: 23px; }.craft-preview small { display: block; color: var(--grade, var(--gold)); font: 8px ui-monospace, monospace; text-transform: uppercase; }.craft-preview h3 { margin: 5px 0; color: #f3eee4; font: 600 20px Georgia, serif; }.craft-preview > strong { color: #d7dce0; font: 9px ui-monospace, monospace; }
 .craft-skill-list, .recipe-costs { margin-top: 18px; }.craft-skill-list h4, .recipe-costs h4 { margin: 0 0 7px; color: #8e98a1; font: 8px ui-monospace, monospace; text-transform: uppercase; }.craft-skill-list > div, .recipe-costs > div { display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; border-top: 1px solid #30373e; color: #cbd1d5; font-size: 9px; }.craft-skill-list b, .recipe-costs b { color: var(--gold); font: 8px ui-monospace, monospace; }.recipe-costs .met b { color: var(--acid); }.recipe-costs .missing b { color: #ff8b8b; }.craft-button { width: 100%; margin-top: 18px; }
+.craft-compare { margin: 12px 0; }.craft-compare div { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid #30353b; }.craft-compare dd { margin: 0; }.craft-compare b, .craft-compare .activated dd { color: var(--acid); }.recipe-costs small { display: block; margin-top: 2px; color: #737e87; font: 7px ui-monospace, monospace; }.craft-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 12px; }.craft-actions .craft-button { margin-top: 0; }
 .move-workbench { display: grid; grid-template-columns: minmax(290px, 360px) minmax(0, 1fr); gap: 1px; min-width: 0; border-top: 1px solid var(--line); background: var(--line); }
 .move-showcase, .move-library-panel { min-width: 0; background: #0c1115; }
 .move-showcase { position: sticky; top: 0; align-self: start; padding: 17px; background: radial-gradient(circle at 50% 20%, rgba(109,87,201,.18), transparent 19rem), #0c1115; }
@@ -426,6 +433,22 @@ kbd { padding: 4px 6px; border: 1px solid #46515b; border-bottom-width: 2px; bor
 
 .fighter-p1 { --fighter-body: #a8cf46; --fighter-near: #c4ed64; --fighter-near-dark: #8dac34; --fighter-far: #61792d; --fighter-far-dark: #465820; --fighter-accent: #efffc7; }
 .fighter-p2 { --fighter-body: #687bdf; --fighter-near: #8fa0ff; --fighter-near-dark: #5568c9; --fighter-far: #3d487f; --fighter-far-dark: #303961; --fighter-accent: #dce2ff; }
+.stage-entity rect { vector-effect: non-scaling-stroke; fill: #47413a; stroke: #88765c; stroke-width: 1.5; }
+.stage-entity text { fill: #e9d7a8; stroke: #090a0d; stroke-width: 3px; paint-order: stroke; font: 700 8px ui-monospace, monospace; letter-spacing: .08em; }
+.entity-kind-0 rect { fill: #5a4e3f; stroke: #bd945c; }
+.entity-kind-1 rect { fill: #b44d5c; stroke: #ff8d9d; }
+.entity-kind-2 rect { fill: #397b98; stroke: #83d8f5; }
+.entity-kind-3 rect { fill: #b78c38; stroke: #ffe28b; }
+.entity-kind-4 rect { fill: #242733; stroke: #a99667; }
+.entity-kind-5 rect, .entity-kind-6 rect { fill: #741f2b; stroke: #ff5e70; }
+.entity-warning rect { fill: rgba(239,83,101,.12); stroke-dasharray: 5 4; animation: warning-pulse 600ms ease-in-out infinite alternate; }
+@keyframes warning-pulse { to { fill: rgba(239,83,101,.34); stroke: #fff0d1; } }
+.entity-used { opacity: .62; }
+.boss-telegraph { pointer-events: none; opacity: calc(.35 + var(--telegraph-progress) * .55); }
+.boss-telegraph rect { fill: rgba(190,53,69,.2); stroke: #ef6979; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.boss-telegraph line { stroke: #ef6979; stroke-width: 3; stroke-dasharray: 10 7; vector-effect: non-scaling-stroke; }
+.pattern-diagonal rect { fill: rgba(190, 53, 69, .16); stroke-dasharray: 9 5; }
+.pattern-rings rect { rx: 12px; stroke-dasharray: 4 5; }
 .fighter-hitstop { filter: brightness(1.65) saturate(.4); }
 :root[data-flashes="reduced"] .fighter-hitstop { filter: brightness(1.2) saturate(.8); }
 :root[data-flashes="off"] .fighter-hitstop { filter: none; }
@@ -437,6 +460,10 @@ kbd { padding: 4px 6px; border: 1px solid #46515b; border-bottom-width: 2px; bor
 .debug-velocity { stroke: #ff8b32; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .contact-ring { fill: rgba(255,255,255,.22); stroke: #fff7a2; stroke-width: 2; }
 .contact-ray { stroke: #fff7a2; stroke-width: 2; }
+.block-burst .contact-ring { fill: rgba(122,142,156,.2); stroke-dasharray: 3 2; }
+.block-burst .contact-ray { stroke-linecap: square; stroke-width: 3; }
+.perfect-guard-burst { filter: drop-shadow(0 0 8px #f5cf68); }
+.guard-break-burst .contact-ring { fill: rgba(255,83,100,.28); stroke: #ff6676; stroke-width: 4; }
 .move-particles { pointer-events: none; filter: drop-shadow(0 0 5px currentColor); }
 .move-particle { vector-effect: non-scaling-stroke; }
 .particle-orb { opacity: .8; }.particle-streak { opacity: .9; stroke-linecap: round; }.particle-shard { opacity: .82; }.particle-rune { opacity: .92; }
@@ -582,6 +609,8 @@ kbd { padding: 4px 6px; border: 1px solid #46515b; border-bottom-width: 2px; bor
 
 .first-launch { position: fixed; z-index: 50; inset: 0; display: grid; place-items: center; padding: 20px; background: radial-gradient(circle, rgba(42,37,62,.94), rgba(3,5,7,.97) 62%); }
 .first-launch > div { display: grid; gap: 10px; width: min(440px, 100%); padding: 34px; border: 1px solid var(--acid); background: #0b1014; box-shadow: 0 32px 120px #000; text-align: center; }
+.campaign-reward { position: fixed; z-index: 45; inset: 0; display: grid; place-items: center; background: rgba(3,4,7,.86); backdrop-filter: blur(12px); }
+.campaign-reward > div { width: min(560px, calc(100% - 32px)); padding: 34px; border: 1px solid #c89b4c; background: radial-gradient(circle at 50% 0, rgba(208,157,66,.2), transparent 55%), #0d1015; box-shadow: 0 34px 120px #000; text-align: center; }.campaign-reward h2 { margin: 4px 0 18px; font-size: 28px; }.campaign-reward > div > strong { display: block; color: #f1cf78; font-size: 24px; letter-spacing: .12em; }.campaign-reward > div > div { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 22px; }
 .first-launch h2 { margin: 0; color: #f5f0e6; font: 600 34px Georgia, serif; text-transform: uppercase; }
 .first-launch > div > p:first-child, .first-launch span { margin: 0; color: var(--acid); font: 800 9px ui-monospace, monospace; letter-spacing: .14em; }
 .first-launch > div > p:not(:first-child) { color: #b1bbc2; font-size: 12px; }

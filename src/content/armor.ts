@@ -53,6 +53,7 @@ export interface MaterialDef {
   name: string;
   icon: string;
   description: string;
+  source?: string;
 }
 
 export interface MaterialCost {
@@ -176,14 +177,15 @@ export const ARMOR_SKILLS: readonly ArmorSkillDef[] = [
 ];
 
 export const MATERIAL_CATALOG: readonly MaterialDef[] = [
-  { id: "iron-scrap", name: "Iron Scrap", icon: "Fe", description: "Serviceable metal reclaimed from ruined armories." },
-  { id: "grave-thread", name: "Grave Thread", icon: "Gt", description: "Cold thread spun from burial cloth and shadow." },
+  { id: "iron-scrap", name: "Iron Scrap", icon: "Fe", description: "Serviceable metal reclaimed from ruined armories.", source: "Black Belfry breakables" },
+  { id: "grave-thread", name: "Grave Thread", icon: "Gt", description: "Cold thread spun from burial cloth and shadow.", source: "Black Belfry breakables" },
   { id: "briar-hide", name: "Briar Hide", icon: "Bh", description: "Thorn-tough hide cut from overgrown beasts." },
   { id: "venom-gland", name: "Venom Gland", icon: "Vg", description: "An intact gland used in poison-resistant weave." },
-  { id: "stormglass", name: "Stormglass", icon: "Sg", description: "Charged crystal formed where lightning strikes sand." },
+  { id: "stormglass", name: "Stormglass", icon: "Sg", description: "Charged crystal formed where lightning strikes sand.", source: "Bell Warden · Black Belfry" },
   { id: "frost-core", name: "Frost Core", icon: "Fc", description: "A core that stays frozen far from its original host." },
   { id: "umbral-cloth", name: "Umbral Cloth", icon: "Uc", description: "Dense cloth that seems to swallow nearby light." },
   { id: "cinder-heart", name: "Cinder Heart", icon: "Ch", description: "A furnace-hot heart from an elder fire beast." },
+  { id: "warden-core", name: "Warden Core", icon: "Wc", description: "The resonant heart of the Bell Warden, still tolling under the metal.", source: "Bell Warden · Black Belfry" },
 ];
 
 const SETS: ReadonlyArray<{
@@ -304,8 +306,8 @@ const ITEM_DESCRIPTIONS: Readonly<Record<string, Readonly<Record<ArmorSlot, stri
   },
 };
 
-export const ARMOR_CATALOG: readonly ArmorDef[] = SETS.flatMap((set) =>
-  ARMOR_SLOTS.map((slot, index): ArmorDef => ({
+export const ARMOR_CATALOG: readonly ArmorDef[] = [
+  ...SETS.flatMap((set) => ARMOR_SLOTS.map((slot, index): ArmorDef => ({
     id: `${set.id}-${slot}`,
     name: `${set.name} ${SLOT_NAMES[slot]}`,
     setName: set.name,
@@ -320,8 +322,21 @@ export const ARMOR_CATALOG: readonly ArmorDef[] = SETS.flatMap((set) =>
       { materialId: set.material, quantity: 2 + index },
       { materialId: set.secondary, quantity: 1 + Math.trunc(index / 2) },
     ],
-  })),
-);
+  }))),
+  {
+    id: "warden-arms",
+    name: "Warden's Vambraces",
+    setName: "Stormglass",
+    slot: "arms",
+    grade: "blue",
+    icon: "W",
+    description: "Bell-metal vambraces threaded with stormglass conductors and a captive cathedral resonance.",
+    setDescription: ARMOR_SET_DESCRIPTIONS.Stormglass,
+    armor: 27,
+    skills: [{ id: "stamina-up", points: 2 }, { id: "static-conductor", points: 1 }],
+    recipe: [{ materialId: "stormglass", quantity: 4 }, { materialId: "warden-core", quantity: 1 }],
+  },
+];
 
 export const DEFAULT_EQUIPMENT: Record<ArmorSlot, string> = equipmentForSet("gravecloth");
 
@@ -336,6 +351,7 @@ export const DEFAULT_ARMOR_INVENTORY: ArmorInventory = {
     "frost-core": 9,
     "umbral-cloth": 8,
     "cinder-heart": 5,
+    "warden-core": 1,
   },
 };
 

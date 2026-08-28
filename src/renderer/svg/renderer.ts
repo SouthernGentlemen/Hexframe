@@ -1,5 +1,5 @@
-import type { CharacterDef, FrameReport, SimState } from "../../combat/types";
-import { StateId } from "../../combat/types";
+import type { CharacterDef, EntityState, FrameReport, SimState, StageDef } from "../../combat/types";
+import { ContactKind, EntityKind, InteractableKind, StateId } from "../../combat/types";
 import { debugBoxes } from "../../combat/collision/boxes";
 import type { RawAnimation, RawRig } from "../../content/raw-types";
 import type { AnimationPlayback } from "../animation/animator";
@@ -16,10 +16,12 @@ export interface FighterRendererAssets {
   rig: RawRig;
   animations: Record<string, RawAnimation>;
   playback?: Readonly<Record<string, AnimationPlayback>>;
+  presentationScale?: number;
 }
 
 export interface RendererAssets {
   fighters: readonly FighterRendererAssets[];
+  stage?: StageDef;
 }
 
 export class Renderer {
@@ -31,7 +33,7 @@ export class Renderer {
   constructor(mount: HTMLElement, chars: readonly CharacterDef[], assets: RendererAssets) {
     this.chars = chars;
     this.assets = assets.fighters;
-    this.stage = createStage(mount);
+    this.stage = createStage(mount, assets.stage);
 
     for (let player = 0; player < chars.length; player++) {
       const asset = this.assets[player];
@@ -44,6 +46,7 @@ export class Renderer {
   }
 
   render(state: SimState, report: FrameReport | null, toggles: DebugToggles): void {
+    this.stage.setCamera(state.fighters[0]?.x ?? 0, state);
     for (let player = 0; player < state.fighters.length; player++) {
       const fighter = state.fighters[player];
       const node = this.nodes[player];
@@ -61,13 +64,15 @@ export class Renderer {
         applyPose(node, sampleAnimation(clip, frame));
       }
       const position = worldToScreen(fighter.x, fighter.y);
+      const scale = asset.presentationScale ?? 1;
       node.root.setAttribute(
         "transform",
-        `translate(${fmt(position.x)} ${fmt(position.y)}) scale(${fighter.facing} 1)`,
+        `translate(${fmt(position.x)} ${fmt(position.y)}) scale(${fmt(fighter.facing * scale)} ${fmt(scale)})`,
       );
       node.root.classList.toggle("fighter-hitstop", fighter.hitstop > 0);
     }
 
+    this.drawEntities(state);
     this.drawEffects(state, report);
     this.stage.svg.classList.toggle("stage-impact", (report?.contacts.length ?? 0) > 0);
     drawDebug(this.stage.layers.debug, debugBoxes(state, this.chars), state, toggles);
@@ -89,6 +94,7 @@ export class Renderer {
       const move = this.chars[player].moves.find((candidate) => candidate.id === fighter.moveId);
       if (!move) continue;
       const point = worldToScreen(fighter.x, fighter.y);
+      this.drawTelegraph(move, fighter.moveFrame, point.x, point.y, fighter.facing, state);
       drawMoveParticles(this.stage.layers.effects, move, point.x, point.y, fighter.facing, fighter.moveFrame);
     }
     if (!report) return;
@@ -98,11 +104,16 @@ export class Renderer {
       const move = this.chars[contact.attacker].moves.find((candidate) => candidate.id === contact.moveId);
       const profile = move ? styleImpact(burst, move) : null;
       if (!move) burst.setAttribute("class", "contact-burst effect-physical");
+      if (contact.kind === ContactKind.Block) {
+        burst.setAttribute("class", `contact-burst block-burst${contact.perfectGuard ? " perfect-guard-burst" : ""}${contact.guardBreak ? " guard-break-burst" : ""}`);
+      }
       burst.setAttribute("transform", `translate(${fmt(point.x)} ${fmt(point.y)})`);
       const circle = document.createElementNS(SVG_NS, "circle");
       circle.setAttribute("r", fmt(profile ? 7 + profile.radius * 0.15 : 9));
       circle.setAttribute("class", "contact-ring");
-      if (profile) circle.setAttribute("stroke", profile.secondary);
+      if (contact.perfectGuard) circle.setAttribute("stroke", "#fff4bf");
+      else if (contact.kind === ContactKind.Block) circle.setAttribute("stroke", "#92a1ad");
+      else if (profile) circle.setAttribute("stroke", profile.secondary);
       burst.appendChild(circle);
       const rays = profile?.count ?? 4;
       for (let ray = 0; ray < rays; ray++) {
@@ -111,7 +122,9 @@ export class Renderer {
         line.setAttribute("x1", fmt(-length));
         line.setAttribute("x2", fmt(length));
         line.setAttribute("class", "contact-ray");
-        if (profile) line.setAttribute("stroke", ray % 2 === 0 ? profile.primary : profile.secondary);
+        if (contact.perfectGuard) line.setAttribute("stroke", ray % 2 === 0 ? "#ffffff" : "#e8bf5d");
+        else if (contact.kind === ContactKind.Block) line.setAttribute("stroke", ray % 2 === 0 ? "#62717e" : "#c2ccd3");
+        else if (profile) line.setAttribute("stroke", ray % 2 === 0 ? profile.primary : profile.secondary);
         line.setAttribute("transform", `rotate(${fmt((profile?.rotation ?? 0) + ray * (180 / rays))})`);
         burst.appendChild(line);
       }
@@ -125,5 +138,78 @@ export class Renderer {
       }
       this.stage.layers.effects.appendChild(burst);
     }
+  }
+
+  private drawEntities(state: SimState): void {
+    this.stage.layers.entities.replaceChildren();
+    for (const entity of state.entities) {
+      if (entity.life === 0) continue;
+      const point = worldToScreen(entity.x, entity.y);
+      const node = document.createElementNS(SVG_NS, "g");
+      node.setAttribute("class", `stage-entity entity-kind-${entity.kind}${entity.owner < 0 ? " entity-warning" : ""}${entity.hitFlags ? " entity-used" : ""}`);
+      node.setAttribute("transform", `translate(${fmt(point.x)} ${fmt(point.y)})`);
+      const body = document.createElementNS(SVG_NS, "rect");
+      body.setAttribute("x", fmt(-entity.w / 200));
+      body.setAttribute("y", fmt(-entity.h / 100));
+      body.setAttribute("width", fmt(entity.w / 100));
+      body.setAttribute("height", fmt(entity.h / 100));
+      body.setAttribute("rx", entity.kind === EntityKind.MaterialPickup ? "8" : "2");
+      node.appendChild(body);
+      if (entity.kind === EntityKind.Interactable) {
+        const label = document.createElementNS(SVG_NS, "text");
+        label.setAttribute("text-anchor", "middle");
+        label.setAttribute("y", fmt(-entity.h / 100 - 10));
+        label.textContent = entity.owner === InteractableKind.BossGate
+          ? (state.stage.arenaLocked ? "SEALED" : "E / RB · ENTER")
+          : entity.owner === InteractableKind.Forge
+            ? "E / RB · FORGE"
+            : entity.owner === InteractableKind.ArsenalShrine
+              ? "E / RB · ARSENAL"
+              : entity.owner === InteractableKind.BossReward
+                ? "E / RB · CLAIM"
+                : "E / RB";
+        node.appendChild(label);
+      }
+      this.stage.layers.entities.appendChild(node);
+    }
+  }
+
+  private drawTelegraph(
+    move: CharacterDef["moves"][number],
+    frame: number,
+    x: number,
+    y: number,
+    facing: number,
+    state: SimState,
+  ): void {
+    const telegraph = move.telegraph;
+    if (!telegraph || frame < telegraph.startFrame || frame > telegraph.endFrame) return;
+    const warning = document.createElementNS(SVG_NS, "g");
+    warning.setAttribute("class", `boss-telegraph telegraph-${telegraph.shape} pattern-${telegraph.pattern}`);
+    const progress = (frame - telegraph.startFrame + 1) / Math.max(1, telegraph.endFrame - telegraph.startFrame + 1);
+    warning.style.setProperty("--telegraph-progress", String(progress));
+    if (telegraph.shape === "vertical-sigil") {
+      const mark = document.createElementNS(SVG_NS, "rect");
+      mark.setAttribute("x", fmt(x + facing * 18 - 42));
+      mark.setAttribute("y", "-245");
+      mark.setAttribute("width", "84");
+      mark.setAttribute("height", "245");
+      warning.appendChild(mark);
+    } else if (telegraph.shape === "tracking-line") {
+      const line = document.createElementNS(SVG_NS, "line");
+      line.setAttribute("x1", fmt(x));
+      line.setAttribute("y1", fmt(y - 72));
+      line.setAttribute("x2", fmt((state.fighters[0]?.x ?? 0) / 100));
+      line.setAttribute("y2", "-42");
+      warning.appendChild(line);
+    } else {
+      const band = document.createElementNS(SVG_NS, "rect");
+      band.setAttribute("x", fmt(x + (facing < 0 ? -370 : -20)));
+      band.setAttribute("y", telegraph.shape === "floor-pulse" ? "-22" : "-34");
+      band.setAttribute("width", telegraph.shape === "floor-pulse" ? "390" : "350");
+      band.setAttribute("height", telegraph.shape === "floor-pulse" ? "22" : "34");
+      warning.appendChild(band);
+    }
+    this.stage.layers.effects.appendChild(warning);
   }
 }

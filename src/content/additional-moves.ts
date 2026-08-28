@@ -4,6 +4,7 @@ import { validateMove } from "./validate";
 interface MoveBlueprint {
   id: number;
   key: string;
+  animation?: string;
   tags: string[];
   description: string;
   level: RawHitLevel;
@@ -56,6 +57,7 @@ const BLUEPRINTS: MoveBlueprint[] = [
   { id: 26, key: "witch_knee", tags: ["chaos", "poison", "air", "crossup"], routeRole: "link", description: "A wraparound knee whose rear coverage enables crossups.", level: "overhead", damage: 34, startup: 6, active: 4, recovery: 11, box: { x: -18, y: 8, w: 74, h: 48 }, hitstun: 18, blockstun: 10, pushback: 2.4, airOk: true, staminaCost: 11, cancelInto: [27, 28] },
   { id: 27, key: "meteor_heel", tags: ["fire", "burn", "air"], routeRole: "cashout", description: "Descending heel that cashes out an airborne burn route.", level: "overhead", damage: 48, startup: 9, active: 5, recovery: 16, box: { x: 8, y: -18, w: 64, h: 62 }, hitstun: 22, blockstun: 13, pushback: 3.8, airOk: true, staminaCost: 16 },
   { id: 28, key: "void_dive", tags: ["void", "air", "crossup"], routeRole: "cashout", description: "Committed diagonal dive with front-and-back finish coverage.", level: "mid", damage: 58, startup: 11, active: 6, recovery: 19, box: { x: -24, y: -12, w: 98, h: 70 }, hitstun: 25, blockstun: 15, pushback: 5.0, airOk: true, staminaCost: 22, lunge: 4.2 },
+  { id: 29, key: "grave_toll", animation: "thunder_clap", tags: ["lightning", "shock", "bell", "area"], routeRole: "cashout", description: "Ring the stolen Warden Core in a close shock burst that cashes out a routed target.", level: "mid", damage: 68, startup: 13, active: 5, recovery: 24, box: { x: -16, y: 20, w: 126, h: 84 }, hitstun: 29, blockstun: 19, pushback: 5.4, staminaCost: 22 },
 ];
 
 const STARTER_IDS = [1, 2, ...BLUEPRINTS.filter((move) => move.routeRole === "starter").map((move) => move.id)];
@@ -92,7 +94,7 @@ function buildMove(blueprint: MoveBlueprint): RawMove {
   return {
     id: blueprint.id,
     key: blueprint.key,
-    animation: blueprint.key,
+    animation: blueprint.animation ?? blueprint.key,
     tags: [...blueprint.tags, blueprint.routeRole],
     description: blueprint.description,
     duration,
