@@ -15,11 +15,10 @@ import rigJson from "../../characters/test_fighter/rig.json";
 import idleJson from "../../characters/test_fighter/animations/idle.json";
 import walkForwardJson from "../../characters/test_fighter/animations/walk_forward.json";
 import walkBackwardJson from "../../characters/test_fighter/animations/walk_backward.json";
-import crouchJson from "../../characters/test_fighter/animations/crouch.json";
-import jumpJson from "../../characters/test_fighter/animations/jump.json";
 import standingLightJson from "../../characters/test_fighter/animations/standing_light.json";
 import crouchingLightJson from "../../characters/test_fighter/animations/crouching_light.json";
 import { ADDITIONAL_ANIMATIONS } from "./additional-animations";
+import { STATE_ANIMATIONS } from "./state-animations";
 
 import type { RawAnimation, RawRig } from "./raw-types";
 import { validateAnimation, validateRig } from "./validate";
@@ -33,10 +32,14 @@ export const TEST_FIGHTER_ANIMATIONS: Record<string, RawAnimation> = {
   idle: validateAnimation(idleJson),
   walk_forward: validateAnimation(walkForwardJson),
   walk_backward: validateAnimation(walkBackwardJson),
-  crouch: validateAnimation(crouchJson),
-  jump: validateAnimation(jumpJson),
   standing_light: validateAnimation(standingLightJson),
   crouching_light: validateAnimation(crouchingLightJson),
+  ...Object.fromEntries(
+    Object.entries(STATE_ANIMATIONS).map(([name, animation]) => [
+      name,
+      validateAnimation(animation, `animations.${name}`),
+    ]),
+  ),
   ...Object.fromEntries(
     Object.entries(ADDITIONAL_ANIMATIONS).map(([name, animation]) => [
       name,
@@ -44,3 +47,9 @@ export const TEST_FIGHTER_ANIMATIONS: Record<string, RawAnimation> = {
     ]),
   ),
 };
+
+/** Distance-derived locomotion phases keep planted feet attached through chill effects. */
+export const TEST_FIGHTER_PLAYBACK = {
+  walk_forward: { phaseMode: "distance", strideDistance: 48 },
+  walk_backward: { phaseMode: "distance", strideDistance: 36 },
+} as const;
