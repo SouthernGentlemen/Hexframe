@@ -6,6 +6,7 @@ changes keep their permanent IDs. See [docs/CHANGE-MANAGEMENT.md](docs/CHANGE-MA
 ## Unreleased
 
 ### Build
+- HF-096 Move official GitHub Actions to their current Node 24 majors
 - HF-095 Fetch the release tag object before enforcing annotated tags
 
 ### Operations

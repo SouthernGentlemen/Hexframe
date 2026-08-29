@@ -95,3 +95,4 @@ HF-093,,,ShadowMoney,aea19b9,2026-08-28,consolidated,,,import the path-preservin
 HF-093,,,ShadowMoney,5f3be31,2026-08-28,consolidated,,,preserve the retired player-save object namespace from the canonical public repository; these rows cannot carry their own public SHA because the file is part of the commit they name
 HF-094,,,,,2026-08-28,controlled-record,,v0.7.2,record public publication and the verified v0.7.2 cutover; this row cannot carry its own SHA because the file is part of the commit it names
 HF-095,,,,,2026-08-28,build-fix,,,fetch the release tag ref before checking its object type; this row cannot carry its own SHA because the file is part of the commit it names
+HF-096,,,,,2026-08-28,build-change,,,move official checkout and setup-node actions to their current Node 24 majors; this row cannot carry its own SHA because the file is part of the commit it names
