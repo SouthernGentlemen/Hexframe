@@ -100,6 +100,8 @@ that each public commit originally existed as an independent Git commit. Origina
 commits and dates are kept in
 [docs/history/CHANGE-MAP.csv](docs/history/CHANGE-MAP.csv), and the method — including what
 was changed on purpose — is documented in [docs/RECONSTRUCTION.md](docs/RECONSTRUCTION.md).
+The public cutover and repository controls are recorded in
+[docs/history/PUBLICATION.md](docs/history/PUBLICATION.md).
 
 Development, release, security and change-management controls here are designed to support
 evidence aligned with ISO/IEC 27001:2022 and ISO/IEC 42001:2023. **No certification is

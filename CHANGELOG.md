@@ -9,6 +9,7 @@ changes keep their permanent IDs. See [docs/CHANGE-MANAGEMENT.md](docs/CHANGE-MA
 - HF-093 Import the maintainable ShadowMoney retirement boundary
 
 ### Documentation
+- HF-094 Record the public repository and verified v0.7.2 cutover
 - HF-092 Correct the ShadowMoney predecessor and identity provenance
 
 ## v0.7.2
