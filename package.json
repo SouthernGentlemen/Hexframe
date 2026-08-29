@@ -1,8 +1,9 @@
 {
   "name": "hexframe",
-  "version": "0.1.0",
+  "version": "0.7.2",
+  "private": true,
   "license": "MIT",
-  "description": "Hexframe — a deterministic 2D fighting game with integrated training tools on Cloudflare Workers.",
+  "description": "Deterministic browser fighting-game training lab.",
   "type": "module",
   "scripts": {
     "build": "vite build && node scripts/version-stamp.mjs Hexframe dist",

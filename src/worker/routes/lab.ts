@@ -1,10 +1,10 @@
 /**
  * Primary developer-laboratory entry.
  *
- * `/lab` is intentionally private. An authenticated operator is sent to the neutral
- * Training Grid with developer tools enabled; everyone else goes through the sign-in
- * flow. Campaign content remains in the product, but it is not part of the laboratory
- * entry path.
+ * `/lab` is intentionally private. An authenticated operator is sent to the Training
+ * Grid with developer tools and the tutorial enabled; everyone else goes through the
+ * sign-in flow. Campaign content remains in the product, but it is not part of the
+ * laboratory entry path.
  */
 import type { Env } from "../env";
 import { credentialsConfigured } from "../auth/credentials";
@@ -38,5 +38,5 @@ export async function handleLab(request: Request, env: Env, url: URL): Promise<R
     return redirect(`/login?next=${encodeURIComponent(next)}`);
   }
 
-  return redirect("/training/?mode=training&debug=1");
+  return redirect("/play/?mode=training&debug=1&tutorial=1");
 }
