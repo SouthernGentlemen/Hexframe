@@ -91,3 +91,5 @@ HF-089,c71090afd4c9eeaadb0257b745bc1417315bf6f7,,,,2026-08-28,controlled-record,
 HF-090,764d4ea88414419e906ea2c1323e7ef4e7bfb9eb,,,,2026-08-28,corrected-record,,v0.7.2,branch-local provenance write was truncated and superseded before merge
 HF-091,,,,,2026-08-28,corrective-record,,v0.7.2,restore and extend the complete change map; this row cannot carry its own SHA because the file is part of the commit it names
 HF-092,,,,,2026-08-28,corrective-record,,,correct the predecessor repository and identity provenance; this row cannot carry its own SHA because the file is part of the commit it names
+HF-093,,,ShadowMoney,aea19b9,2026-08-28,consolidated,,,import the path-preserving retirement boundary into the canonical public repository
+HF-093,,,ShadowMoney,5f3be31,2026-08-28,consolidated,,,preserve the retired player-save object namespace from the canonical public repository; these rows cannot carry their own public SHA because the file is part of the commit they name
