@@ -5,6 +5,9 @@ changes keep their permanent IDs. See [docs/CHANGE-MANAGEMENT.md](docs/CHANGE-MA
 
 ## Unreleased
 
+### Build
+- HF-095 Fetch the release tag object before enforcing annotated tags
+
 ### Operations
 - HF-093 Import the maintainable ShadowMoney retirement boundary
 
