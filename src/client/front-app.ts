@@ -30,7 +30,6 @@ export async function startFrontApp(mount: HTMLElement): Promise<() => void> {
 
   const render = (): void => {
     mount.innerHTML = routeMarkup(window.location.pathname, state);
-    bindMenuPreview(mount);
     mount.querySelector<HTMLElement>("[autofocus]")?.focus();
   };
 
@@ -114,8 +113,8 @@ export async function startFrontApp(mount: HTMLElement): Promise<() => void> {
 
 function routeMarkup(pathname: string, state: FrontState): string {
   const path = normalizePath(pathname);
-  if (path === "/") return titleMarkup();
-  if (path === "/play/") return shell(mainMenuMarkup(state), "Main menu");
+  if (path === "/") return overviewMarkup();
+  if (path === "/play/") return shell(trainingMarkup(state), "Training");
   if (path === "/campaign/") return shell(campaignMarkup(state), "Campaign");
   if (path === "/fight/") return shell(setupMarkup(state, "fight"), "Fight setup");
   if (path === "/training/") return shell(trainingMarkup(state), "Training");
@@ -137,24 +136,11 @@ function routeMarkup(pathname: string, state: FrontState): string {
 }
 
 function shell(content: string, label: string): string {
-  return `<main class="route-shell" aria-label="${label}"><header class="route-global"><a class="route-brand" href="/play/">HEXFRAME</a><nav aria-label="Global controls"><a href="/settings/#profile" aria-label="Player profile">PLAYER</a><a class="settings-link" href="/settings/" aria-label="Settings">⚙ <span>SETTINGS</span></a></nav></header>${content}</main>`;
+  return `<main class="route-shell" aria-label="${label}"><header class="route-global"><a class="route-brand" href="/">HEXFRAME</a><nav aria-label="Primary"><a href="/">OVERVIEW</a><a href="/play/" aria-current="page">TRAINING</a><a href="https://github.com/Wizard-Gang/Hexframe" target="_blank" rel="noopener noreferrer">GITHUB ↗</a></nav></header>${content}</main>`;
 }
 
-function titleMarkup(): string {
-  return `<main class="route-title"><p>WIZARD GANG PRESENTS</p><h1>HEX<span>FRAME</span></h1><a href="/play/" autofocus>Press any button</a><footer><a href="/settings/#about">About</a></footer></main>`;
-}
-
-function mainMenuMarkup(state: FrontState): string {
-  const progress = state.save.campaign.stages["black-belfry"];
-  const checkpoint = progress?.checkpointId ? "Belfry Crossing" : "Belfry Approach";
-  const items = [
-    ["/campaign/", "CONTINUE", "Black Belfry", `Checkpoint: ${checkpoint}`, "continue"],
-    ["/fight/", "FIGHT", "Fight", "Build a party and face the Bell Warden.", "fight"],
-    ["/training/", "TRAINING", "Training", "Practice freely or learn the fundamentals.", "training"],
-    ["/loadouts/", "LOADOUTS", "Loadouts", "Edit the techniques your human and AI slots use.", "loadouts"],
-    ["/codex/", "CODEX", "Codex", "Study moves, statuses, enemies, and stages.", "codex"],
-  ];
-  return `<section class="main-menu-screen"><nav class="main-menu-list" aria-label="Main menu">${items.map(([href, label, title, copy, art], index) => `<a href="${href}" data-menu-preview data-preview-title="${title}" data-preview-copy="${copy}" data-preview-art="${art}" ${index === 0 ? "autofocus" : ""}>${label}</a>`).join("")}</nav><aside class="main-menu-preview" aria-live="polite"><div class="menu-art art-continue" data-preview-image aria-hidden="true"><i></i><i></i><i></i></div><p data-preview-title>Black Belfry</p><span data-preview-copy>Checkpoint: ${checkpoint}</span><strong>SELECT →</strong></aside></section>`;
+function overviewMarkup(): string {
+  return `<main class="project-overview" id="main"><a class="skip-link" href="#overview-content">Skip to project overview</a><header class="overview-nav"><a class="route-brand" href="/">HEXFRAME</a><nav aria-label="Primary"><a href="/" aria-current="page">Overview</a><a href="/play/">Training</a><a href="https://github.com/Wizard-Gang/Hexframe" target="_blank" rel="noopener noreferrer">GitHub ↗</a></nav></header><section class="overview-hero" id="overview-content"><div><p class="overview-kicker">Deterministic fighting-game systems</p><h1>Hexframe</h1><p>Hexframe is a browser-based fighting-game training lab built around fixed-step combat, authored frame data, and replayable state.</p><div class="overview-actions"><a class="overview-primary" href="/play/" autofocus>Open training →</a><a href="https://github.com/Wizard-Gang/Hexframe" target="_blank" rel="noopener noreferrer">View source ↗</a></div></div><div class="overview-frame" role="img" aria-label="An eighteen-frame move timeline with startup, active, and recovery frames"><header><span>standing_light</span><strong>18 frames</strong></header><div>${Array.from({ length: 18 }, (_, index) => `<i class="${index < 4 ? "startup" : index < 6 ? "active" : "recovery"}"></i>`).join("")}</div><footer><span>Startup 4f</span><span>Active 2f</span><span>Recovery 12f</span></footer></div></section><section class="overview-proof" aria-label="Project capabilities"><span>Deterministic simulation</span><span>Rollback-ready state</span><span>Training tools</span><span>Accessible controls</span></section><section class="overview-sections"><article><span>01</span><h2>Simulation</h2><p>Combat runs at a fixed 60 Hz using integer state and explicit snapshots.</p></article><article><span>02</span><h2>Training</h2><p>Frame stepping, save states, collision views, and replay tools use the same combat state.</p></article><article><span>03</span><h2>Controls</h2><p>Keyboard and gamepad input share one action model with visible focus and reduced-motion settings.</p></article></section><footer class="overview-footer"><span>Wizard Gang · Hexframe</span><a href="https://wizardgang.ai/projects/hexframe/">Case study ↗</a></footer></main>`;
 }
 
 function campaignMarkup(state: FrontState): string {
@@ -169,7 +155,7 @@ function setupMarkup(state: FrontState, mode: "fight"): string {
 
 function trainingMarkup(state: FrontState): string {
   const active = state.save.loadouts.byId[state.party[0].loadoutId];
-  return screenHeader("TRAINING", "Practice freely", "/play/") + `<section class="training-entry"><div class="training-figure" aria-hidden="true"><i></i><i></i><i></i></div><article><p>LOADOUT</p><button type="button" data-action="pick-slot" data-slot="0"><strong>YOU</strong><span>${escapeHtml(active.name)}</span><em>Change</em></button>${pickerMarkup(state)}<div class="training-entry-actions"><button type="button" data-launch="training" data-tutorial="true">Tutorial</button><button class="route-primary" type="button" data-launch="training">Start training</button></div></article></section>`;
+  return screenHeader("TRAINING", "Learn the system", "/") + `<section class="training-entry"><div class="training-figure" aria-hidden="true"><i></i><i></i><i></i></div><article><p>LOADOUT</p><button type="button" data-action="pick-slot" data-slot="0"><strong>YOU</strong><span>${escapeHtml(active.name)}</span><em>Change</em></button>${pickerMarkup(state)}<div class="training-entry-actions"><button type="button" data-launch="training">Free practice</button><button class="route-primary" type="button" data-launch="training" data-tutorial="true" autofocus>Start tutorial</button></div></article></section>`;
 }
 
 function partyMarkup(state: FrontState): string {
@@ -278,23 +264,6 @@ function toggle(label: string, section: keyof LabPreferences, key: string, value
 
 function normalizePath(pathname: string): string {
   return pathname === "/" ? "/" : `${pathname.replace(/\/+$/, "")}/`;
-}
-
-function bindMenuPreview(mount: HTMLElement): void {
-  const preview = mount.querySelector<HTMLElement>(".main-menu-preview");
-  if (!preview) return;
-  const update = (target: HTMLElement): void => {
-    const title = preview.querySelector<HTMLElement>("[data-preview-title]");
-    const copy = preview.querySelector<HTMLElement>("[data-preview-copy]");
-    const art = preview.querySelector<HTMLElement>("[data-preview-image]");
-    if (title) title.textContent = target.dataset.previewTitle ?? "";
-    if (copy) copy.textContent = target.dataset.previewCopy ?? "";
-    if (art) art.className = `menu-art art-${target.dataset.previewArt ?? "continue"}`;
-  };
-  for (const link of mount.querySelectorAll<HTMLElement>("[data-menu-preview]")) {
-    link.addEventListener("focus", () => update(link));
-    link.addEventListener("pointerenter", () => update(link));
-  }
 }
 
 function launch(state: FrontState, mode: GameMode, tutorial = false): void {

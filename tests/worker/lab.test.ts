@@ -41,7 +41,7 @@ describe("developer laboratory route", () => {
     const response = await handleLab(new Request(url, { headers: { cookie } }), env, url);
 
     expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("/training/?mode=training&debug=1");
+    expect(response.headers.get("location")).toBe("/play/?mode=training&debug=1&tutorial=1");
     expect(await response.text()).toBe("");
   });
 

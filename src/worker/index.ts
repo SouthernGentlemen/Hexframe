@@ -15,7 +15,7 @@ import { handleLogin, handleLogout } from "./routes/login";
 import { handleLab } from "./routes/lab";
 import { handleLabApi } from "./routes/api-lab";
 import { handleCodex } from "./routes/codex";
-import { handlePlay, handleTraining } from "./routes/play";
+import { handleTraining } from "./routes/play";
 import { handleSaveApi } from "./routes/api-save";
 export { PlayerSaveObject } from "./player-save-object";
 
@@ -42,6 +42,13 @@ function notFound(pathname: string): Response {
   });
 }
 
+function redirect(location: string, status = 308): Response {
+  return new Response(null, {
+    status,
+    headers: { location, "cache-control": "no-store" },
+  });
+}
+
 async function passThrough(request: Request, env: Env, url: URL): Promise<Response> {
   if (request.method !== "GET" && request.method !== "HEAD") {
     return new Response("Method not allowed\n", {
@@ -64,7 +71,10 @@ async function passThrough(request: Request, env: Env, url: URL): Promise<Respon
 async function route(request: Request, env: Env, url: URL): Promise<Response> {
   const path = url.pathname;
 
-  if (path === "/") return handleLab(request, env, url);
+  if (path === "/") {
+    const overviewUrl = new URL("/index.html", url);
+    return passThrough(request, env, overviewUrl);
+  }
 
   if (path === "/login") return handleLogin(request, env);
 
@@ -78,9 +88,13 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
     return handleLogout(url);
   }
 
-  if (path === "/play" || path.startsWith("/play/")) return handlePlay(request, env, url);
+  if (path === "/play") return redirect(`/play/${url.search}`);
+  if (path.startsWith("/play/")) return handleTraining(request, env, url);
 
-  if (path === "/training" || path.startsWith("/training/")) return handleTraining(request, env, url);
+  if (path === "/training" || path.startsWith("/training/")) {
+    const suffix = path.replace(/^\/training/, "");
+    return redirect(`/play${suffix || "/"}${url.search}`);
+  }
 
   if (path === "/codex" || path.startsWith("/codex/")) return handleCodex(request, env, url);
 
@@ -90,7 +104,7 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
     path === "/loadouts" || path.startsWith("/loadouts/") ||
     path === "/forge" || path.startsWith("/forge/") ||
     path === "/settings" || path.startsWith("/settings/")
-  ) return handlePlay(request, env, url);
+  ) return redirect(`/play/${url.search}`);
 
   if (path === "/lab" || path.startsWith("/lab/")) return handleLab(request, env, url);
 

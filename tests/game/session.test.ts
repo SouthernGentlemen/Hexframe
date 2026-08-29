@@ -43,6 +43,8 @@ describe("game session contract", () => {
   it("round-trips an explicit Training tutorial session", () => {
     const tutorial = defaultSession("training", "loadout-02");
     tutorial.options.tutorial = true;
-    expect(readGameSession(new URL(sessionUrl(tutorial), "https://hexframe.test"))).toEqual(tutorial);
+    const url = sessionUrl(tutorial);
+    expect(url).toMatch(/^\/play\/\?/);
+    expect(readGameSession(new URL(url, "https://hexframe.test"))).toEqual(tutorial);
   });
 });

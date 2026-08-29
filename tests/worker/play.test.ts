@@ -14,6 +14,11 @@ function environment(paths: string[]): Env {
           headers: { "content-type": "text/html; charset=utf-8" },
         });
       }
+      if (path === "/index.html") {
+        return new Response("<main><h1>Hexframe</h1><a href=\"/play/\">Open training</a></main>", {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
+      }
       if (path === "/lab/assets/game.js") {
         return new Response("export {};", { headers: { "content-type": "text/javascript" } });
       }
@@ -45,19 +50,19 @@ describe("public playtest route", () => {
     expect(response.headers.get("cache-control")).toContain("immutable");
   });
 
-  it("serves the same game bundle under Training", async () => {
+  it("serves the training bundle through the canonical play route", async () => {
     const paths: string[] = [];
-    const url = new URL("https://hexframe.test/training/?mode=training");
+    const url = new URL("https://hexframe.test/play/?mode=training");
     const response = await handleTraining(new Request(url), environment(paths), url);
     expect(response.status).toBe(200);
-    expect(await response.text()).toContain('src="/training/assets/game.js"');
+    expect(await response.text()).toContain('src="/play/assets/game.js"');
   });
 
   it("strips unauthenticated developer tools without rendering redirect text", async () => {
-    const url = new URL("https://hexframe.test/training/?mode=training&debug=1");
+    const url = new URL("https://hexframe.test/play/?mode=training&debug=1");
     const response = await handleTraining(new Request(url), environment([]), url);
     expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("/training/?mode=training");
+    expect(response.headers.get("location")).toBe("/play/?mode=training");
     expect(await response.text()).toBe("");
   });
 
@@ -68,8 +73,16 @@ describe("public playtest route", () => {
     expect(response.headers.get("allow")).toBe("GET, HEAD");
   });
 
-  it.each(["/", "/codex/", "/codex/moves/3/"])(
-    "routes the lab-focused surface at %s through operator sign in",
+  it("serves a public project overview at the root", async () => {
+    const paths: string[] = [];
+    const response = await worker.fetch(new Request("https://hexframe.test/"), environment(paths));
+    expect(response.status).toBe(200);
+    expect(paths).toEqual(["/index.html"]);
+    expect(await response.text()).toContain("Open training");
+  });
+
+  it.each(["/codex/", "/codex/moves/3/"])(
+    "routes the protected developer surface at %s through operator sign in",
     async (pathname) => {
       const response = await worker.fetch(new Request(`https://hexframe.test${pathname}`), environment([]));
       expect(response.status).toBe(302);
@@ -78,14 +91,15 @@ describe("public playtest route", () => {
     },
   );
 
-  it.each(["/campaign/", "/fight/", "/loadouts/loadout-01/", "/forge/", "/settings/"])(
-    "keeps the legacy player-facing SPA route available at %s",
+  it.each(["/training/", "/campaign/", "/fight/", "/loadouts/loadout-01/", "/forge/", "/settings/"])(
+    "redirects the retired public route %s to training",
     async (pathname) => {
       const paths: string[] = [];
       const response = await worker.fetch(new Request(`https://hexframe.test${pathname}`), environment(paths));
-      expect(response.status).toBe(200);
-      expect(paths).toEqual(["/lab/index.html"]);
-      expect(await response.text()).toContain('src="/play/assets/game.js"');
+      expect(response.status).toBe(308);
+      expect(response.headers.get("location")).toBe("/play/");
+      expect(paths).toEqual([]);
+      expect(await response.text()).toBe("");
     },
   );
 });

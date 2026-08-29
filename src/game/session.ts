@@ -189,7 +189,7 @@ export function defaultSession(mode: GameMode, loadoutId = "loadout-01", develop
 
 export function readGameSession(url: URL): GameSession | null {
   const rawMode = url.searchParams.get("mode");
-  const developerTools = url.pathname.startsWith("/training") && url.searchParams.get("debug") === "1";
+  const developerTools = (url.pathname.startsWith("/play") || url.pathname.startsWith("/training")) && url.searchParams.get("debug") === "1";
   const mode: GameMode | null = rawMode === "campaign" || rawMode === "fight" || rawMode === "training"
     ? rawMode
     : developerTools ? "training" : null;
@@ -226,7 +226,8 @@ export function sessionUrl(session: GameSession): string {
   if (session.options.developerTools) query.set("debug", "1");
   if (session.options.tutorial) query.set("tutorial", "1");
   if (session.options.friendlyFire) query.set("friendlyFire", "1");
-  return `/${session.mode}/?${query}`;
+  const route = session.mode === "training" ? "play" : session.mode;
+  return `/${route}/?${query}`;
 }
 
 function readParty(value: string | null, legacyLoadout: string, mode: GameMode): PartySlot[] {
