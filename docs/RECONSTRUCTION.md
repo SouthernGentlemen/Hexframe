@@ -1,6 +1,6 @@
 # Historical reconstruction
 
-<!-- SHARED WIZARDGANG TEMPLATE. Replace Hexframe, HF, `SouthernGentlemen/Hexframe` per project. -->
+<!-- SHARED WIZARDGANG TEMPLATE. Replace Hexframe, HF, and the predecessor repository per project. -->
 
 ## Declaration
 
@@ -19,7 +19,7 @@ Original source commits and dates are retained in `docs/history/CHANGE-MAP.csv`.
 
 | Input | Role |
 | --- | --- |
-| ``SouthernGentlemen/Hexframe`` | Original private implementation history. Immutable provenance; not rewritten. |
+| `SouthernGentlemen/ShadowMoney` | Original private implementation history. Retired after the reconstruction; its source SHAs remain the immutable provenance identifiers. |
 | Deployed production artifacts | Evidence of what actually runs |
 | Test suite | Evidence of intended and verified behavior |
 | Schemas and content | Evidence of authored data contracts |
@@ -88,24 +88,27 @@ source / requirement → controlled change → tested commit → release → dep
 
 ### Product identity
 
-The source repository's product was named *Hexframe*. The public product is **Hexframe**.
-The reconstruction therefore carries the Hexframe identity from `HF-001` onward; the former
-name survives only as provenance in this document and in `docs/history/CHANGE-MAP.csv`.
+The source repository's product was named *ShadowMoney*. The public product is
+**Hexframe**. The reconstruction therefore carries the Hexframe identity from `HF-001`
+onward; the former name survives only where it is needed for provenance and for the
+path-preserving retirement boundary documented in `docs/SHADOWMONEY-RETIREMENT.md`.
 
 This is a rename of identity, not of behaviour. Where the former name appeared in persisted
 state keys, the reconstruction uses Hexframe keys:
 
 | Former | Reconstructed |
 | --- | --- |
-| `hexframe.preferences.v1` | `hexframe.preferences.v1` |
-| `hexframe.player-save.v2` | `hexframe.player-save.v2` |
-| `hf_player` cookie | `hf_player` cookie |
+| `shadowmoney.preferences.v1` | `hexframe.preferences.v1` |
+| `shadowmoney.player-save.v2` | `hexframe.player-save.v2` |
+| `sm_player` cookie | `hf_player` cookie |
 
 Hexframe is deployed as a new Worker on a new origin. Browser storage and cookies are
 origin-scoped, so no prior local state can be present for the reconstruction to migrate,
 and the source project's legacy-key migration path is therefore not carried forward.
-Player saves held by the former deployment are **not** transferred. This is a deliberate
-pre-1.0 decision and is stated in the release notes rather than left implicit.
+Player saves held by the former deployment are **not** transferred. The retired Worker
+keeps its original Durable Object class export so those saves are preserved without being
+made reachable from Hexframe. This is a deliberate pre-1.0 decision and is stated in the
+release notes rather than left implicit.
 
 ### Reconstruction fidelity
 

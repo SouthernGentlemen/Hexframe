@@ -3,6 +3,11 @@
 Every entry is a controlled change. Ordered newest release first; within a release,
 changes keep their permanent IDs. See [docs/CHANGE-MANAGEMENT.md](docs/CHANGE-MANAGEMENT.md).
 
+## Unreleased
+
+### Documentation
+- HF-092 Correct the ShadowMoney predecessor and identity provenance
+
 ## v0.7.2
 
 ### Added
