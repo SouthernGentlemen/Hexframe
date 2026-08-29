@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "validate:content": "vitest run tests/content",
     "secrets:push": "node scripts/sync-secrets.mjs",
-    "deploy": "node scripts/deploy.mjs"
+    "deploy": "node scripts/deploy.mjs",
+    "deploy:shadowmoney-retirement": "node scripts/deploy-shadowmoney-retirement.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260823.1",

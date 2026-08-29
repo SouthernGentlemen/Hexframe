@@ -1,0 +1,13 @@
+{
+  // Compatibility Worker for the retired ShadowMoney origin. Hexframe is the only
+  // active product; this script exists solely to preserve old links and stored saves.
+  "name": "shadowmoney",
+  "main": "src/worker/shadowmoney-retirement.ts",
+  "compatibility_date": "2026-06-28",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "routes": [{ "pattern": "shadowmoney.wizardgang.ai", "custom_domain": true }],
+  "observability": { "enabled": true },
+  "durable_objects": { "bindings": [] },
+  "migrations": [{ "tag": "player-saves-v1", "new_sqlite_classes": ["PlayerSaveObject"] }]
+}

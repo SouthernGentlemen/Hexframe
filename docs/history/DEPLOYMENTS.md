@@ -54,6 +54,32 @@ from the authorized local release environment.
 
 ---
 
+## DEP-HF-003
+
+**Product:** Hexframe
+**Release:** v0.7.2
+**Commit:** `e134f5fc9f69bbf76f21a4c0fb62556f60629d39`
+**Environment:** production
+**Date:** 2026-08-28
+**URL:** https://hexframe.wizardgang.ai
+
+**Changes:** HF-072 through HF-091 (lab-first product focus and animated developer Codex)
+
+**Validation:** PASS — 148 tests across 35 files, typecheck, production build, exact live
+release identity, public play and Training routes, player save API, login boundary, protected lab
+and Codex routes, developer API authorization, retirement redirect, and WizardGang portfolio link.
+
+**Previous:** v0.7.1
+
+**Rollback:** Deploy v0.7.1.
+
+**Note:** The exact annotated tag was deployed and verified from the authorized local release
+environment. GitHub Actions reproduced its code and tests but the release tag guard did not fetch
+the annotated tag object, and the deploy job had no scoped Cloudflare API token. HF-095 corrects
+the tag guard; `docs/history/PUBLICATION.md` records the remaining credential boundary.
+
+---
+
 ## Record format
 
 ```

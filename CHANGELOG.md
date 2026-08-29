@@ -3,6 +3,18 @@
 Every entry is a controlled change. Ordered newest release first; within a release,
 changes keep their permanent IDs. See [docs/CHANGE-MANAGEMENT.md](docs/CHANGE-MANAGEMENT.md).
 
+## Unreleased
+
+### Build
+- HF-095 Fetch the release tag object before enforcing annotated tags
+
+### Operations
+- HF-093 Import the maintainable ShadowMoney retirement boundary
+
+### Documentation
+- HF-094 Record the public repository and verified v0.7.2 cutover
+- HF-092 Correct the ShadowMoney predecessor and identity provenance
+
 ## v0.7.2
 
 ### Added
