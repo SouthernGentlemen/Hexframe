@@ -7,6 +7,7 @@ changes keep their permanent IDs. See [docs/CHANGE-MANAGEMENT.md](docs/CHANGE-MA
 
 ### Build
 - HF-099 Have Release call Deploy directly, and verify production against the tag's own commit
+- HF-100 Retry the post-deploy identity check and name an edge block as distinct from a bad deploy
 
 ## v0.7.3
 

@@ -66,14 +66,33 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler deploy --env production
 
+      # The deploy has already happened by this point. This step decides whether it can
+      # be *proven*, so it must separate "production is serving the wrong thing" from
+      # "the edge would not talk to this runner". Cloudflare bot protection blocks
+      # datacenter IPs, and GitHub runners are datacenter IPs, so a 403 here says nothing
+      # about the deployment.
       - name: Verify production identity matches this release
         env:
           RELEASE: ${{ inputs.tag }}
           COMMIT: ${{ steps.target.outputs.sha }}
           HOST: ${{ vars.PRODUCTION_HOST }}
         run: |
-          sleep 10
-          live=$(curl -fsS "https://$HOST/version.json")
+          live=""
+          for attempt in 1 2 3 4 5; do
+            sleep $(( attempt * 5 ))
+            code=$(curl -s -o /tmp/version.json -w '%{http_code}' "https://$HOST/version.json" || echo 000)
+            if [ "$code" = "200" ]; then live=$(cat /tmp/version.json); break; fi
+            echo "attempt $attempt: HTTP $code"
+          done
+
+          if [ -z "$live" ]; then
+            echo "::error::Could not read https://$HOST/version.json from this runner (last status $code)."
+            echo "::error::A 403 here is the edge refusing the runner, not a bad deploy — Cloudflare bot"
+            echo "::error::protection blocks datacenter IPs. Add a WAF skip rule for /version.json, or"
+            echo "::error::confirm by hand: curl -s https://$HOST/version.json"
+            exit 1
+          fi
+
           echo "$live"
           [ "$(printf '%s' "$live" | jq -r .release)" = "$RELEASE" ] \
             || { echo "::error::production release != $RELEASE"; exit 1; }
