@@ -149,6 +149,7 @@ export async function startLab(mount: HTMLElement): Promise<() => void> {
     unlockedMoveIds: playerSave.unlocks.moves,
     unlockedRecipeIds: playerSave.unlocks.recipes,
   });
+  mount.removeAttribute("aria-busy");
 
   // The Training reset is a canonical contact setup: standing light reaches the dummy without
   // hidden walking or timing, so the same move can be run, inspected, edited, and rerun.
@@ -320,7 +321,7 @@ export async function startLab(mount: HTMLElement): Promise<() => void> {
     if (campaign) syncCampaignHud(state);
     const move = playerCharacter.moves.find((candidate) => candidate.id === state.fighters[0].moveId);
     required("active-move").textContent = move?.key.replaceAll("_", " ") ?? "Ready";
-    required("active-tags").textContent = move?.tags.join(" · ") ?? `Choose any 16 of ${playerCharacter.moves.length} moves`;
+    required("active-tags").textContent = move?.tags.join(" · ") ?? "Move, strike, and inspect the result";
     for (const pause of mount.querySelectorAll<HTMLButtonElement>("[data-action='pause']")) pause.textContent = timeline.paused ? "Play" : "Pause";
     const frameInspector = mount.querySelector<HTMLElement>("#frame-inspector");
     if (frameInspector) frameInspector.innerHTML = frameInspectorMarkup(state, sim.characters(), lastReport ?? timeline.lastReport, stateHash);
