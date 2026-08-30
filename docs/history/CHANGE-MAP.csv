@@ -98,3 +98,4 @@ HF-095,,,,,2026-08-28,build-fix,,,fetch the release tag ref before checking its 
 HF-096,,,,,2026-08-28,build-change,,,move official checkout and setup-node actions to their current Node 24 majors; this row cannot carry its own SHA because the file is part of the commit it names
 HF-097,,,,,2026-08-29,forward-change,,,publish the project overview and make tutorial training the canonical play path; this row cannot carry its own SHA because the file is part of the commit it names
 HF-098,,,,,2026-08-29,controlled-record,,v0.7.3,record and version the public overview and tutorial-training release; this row cannot carry its own SHA because the file is part of the commit it names
+HF-099,,,,,2026-08-29,build-fix,,,let Release call Deploy directly because a release published with GITHUB_TOKEN raises no event a workflow may act on; also verify production against the checked-out tag commit rather than the triggering commit

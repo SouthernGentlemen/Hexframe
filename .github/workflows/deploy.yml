@@ -1,15 +1,27 @@
 # SHARED WIZARDGANG TEMPLATE.
 # Production deploys a release tag, never an arbitrary main commit.
+#
+# This workflow does NOT listen for `release: published`. It used to, and that trigger
+# never fired: Release publishes with GITHUB_TOKEN, and GitHub deliberately refuses to
+# start a workflow from an event raised by that token. v0.7.1 and v0.7.2 only deployed
+# because the Release run failed and a human created those releases by hand; once HF-095
+# fixed the tag check, Release started publishing and Deploy silently stopped running.
+# Release now calls this workflow directly instead.
 name: Deploy
 
 on:
-  release:
-    types: [published]
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to deploy
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       tag:
         description: Release tag to deploy
         required: true
+        type: string
 
 permissions:
   contents: read
@@ -21,13 +33,21 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.inputs.tag || github.event.release.tag_name }}
+          ref: ${{ inputs.tag }}
           fetch-depth: 0
 
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
+
+      # The commit actually checked out, which is the tag's commit. GITHUB_SHA is the
+      # commit that triggered the run, so on a manual dispatch from a branch it names the
+      # branch head rather than the tag being deployed, and the identity check below would
+      # compare production against the wrong commit.
+      - name: Resolve the deployed commit
+        id: target
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Reproduce before deploying
         run: |
@@ -37,7 +57,7 @@ jobs:
 
       - name: Build with deployment identity
         env:
-          RELEASE: ${{ github.event.inputs.tag || github.event.release.tag_name }}
+          RELEASE: ${{ inputs.tag }}
         run: npm run build
 
       - name: Deploy
@@ -48,7 +68,8 @@ jobs:
 
       - name: Verify production identity matches this release
         env:
-          RELEASE: ${{ github.event.inputs.tag || github.event.release.tag_name }}
+          RELEASE: ${{ inputs.tag }}
+          COMMIT: ${{ steps.target.outputs.sha }}
           HOST: ${{ vars.PRODUCTION_HOST }}
         run: |
           sleep 10
@@ -56,6 +77,6 @@ jobs:
           echo "$live"
           [ "$(printf '%s' "$live" | jq -r .release)" = "$RELEASE" ] \
             || { echo "::error::production release != $RELEASE"; exit 1; }
-          [ "$(printf '%s' "$live" | jq -r .commit)" = "$GITHUB_SHA" ] \
-            || { echo "::error::production commit != $GITHUB_SHA"; exit 1; }
-          echo "Production identity matches $RELEASE @ $GITHUB_SHA"
+          [ "$(printf '%s' "$live" | jq -r .commit)" = "$COMMIT" ] \
+            || { echo "::error::production commit != $COMMIT"; exit 1; }
+          echo "Production identity matches $RELEASE @ $COMMIT"

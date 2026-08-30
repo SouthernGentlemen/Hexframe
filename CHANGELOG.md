@@ -5,6 +5,9 @@ changes keep their permanent IDs. See [docs/CHANGE-MANAGEMENT.md](docs/CHANGE-MA
 
 ## Unreleased
 
+### Build
+- HF-099 Have Release call Deploy directly, and verify production against the tag's own commit
+
 ## v0.7.3
 
 ### Changed
