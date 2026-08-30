@@ -5,10 +5,16 @@ changes keep their permanent IDs. See [docs/CHANGE-MANAGEMENT.md](docs/CHANGE-MA
 
 ## Unreleased
 
+## v0.7.4
+
+### Changed
+- HF-102 Replace the public loadout chooser with the real training stage and refresh the project overview
+
 ### Build
 - HF-099 Have Release call Deploy directly, and verify production against the tag's own commit
 - HF-100 Retry the post-deploy identity check and name an edge block as distinct from a bad deploy
 - HF-101 Gate deployment on the authenticated Cloudflare deployment list, which a runner can actually reach
+- HF-103 Record and version the v0.7.4 release
 
 ## v0.7.3
 
