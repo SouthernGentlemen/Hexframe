@@ -19,6 +19,19 @@ import { handleTraining } from "./routes/play";
 import { handleSaveApi } from "./routes/api-save";
 export { PlayerSaveObject } from "./player-save-object";
 
+const APP_CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "base-uri 'none'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  "script-src 'self' https://static.cloudflareinsights.com",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "connect-src 'self' https://cloudflareinsights.com",
+  "font-src 'self'",
+].join("; ");
+
 function harden(response: Response): Response {
   const headers = new Headers(response.headers);
   const cookies = response.headers.getSetCookie();
@@ -27,7 +40,13 @@ function harden(response: Response): Response {
     for (const cookie of cookies) headers.append("set-cookie", cookie);
   }
   headers.set("x-content-type-options", "nosniff");
+  headers.set("strict-transport-security", "max-age=31536000; includeSubDomains");
+  headers.set("x-frame-options", "DENY");
+  headers.set("permissions-policy", "camera=(), microphone=(), geolocation=()");
   if (!headers.has("referrer-policy")) headers.set("referrer-policy", "no-referrer");
+  if (!headers.has("content-security-policy")) {
+    headers.set("content-security-policy", APP_CONTENT_SECURITY_POLICY);
+  }
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
