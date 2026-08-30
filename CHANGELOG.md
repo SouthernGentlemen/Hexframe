@@ -5,6 +5,14 @@ changes keep their permanent IDs. See [docs/CHANGE-MANAGEMENT.md](docs/CHANGE-MA
 
 ## Unreleased
 
+## v0.7.5
+
+### Security
+- HF-104 Apply transport, framing, capability, and content restrictions to every Worker response
+
+### Build
+- HF-105 Record and version the v0.7.5 security release
+
 ## v0.7.4
 
 ### Changed
