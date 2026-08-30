@@ -61,41 +61,59 @@ jobs:
         run: npm run build
 
       - name: Deploy
+        id: deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler deploy --env production
+        run: |
+          set -o pipefail
+          npx wrangler deploy --env production 2>&1 | tee /tmp/deploy.log
+          version=$(grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' /tmp/deploy.log | tail -1)
+          [ -n "$version" ] || { echo "::error::could not read the deployed Version ID from wrangler output"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Uploaded version $version"
 
-      # The deploy has already happened by this point. This step decides whether it can
-      # be *proven*, so it must separate "production is serving the wrong thing" from
-      # "the edge would not talk to this runner". Cloudflare bot protection blocks
-      # datacenter IPs, and GitHub runners are datacenter IPs, so a 403 here says nothing
-      # about the deployment.
-      - name: Verify production identity matches this release
+      # This is the gate. It runs through the authenticated Cloudflare API, which is not
+      # subject to the zone's bot protection, so it works from a runner. It proves the
+      # version this run uploaded is the one serving 100% of production traffic.
+      - name: Confirm the uploaded version is live
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VERSION: ${{ steps.deploy.outputs.version }}
+        run: |
+          npx wrangler deployments list --env production > /tmp/deployments.txt 2>&1 || {
+            cat /tmp/deployments.txt; echo "::error::could not list deployments"; exit 1; }
+          newest=$(grep -E '^Version\(s\):' /tmp/deployments.txt | tail -1)
+          echo "newest deployment: $newest"
+          printf '%s' "$newest" | grep -q "$VERSION" \
+            || { echo "::error::the live deployment is not $VERSION"; exit 1; }
+          printf '%s' "$newest" | grep -q '(100%)' \
+            || { echo "::error::$VERSION is not serving 100% of traffic"; exit 1; }
+          echo "Production is serving $VERSION at 100%"
+
+      # Best effort. wizardgang.ai issues a Cloudflare managed challenge to datacenter
+      # IPs, and GitHub runners are datacenter IPs, so this cannot succeed from CI until a
+      # WAF skip rule exists for the zone. It is not the gate: when the edge answers, the
+      # identity must be right and a mismatch fails the run; when the edge challenges, the
+      # authenticated check above has already proven the deployment.
+      - name: Public identity check
         env:
           RELEASE: ${{ inputs.tag }}
           COMMIT: ${{ steps.target.outputs.sha }}
           HOST: ${{ vars.PRODUCTION_HOST }}
         run: |
-          live=""
-          for attempt in 1 2 3 4 5; do
-            sleep $(( attempt * 5 ))
-            code=$(curl -s -o /tmp/version.json -w '%{http_code}' "https://$HOST/version.json" || echo 000)
-            if [ "$code" = "200" ]; then live=$(cat /tmp/version.json); break; fi
-            echo "attempt $attempt: HTTP $code"
-          done
-
-          if [ -z "$live" ]; then
-            echo "::error::Could not read https://$HOST/version.json from this runner (last status $code)."
-            echo "::error::A 403 here is the edge refusing the runner, not a bad deploy — Cloudflare bot"
-            echo "::error::protection blocks datacenter IPs. Add a WAF skip rule for /version.json, or"
-            echo "::error::confirm by hand: curl -s https://$HOST/version.json"
-            exit 1
+          sleep 10
+          code=$(curl -s -o /tmp/version.json -D /tmp/headers.txt -w '%{http_code}' "https://$HOST/version.json" || echo 000)
+          if [ "$code" = "200" ]; then
+            live=$(cat /tmp/version.json); echo "$live"
+            [ "$(printf '%s' "$live" | jq -r .release)" = "$RELEASE" ] \
+              || { echo "::error::production release != $RELEASE"; exit 1; }
+            [ "$(printf '%s' "$live" | jq -r .commit)" = "$COMMIT" ] \
+              || { echo "::error::production commit != $COMMIT"; exit 1; }
+            echo "Public identity matches $RELEASE @ $COMMIT"
+          elif grep -qi '^cf-mitigated: *challenge' /tmp/headers.txt; then
+            echo "::warning::$HOST issued a Cloudflare managed challenge to this runner (HTTP $code), so the public identity could not be read. The deployment was already proven above. Add a WAF skip rule for /version.json to restore this check."
+          else
+            echo "::warning::could not read https://$HOST/version.json (HTTP $code); the deployment was proven above"
           fi
-
-          echo "$live"
-          [ "$(printf '%s' "$live" | jq -r .release)" = "$RELEASE" ] \
-            || { echo "::error::production release != $RELEASE"; exit 1; }
-          [ "$(printf '%s' "$live" | jq -r .commit)" = "$COMMIT" ] \
-            || { echo "::error::production commit != $COMMIT"; exit 1; }
-          echo "Production identity matches $RELEASE @ $COMMIT"
