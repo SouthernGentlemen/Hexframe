@@ -55,3 +55,12 @@ jobs:
             --title "$GITHUB_REF_NAME" \
             --notes-file "$notes" \
             --verify-tag
+
+  # Release calls Deploy rather than letting Deploy listen for `release: published`,
+  # because a release published with GITHUB_TOKEN raises no event a workflow may act on.
+  deploy:
+    needs: reproduce
+    uses: ./.github/workflows/deploy.yml
+    with:
+      tag: ${{ github.ref_name }}
+    secrets: inherit
