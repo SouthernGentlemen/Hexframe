@@ -5,10 +5,13 @@ changes keep their permanent IDs. See [docs/CHANGE-MANAGEMENT.md](docs/CHANGE-MA
 
 ## Unreleased
 
+## v0.7.3
+
 ### Changed
 - HF-097 Make the project overview public and use tutorial training as the canonical play path
 
 ### Build
+- HF-098 Record and version the v0.7.3 release
 - HF-096 Move official GitHub Actions to their current Node 24 majors
 - HF-095 Fetch the release tag object before enforcing annotated tags
 
