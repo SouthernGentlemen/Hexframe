@@ -13,7 +13,8 @@
       One browser bundle serves independent routed menu screens and active combat. The
       legacy /lab route redirects authenticated operators to Training developer tools.
     -->
-    <div id="lab">
+    <div id="lab" aria-busy="true"></div>
+    <noscript>
       <main aria-labelledby="fallback-title">
         <p>HEXFRAME</p>
         <h1 id="fallback-title">Hexframe</h1>
@@ -37,7 +38,7 @@
         </p>
         <p><a href="/play/">Open Hexframe</a></p>
       </main>
-    </div>
+    </noscript>
     <script type="module" src="/src/client/lab-main.ts"></script>
   </body>
 </html>
