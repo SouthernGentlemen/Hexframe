@@ -3,9 +3,22 @@ import { describe, expect, it } from "vitest";
 
 const source = readFileSync(new URL("../../src/client/front-app.ts", import.meta.url), "utf8");
 const frontCss = readFileSync(new URL("../../src/client/styles/front.css", import.meta.url), "utf8");
+const labCss = readFileSync(new URL("../../src/client/styles/lab.css", import.meta.url), "utf8");
 const labMain = readFileSync(new URL("../../src/client/lab-main.ts", import.meta.url), "utf8");
 const rootHtml = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
 const labHtml = readFileSync(new URL("../../lab/index.html", import.meta.url), "utf8");
+
+function relativeLuminance(hex: string): number {
+  const channels = hex.match(/[\da-f]{2}/gi)?.map((value) => Number.parseInt(value, 16) / 255) ?? [];
+  const [red = 0, green = 0, blue = 0] = channels.map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}
+
+function contrastRatio(foreground: string, background: string): number {
+  const first = relativeLuminance(foreground);
+  const second = relativeLuminance(background);
+  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+}
 
 describe("public Hexframe surface", () => {
   it("uses a project overview at the root and training at play", () => {
@@ -49,6 +62,14 @@ describe("public Hexframe surface", () => {
     expect(overview).toContain("Practice the hit.");
     expect(overview).toContain("data-training-stage");
     expect(overview).toContain("Pause on contact");
+  });
+
+  it("keeps compact footer and control labels above AA text contrast", () => {
+    expect(frontCss).toMatch(/\.desktop-only-gate > footer \{[^}]*color: #758089;/);
+    expect(frontCss).toMatch(/\.overview-footer \{[^}]*color: #758089;/);
+    expect(labCss).toMatch(/\.control-legend \{[^}]*background: #0d1115; color: #758089;/);
+    expect(contrastRatio("#758089", "#07090d")).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio("#758089", "#0d1115")).toBeGreaterThanOrEqual(4.5);
   });
 
   it("does not paint fallback copy before either JavaScript app mounts", () => {

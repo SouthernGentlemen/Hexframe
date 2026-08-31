@@ -178,7 +178,7 @@ kbd { padding: 4px 6px; border: 1px solid #46515b; border-bottom-width: 2px; bor
 :root[data-status-patterns="on"] .status-bleed { background-image: repeating-linear-gradient(0deg, transparent 0 8px, color-mix(in srgb, var(--bleed) 16%, transparent) 8px 10px); }
 .audio-caption { position: absolute; z-index: 5; right: 50%; bottom: 74px; padding: 8px 15px; border: 1px solid #fff; border-radius: 999px; background: rgba(4,6,8,.9); color: #fff; font-size: 12px; font-weight: 800; transform: translateX(50%); }
 
-.control-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 22px; padding: 12px 14px; border: 1px solid var(--line); border-top: 0; background: #0d1115; color: #6f7982; font: 9px ui-monospace, monospace; }
+.control-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 22px; padding: 12px 14px; border: 1px solid var(--line); border-top: 0; background: #0d1115; color: #758089; font: 9px ui-monospace, monospace; }
 .control-legend b { color: #b6bec5; }
 
 .menu-scrim { position: fixed; z-index: 20; inset: 0; display: grid; place-items: center; min-width: 0; min-height: 0; padding: clamp(8px, 2vw, 26px); background: rgba(3,5,7,.82); backdrop-filter: blur(12px); }
