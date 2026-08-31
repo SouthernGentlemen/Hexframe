@@ -5,8 +5,13 @@ changes keep their permanent IDs. See [docs/CHANGE-MANAGEMENT.md](docs/CHANGE-MA
 
 ## Unreleased
 
+## v0.7.8
+
 ### Fixed
 - HF-110 Raise compact footer and control-legend labels above WCAG AA text contrast
+
+### Build
+- HF-111 Record and version the v0.7.8 contrast-correction release
 
 ## v0.7.7
 
