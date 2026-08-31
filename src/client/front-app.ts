@@ -21,13 +21,25 @@ const PREVIEW_TOGGLES: DebugToggles = {
   velocity: false,
 };
 
+const DESKTOP_ONLY_QUERY = "(pointer: coarse), (max-width: 960px)";
+
+export function isUnsupportedMobileDevice(): boolean {
+  return window.matchMedia(DESKTOP_ONLY_QUERY).matches;
+}
+
+export function desktopOnlyMarkup(): string {
+  return `<main class="desktop-only-gate" id="main"><a class="route-brand" href="/">HEXFRAME</a><section role="note" aria-labelledby="desktop-only-title"><p>DEVICE SUPPORT</p><h1 id="desktop-only-title">Desktop only.</h1><p>Hexframe requires a desktop browser with a keyboard or gamepad. Mobile and tablet support is not planned.</p><div><a class="desktop-only-primary" href="https://github.com/Wizard-Gang/Hexframe" target="_blank" rel="noopener noreferrer">View source ↗</a><a href="https://wizardgang.ai/projects/hexframe/">Read the case study ↗</a></div></section><footer><span>WIZARD GANG · HEXFRAME</span><span>KEYBOARD + GAMEPAD</span></footer></main>`;
+}
+
 /** Mounts the two public routes without waiting for player data or constructing game menus. */
 export async function startFrontApp(mount: HTMLElement): Promise<() => void> {
   let previewRenderers: Renderer[] = [];
 
   const render = (): void => {
     for (const renderer of previewRenderers) renderer.dispose();
-    mount.innerHTML = routeMarkup(window.location.pathname);
+    mount.innerHTML = isUnsupportedMobileDevice()
+      ? desktopOnlyMarkup()
+      : routeMarkup(window.location.pathname);
     mount.removeAttribute("aria-busy");
     previewRenderers = mountTrainingStages(mount);
   };
@@ -71,7 +83,7 @@ function overviewMarkup(): string {
 }
 
 function trainingMarkup(): string {
-  return screenHeader("TRAINING", "Hit the dummy. Inspect the result.", "/") + `<section class="training-entry"><div class="training-preview"><div class="training-preview-stage" data-training-stage role="img" aria-label="Hexframe's training stage with the player facing a practice dummy"></div><div class="training-preview-labels" aria-hidden="true"><span>PLAYER</span><span>DUMMY</span></div></div><article><div><p>TRAINING LAB</p><h2>One stage. One dummy. Every frame.</h2><span>Learn the controls with a short tutorial or go straight to free practice.</span><div class="training-input-notice" role="note">Hexframe training needs a keyboard or gamepad — best on desktop.</div></div><div class="training-entry-actions"><button type="button" data-launch-training="true">Free practice</button><button class="route-primary" type="button" data-launch-training="true" data-tutorial="true">Start tutorial</button></div></article></section>`;
+  return screenHeader("TRAINING", "Hit the dummy. Inspect the result.", "/") + `<section class="training-entry"><div class="training-preview"><div class="training-preview-stage" data-training-stage role="img" aria-label="Hexframe's training stage with the player facing a practice dummy"></div><div class="training-preview-labels" aria-hidden="true"><span>PLAYER</span><span>DUMMY</span></div></div><article><div><p>TRAINING LAB</p><h2>One stage. One dummy. Every frame.</h2><span>Learn the controls with a short tutorial or go straight to free practice.</span></div><div class="training-entry-actions"><button type="button" data-launch-training="true">Free practice</button><button class="route-primary" type="button" data-launch-training="true" data-tutorial="true">Start tutorial</button></div></article></section>`;
 }
 
 function screenHeader(eyebrow: string, title: string, back: string): string {

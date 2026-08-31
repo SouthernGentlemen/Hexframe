@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const source = readFileSync(new URL("../../src/client/front-app.ts", import.meta.url), "utf8");
 const frontCss = readFileSync(new URL("../../src/client/styles/front.css", import.meta.url), "utf8");
+const labMain = readFileSync(new URL("../../src/client/lab-main.ts", import.meta.url), "utf8");
 const rootHtml = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
 const labHtml = readFileSync(new URL("../../lab/index.html", import.meta.url), "utf8");
 
@@ -32,11 +33,15 @@ describe("public Hexframe surface", () => {
     expect(training).not.toContain("pick-slot");
   });
 
-  it("warns coarse-pointer visitors that combat needs a keyboard or gamepad", () => {
-    const training = source.match(/function trainingMarkup[\s\S]*?\n}/)?.[0] ?? "";
-    expect(training).toContain("Hexframe training needs a keyboard or gamepad — best on desktop.");
-    expect(training).toContain('class="training-input-notice" role="note"');
-    expect(frontCss).toMatch(/@media \(pointer: coarse\)[\s\S]*?\.training-input-notice \{ display: block; \}/);
+  it("gates coarse-pointer visitors with the desktop-only support policy", () => {
+    const notice = source.match(/export function desktopOnlyMarkup[\s\S]*?\n}/)?.[0] ?? "";
+    expect(source).toContain('const DESKTOP_ONLY_QUERY = "(pointer: coarse), (max-width: 960px)"');
+    expect(source).toContain("isUnsupportedMobileDevice()");
+    expect(notice).toContain("Desktop only.");
+    expect(notice).toContain("Mobile and tablet support is not planned.");
+    expect(notice).toContain('role="note"');
+    expect(labMain).toContain("if (isUnsupportedMobileDevice())");
+    expect(frontCss).toContain(".desktop-only-gate");
   });
 
   it("uses the real training renderer on the refreshed overview", () => {

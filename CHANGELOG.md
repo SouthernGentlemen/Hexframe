@@ -5,6 +5,9 @@ changes keep their permanent IDs. See [docs/CHANGE-MANAGEMENT.md](docs/CHANGE-MA
 
 ## Unreleased
 
+### Changed
+- HF-108 Gate mobile and tablet devices behind the desktop-only support notice
+
 ## v0.7.6
 
 ### Fixed
