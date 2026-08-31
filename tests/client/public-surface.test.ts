@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const source = readFileSync(new URL("../../src/client/front-app.ts", import.meta.url), "utf8");
+const frontCss = readFileSync(new URL("../../src/client/styles/front.css", import.meta.url), "utf8");
 const rootHtml = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
 const labHtml = readFileSync(new URL("../../lab/index.html", import.meta.url), "utf8");
 
@@ -29,6 +30,13 @@ describe("public Hexframe surface", () => {
     expect(training).toContain("One stage. One dummy. Every frame.");
     expect(training).not.toContain("LOADOUT");
     expect(training).not.toContain("pick-slot");
+  });
+
+  it("warns coarse-pointer visitors that combat needs a keyboard or gamepad", () => {
+    const training = source.match(/function trainingMarkup[\s\S]*?\n}/)?.[0] ?? "";
+    expect(training).toContain("Hexframe training needs a keyboard or gamepad — best on desktop.");
+    expect(training).toContain('class="training-input-notice" role="note"');
+    expect(frontCss).toMatch(/@media \(pointer: coarse\)[\s\S]*?\.training-input-notice \{ display: block; \}/);
   });
 
   it("uses the real training renderer on the refreshed overview", () => {
