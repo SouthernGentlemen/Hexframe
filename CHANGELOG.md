@@ -5,6 +5,14 @@ changes keep their permanent IDs. See [docs/CHANGE-MANAGEMENT.md](docs/CHANGE-MA
 
 ## Unreleased
 
+## v0.7.6
+
+### Fixed
+- HF-106 Warn touch-only visitors that training requires a keyboard or gamepad
+
+### Build
+- HF-107 Record and version the v0.7.6 accessibility release
+
 ## v0.7.5
 
 ### Security
