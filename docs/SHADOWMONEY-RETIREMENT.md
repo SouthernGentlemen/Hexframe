@@ -1,21 +1,18 @@
-# ShadowMoney retirement boundary
+# ShadowMoney decommission record
 
-Hexframe owns the permanent compatibility boundary for the retired ShadowMoney product.
-`shadowmoney.wizardgang.ai` returns a path- and query-preserving `308` redirect to
-`hexframe.wizardgang.ai`; it does not serve the former application or forward request
-credentials.
+ShadowMoney was the private predecessor to Hexframe. Its compatibility Worker previously
+returned a path- and query-preserving `308` redirect from `shadowmoney.wizardgang.ai` to
+`hexframe.wizardgang.ai` while retaining the former `PlayerSaveObject` namespace.
 
-## Canonical implementation
+On 2026-08-31, an explicitly authorised destructive-data decision ended that boundary.
+The `shadowmoney` Worker, custom domain, DNS route, and Durable Object namespace were
+deleted. The former hostname no longer resolves to an application, and predecessor player
+saves are no longer retained or recoverable. Hexframe and its own `PlayerSaveObject`
+namespace were not changed.
 
-- Worker entry: `src/worker/shadowmoney-retirement.ts`
-- Cloudflare configuration: `wrangler.shadowmoney-retirement.jsonc`
-- Contract tests: `tests/worker/shadowmoney-retirement.test.ts`
-- Deployment command: `npm run deploy:shadowmoney-retirement`
-
-The compatibility Worker deliberately exports `PlayerSaveObject` while exposing no
-Durable Object binding. Cloudflare therefore retains the former Worker's stored save
-namespace without making it reachable through the redirect. Removing that export or its
-existing migration requires a separately reviewed destructive-data decision.
+The obsolete Worker entry, deployment script, Cloudflare configuration, and contract test
+were removed under HF-112 so the current tree cannot accidentally recreate the retired
+runtime.
 
 ## Source provenance
 
@@ -24,26 +21,27 @@ The retirement behavior was consolidated from the final two ShadowMoney source c
 - `aea19b9` — replace the application at the former hostname with the fixed redirect.
 - `5f3be31` — preserve the retired save-object class export.
 
-The original repository is retired. These source identifiers, the implementation above,
-and `docs/history/CHANGE-MAP.csv` keep the retirement boundary reproducible from the public
-Hexframe repository.
+The original repository is retired. These source identifiers, the public Git history, the
+v0.7.3 release record, and `docs/history/CHANGE-MAP.csv` preserve the provenance of the
+former retirement boundary without keeping it deployable in the current tree.
 
 ## Verification
 
-Before and after a retirement deployment, verify at minimum:
+The decommission is verified by the Cloudflare account inventory and public DNS:
 
 ```bash
-curl -I 'https://shadowmoney.wizardgang.ai/'
-curl -I 'https://shadowmoney.wizardgang.ai/training/?mode=training'
+dig +short shadowmoney.wizardgang.ai A
+dig +short shadowmoney.wizardgang.ai AAAA
+dig +short shadowmoney.wizardgang.ai CNAME
 ```
 
-Both responses must be `308`, point to the same path and query on
-`https://hexframe.wizardgang.ai`, and include the retirement security headers. Also verify
-that `https://hexframe.wizardgang.ai/version.json` still names the intended Hexframe
-release; the two Workers have separate deployment identities.
+All three DNS queries return no answer. The Cloudflare inventory contains no `shadowmoney`
+Worker, custom domain, DNS record, or Durable Object namespace. It still contains the
+`hexframe` Worker, custom domain, and `hexframe_PlayerSaveObject` namespace.
 
-## Rollback
+## Recovery boundary
 
-Redeploy the last known-good retirement boundary from its Hexframe release tag. Do not
-restore the ShadowMoney application as an ordinary rollback: Hexframe is the canonical
-product and the old save namespace is preserved only for recovery.
+The deleted Durable Object data cannot be rolled back. Git history preserves the former
+redirect implementation for audit purposes, but recreating any ShadowMoney runtime or
+hostname would be a new controlled infrastructure change. Hexframe remains the canonical
+product and recovery target.

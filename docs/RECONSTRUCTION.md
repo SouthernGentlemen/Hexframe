@@ -91,7 +91,7 @@ source / requirement → controlled change → tested commit → release → dep
 The source repository's product was named *ShadowMoney*. The public product is
 **Hexframe**. The reconstruction therefore carries the Hexframe identity from `HF-001`
 onward; the former name survives only where it is needed for provenance and for the
-path-preserving retirement boundary documented in `docs/SHADOWMONEY-RETIREMENT.md`.
+decommission record documented in `docs/SHADOWMONEY-RETIREMENT.md`.
 
 This is a rename of identity, not of behaviour. Where the former name appeared in persisted
 state keys, the reconstruction uses Hexframe keys:
@@ -106,9 +106,10 @@ Hexframe is deployed as a new Worker on a new origin. Browser storage and cookie
 origin-scoped, so no prior local state can be present for the reconstruction to migrate,
 and the source project's legacy-key migration path is therefore not carried forward.
 Player saves held by the former deployment are **not** transferred. The retired Worker
-keeps its original Durable Object class export so those saves are preserved without being
-made reachable from Hexframe. This is a deliberate pre-1.0 decision and is stated in the
-release notes rather than left implicit.
+initially kept its original Durable Object class export so those saves were preserved
+without being made reachable from Hexframe. HF-112 later recorded the explicitly
+authorised removal of that Worker, hostname, and namespace. Those predecessor saves are
+therefore no longer retained or recoverable; Hexframe state is unaffected.
 
 ### Reconstruction fidelity
 

@@ -5,6 +5,9 @@ changes keep their permanent IDs. See [docs/CHANGE-MANAGEMENT.md](docs/CHANGE-MA
 
 ## Unreleased
 
+### Operations
+- HF-112 Decommission the ShadowMoney compatibility Worker, hostname, and retained save namespace
+
 ## v0.7.8
 
 ### Fixed
