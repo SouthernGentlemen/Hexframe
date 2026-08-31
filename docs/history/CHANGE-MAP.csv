@@ -107,4 +107,5 @@ HF-104,,,,,2026-08-30,security-change,,v0.7.5,apply HSTS framing denial capabili
 HF-105,,,,,2026-08-30,controlled-record,,v0.7.5,record and version the response-hardening security release; this row cannot carry its own SHA because the file is part of the commit it names
 HF-106,,,,,2026-08-31,forward-change,,v0.7.6,warn coarse-pointer visitors at the public training entry that combat requires a keyboard or gamepad; this row cannot carry its own SHA because the file is part of the release commit that names it
 HF-107,,,,,2026-08-31,controlled-record,,v0.7.6,record and version the touch-input notice release; this row cannot carry its own SHA because the file is part of the commit it names
-HF-108,,,,,2026-08-31,forward-change,,,gate mobile and tablet devices behind an explicit desktop-only notice because mobile support is not planned; this row cannot carry its own SHA because the file is part of the commit that names it
+HF-108,,,,,2026-08-31,forward-change,,v0.7.7,gate mobile and tablet devices behind an explicit desktop-only notice because mobile support is not planned; this row cannot carry its own SHA because the file is part of the release commit that names it
+HF-109,,,,,2026-08-31,controlled-record,,v0.7.7,record and version the desktop-only support-boundary release; this row cannot carry its own SHA because the file is part of the commit it names
