@@ -111,4 +111,6 @@ HF-108,,,,,2026-08-31,forward-change,,v0.7.7,gate mobile and tablet devices behi
 HF-109,,,,,2026-08-31,controlled-record,,v0.7.7,record and version the desktop-only support-boundary release; this row cannot carry its own SHA because the file is part of the commit it names
 HF-110,,,,,2026-08-31,forward-fix,,v0.7.8,raise compact footer and control-legend labels above WCAG AA text contrast; this row cannot carry its own SHA because the file is part of the commit it names
 HF-111,,,,,2026-08-31,controlled-record,,v0.7.8,record and version the compact-label contrast correction release; this row cannot carry its own SHA because the file is part of the commit it names
-HF-112,,,,,2026-08-31,forward-change,,,decommission the ShadowMoney compatibility Worker hostname deployment surface and retained save namespace after an explicitly authorised purge
+HF-112,,,,,2026-08-31,forward-change,,v0.7.9,decommission the ShadowMoney compatibility Worker hostname deployment surface and retained save namespace after an explicitly authorised purge
+HF-113,,,,,2026-09-02,forward-change,,v0.7.9,replace stale public Hexframe brand links and browser icons with the current WizardGang offset-square mark and wordmark
+HF-114,,,,,2026-09-02,controlled-record,,v0.7.9,record and version the WizardGang brand-alignment release; this row cannot carry its own SHA because the file is part of the commit it names
