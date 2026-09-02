@@ -7,6 +7,8 @@ const labCss = readFileSync(new URL("../../src/client/styles/lab.css", import.me
 const labMain = readFileSync(new URL("../../src/client/lab-main.ts", import.meta.url), "utf8");
 const rootHtml = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
 const labHtml = readFileSync(new URL("../../lab/index.html", import.meta.url), "utf8");
+const codexHtml = readFileSync(new URL("../../codex/index.html", import.meta.url), "utf8");
+const loginSource = readFileSync(new URL("../../src/worker/routes/login.ts", import.meta.url), "utf8");
 
 function relativeLuminance(hex: string): number {
   const channels = hex.match(/[\da-f]{2}/gi)?.map((value) => Number.parseInt(value, 16) / 255) ?? [];
@@ -35,6 +37,18 @@ describe("public Hexframe surface", () => {
     expect(shell).not.toContain("CAMPAIGN");
     expect(shell).not.toContain("LOADOUTS");
     expect(shell).not.toContain("CODEX");
+  });
+
+  it("uses the current WizardGang mark and wordmark across public entry points", () => {
+    expect(source).toContain('<span class="wizardgang-mark" aria-hidden="true"></span>');
+    expect(source).toContain('<strong>WIZARDGANG</strong><small>Hexframe</small>');
+    expect(source.match(/\$\{WIZARDGANG_BRAND\}/g)).toHaveLength(3);
+    expect(frontCss).toContain("background: #d9ff43; box-shadow: .5rem -.5rem 0 #a489ff;");
+    for (const document of [rootHtml, labHtml, codexHtml, loginSource]) {
+      expect(document).toContain('rel="icon"');
+      expect(document).toContain("%23d9ff43");
+      expect(document).toContain("%23a489ff");
+    }
   });
 
   it("makes the tutorial the primary training action", () => {

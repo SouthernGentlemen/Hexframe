@@ -23,12 +23,14 @@ const PREVIEW_TOGGLES: DebugToggles = {
 
 const DESKTOP_ONLY_QUERY = "(pointer: coarse), (max-width: 960px)";
 
+const WIZARDGANG_BRAND = `<span class="wizardgang-mark" aria-hidden="true"></span><span class="wizardgang-brand-copy"><strong>WIZARDGANG</strong><small>Hexframe</small></span>`;
+
 export function isUnsupportedMobileDevice(): boolean {
   return window.matchMedia(DESKTOP_ONLY_QUERY).matches;
 }
 
 export function desktopOnlyMarkup(): string {
-  return `<main class="desktop-only-gate" id="main"><a class="route-brand" href="/">HEXFRAME</a><section role="note" aria-labelledby="desktop-only-title"><p>DEVICE SUPPORT</p><h1 id="desktop-only-title">Desktop only.</h1><p>Hexframe requires a desktop browser with a keyboard or gamepad. Mobile and tablet support is not planned.</p><div><a class="desktop-only-primary" href="https://github.com/Wizard-Gang/Hexframe" target="_blank" rel="noopener noreferrer">View source ↗</a><a href="https://wizardgang.ai/projects/hexframe/">Read the case study ↗</a></div></section><footer><span>WIZARD GANG · HEXFRAME</span><span>KEYBOARD + GAMEPAD</span></footer></main>`;
+  return `<main class="desktop-only-gate" id="main"><a class="route-brand" href="/" aria-label="WizardGang Hexframe home">${WIZARDGANG_BRAND}</a><section role="note" aria-labelledby="desktop-only-title"><p>DEVICE SUPPORT</p><h1 id="desktop-only-title">Desktop only.</h1><p>Hexframe requires a desktop browser with a keyboard or gamepad. Mobile and tablet support is not planned.</p><div><a class="desktop-only-primary" href="https://github.com/Wizard-Gang/Hexframe" target="_blank" rel="noopener noreferrer">View source ↗</a><a href="https://wizardgang.ai/projects/hexframe/">Read the case study ↗</a></div></section><footer><span>WIZARD GANG · HEXFRAME</span><span>KEYBOARD + GAMEPAD</span></footer></main>`;
 }
 
 /** Mounts the two public routes without waiting for player data or constructing game menus. */
@@ -69,11 +71,11 @@ function routeMarkup(pathname: string): string {
 }
 
 function shell(content: string, label: string): string {
-  return `<main class="route-shell" aria-label="${label}"><header class="route-global"><a class="route-brand" href="/">HEXFRAME</a><nav aria-label="Primary"><a href="/">OVERVIEW</a><a href="/play/" aria-current="page">TRAINING</a><a href="https://github.com/Wizard-Gang/Hexframe" target="_blank" rel="noopener noreferrer">GITHUB ↗</a></nav></header>${content}</main>`;
+  return `<main class="route-shell" aria-label="${label}"><header class="route-global"><a class="route-brand" href="/" aria-label="WizardGang Hexframe home">${WIZARDGANG_BRAND}</a><nav aria-label="Primary"><a href="/">OVERVIEW</a><a href="/play/" aria-current="page">TRAINING</a><a href="https://github.com/Wizard-Gang/Hexframe" target="_blank" rel="noopener noreferrer">GITHUB ↗</a></nav></header>${content}</main>`;
 }
 
 function overviewMarkup(): string {
-  return `<main class="project-overview" id="main"><a class="skip-link" href="#overview-content">Skip to project overview</a><header class="overview-nav"><a class="route-brand" href="/">HEXFRAME</a><nav aria-label="Primary"><a href="/" aria-current="page">Overview</a><a href="/play/">Training</a><a href="https://github.com/Wizard-Gang/Hexframe" target="_blank" rel="noopener noreferrer">GitHub ↗</a></nav></header>
+  return `<main class="project-overview" id="main"><a class="skip-link" href="#overview-content">Skip to project overview</a><header class="overview-nav"><a class="route-brand" href="/" aria-label="WizardGang Hexframe home">${WIZARDGANG_BRAND}</a><nav aria-label="Primary"><a href="/" aria-current="page">Overview</a><a href="/play/">Training</a><a href="https://github.com/Wizard-Gang/Hexframe" target="_blank" rel="noopener noreferrer">GitHub ↗</a></nav></header>
     <section class="overview-hero" id="overview-content"><div class="overview-copy"><p class="overview-kicker">Browser fighting-game lab</p><h1>Practice the hit.<br><span>Inspect the result.</span></h1><p>Fight a training dummy, pause on contact, and step through the exact frames that decided the hit.</p><div class="overview-actions"><a class="overview-primary" href="/play/">Open training →</a><a href="https://github.com/Wizard-Gang/Hexframe" target="_blank" rel="noopener noreferrer">View source ↗</a></div></div>
       <figure class="overview-demo"><figcaption><span>TRAINING GRID</span><strong>PLAYER + DUMMY</strong></figcaption><div class="overview-training-stage" data-training-stage role="img" aria-label="Hexframe's training stage with the player facing a practice dummy"></div><footer><span>60 HZ COMBAT</span><span>ACTUAL GAME RENDERER</span></footer></figure>
     </section>
