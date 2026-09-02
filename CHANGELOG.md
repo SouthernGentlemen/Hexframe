@@ -5,8 +5,16 @@ changes keep their permanent IDs. See [docs/CHANGE-MANAGEMENT.md](docs/CHANGE-MA
 
 ## Unreleased
 
+## v0.7.9
+
 ### Operations
 - HF-112 Decommission the ShadowMoney compatibility Worker, hostname, and retained save namespace
+
+### Changed
+- HF-113 Adopt the current WizardGang mark and wordmark across public Hexframe surfaces
+
+### Build
+- HF-114 Record and version the v0.7.9 brand-alignment release
 
 ## v0.7.8
 
