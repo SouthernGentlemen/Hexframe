@@ -33,7 +33,11 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
 .route-shell::before, .route-title::before { content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .55; background: repeating-linear-gradient(transparent 0 5px, rgba(255,255,255,.018) 6px), linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px); background-size: auto, 64px 64px; }
 .route-shell a, .route-title a { color: inherit; text-decoration: none; }
 .route-global { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; min-height: 64px; padding: 0 clamp(20px, 5vw, 72px); border-bottom: 1px solid rgba(255,255,255,.12); }
-.route-brand { font: 900 13px ui-monospace, monospace; letter-spacing: .16em; }
+.route-brand { display: inline-flex; align-items: center; gap: .8rem; text-decoration: none; }
+.wizardgang-mark { flex: 0 0 auto; width: .65rem; height: .65rem; background: #d9ff43; box-shadow: .5rem -.5rem 0 #a489ff; }
+.wizardgang-brand-copy { display: grid; gap: .18rem; }
+.wizardgang-brand-copy strong { font: 900 .82rem/1 ui-monospace, monospace; letter-spacing: .16em; }
+.wizardgang-brand-copy small { color: #aeb7be; font: 750 .58rem/1 ui-monospace, monospace; letter-spacing: .12em; text-transform: uppercase; }
 .route-global nav { display: flex; align-items: center; gap: 18px; color: #8d98a1; font: 800 8px ui-monospace, monospace; letter-spacing: .12em; }
 .settings-link { display: flex; gap: 7px; align-items: center; }
 .route-heading { position: relative; z-index: 1; width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: clamp(28px, 6vh, 72px) 0 22px; border-bottom: 1px solid var(--route-line); }
